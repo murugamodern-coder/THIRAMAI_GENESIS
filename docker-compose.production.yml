@@ -1,0 +1,107 @@
+# THIRAMAI Genesis — production SaaS stack (Gunicorn API + Postgres + Redis + workers)
+#
+# - **web**: Gunicorn → Uvicorn workers (`GUNICORN_WORKERS`), `THIRAMAI_JOB_QUEUE=db`
+# - **db / redis**: not published to the host (Docker network only)
+# - **worker-jobs**: drains PostgreSQL `background_jobs` (`python -m workers.run_worker`)
+# - **worker-alerts**: APScheduler + alert scans (`python -m workers.alert_system`)
+#
+# Usage (VPS):
+#   cp .env.production.example .env.production   # fill secrets
+#   # Full sequence (checklist → Alembic → up → /health/ready): see scripts/deploy_production.sh
+#   #   ./scripts/deploy_production.sh
+#   docker compose -f docker-compose.production.yml --env-file .env.production up -d --build
+#
+# TLS: terminate HTTPS on host Nginx/Caddy → proxy to 127.0.0.1:8000 (see docs/PRODUCTION_NGINX_SSL.md).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-thiramai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-thiramai}
+    volumes:
+      - thiramai_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thiramai} -d ${POSTGRES_DB:-thiramai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - thiramai_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Bind loopback only — put Nginx/Caddy on the host in front for HTTPS.
+      - "127.0.0.1:${WEB_PORT:-8000}:8000"
+    environment:
+      ENV: production
+      THIRAMAI_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      THIRAMAI_CORS_ORIGINS: ${THIRAMAI_CORS_ORIGINS:?set THIRAMAI_CORS_ORIGINS}
+      THIRAMAI_SAFE_ERRORS: ${THIRAMAI_SAFE_ERRORS:-1}
+      THIRAMAI_LOG_JSON: ${THIRAMAI_LOG_JSON:-1}
+      THIRAMAI_RL_TRUST_X_FORWARDED_FOR: ${THIRAMAI_RL_TRUST_X_FORWARDED_FOR:-1}
+      THIRAMAI_PROXY_TRUSTED_HOSTS: ${THIRAMAI_PROXY_TRUSTED_HOSTS:-*}
+      THIRAMAI_JOB_QUEUE: db
+      THIRAMAI_ENABLE_ALERT_SCHEDULER: "0"
+      THIRAMAI_AUTH_DISABLED: ${THIRAMAI_AUTH_DISABLED:-0}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-jobs:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "workers.run_worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      THIRAMAI_JOB_QUEUE: db
+      THIRAMAI_WORKER_POLL_SEC: ${THIRAMAI_WORKER_POLL_SEC:-2}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-alerts:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "workers.alert_system"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      THIRAMAI_ENABLE_ALERT_SCHEDULER: "1"
+      THIRAMAI_ALERT_INTERVAL_MINUTES: ${THIRAMAI_ALERT_INTERVAL_MINUTES:-15}
+      THIRAMAI_ALERT_LOW_STOCK_THRESHOLD: ${THIRAMAI_ALERT_LOW_STOCK_THRESHOLD:-10}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  thiramai_pgdata:
+  thiramai_redis:

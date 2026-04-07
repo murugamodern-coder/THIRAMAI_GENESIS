@@ -1,0 +1,366 @@
+=== tests\test_action_policy.py === exit=0
+......                                                                   [100%]
+6 passed in 0.06s
+
+=== tests\test_analytics.py === exit=1
+
+no tests ran in 3.88s
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pytest\__main__.py", line 9, in <module>
+    raise SystemExit(pytest.console_main())
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 223, in console_main
+    code = main()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 199, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 365, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 360, in wrap_session
+    config._ensure_unconfigure()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1171, in _ensure_unconfigure
+    self._cleanup_stack.close()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 627, in close
+    self.__exit__(None, None, None)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 619, in __exit__
+    raise exc
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 604, in __exit__
+    if cb(*exc_details):
+       ~~^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 482, in _exit_wrapper
+    callback(*args, **kwds)
+    ~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 778, in stop_global_capturing
+    self._global_capturing.pop_outerr_to_orig()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 659, in pop_outerr_to_orig
+    out, err = self.readouterr()
+               ~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 706, in readouterr
+    out = self.out.snap() if self.out else ""
+          ~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 453, in snap
+    res = self.tmpfile.getvalue()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 209, in getvalue
+    return self.buffer.getvalue().decode("UTF-8")
+           ~~~~~~~~~~~~~~~~~~~~^^
+ValueError: I/O operation on closed file.
+
+=== tests\test_command_center.py === exit=0
+....                                                                     [100%]
+4 passed in 3.40s
+
+=== tests\test_compliance_phase5.py === exit=0
+......                                                                   [100%]
+6 passed in 1.15s
+
+=== tests\test_economics_service.py === exit=0
+...                                                                      [100%]
+3 passed in 0.75s
+
+=== tests\test_factory_os.py === exit=0
+.....                                                                    [100%]
+5 passed in 1.39s
+
+=== tests\test_health_routes.py === exit=1
+
+no tests ran in 2.15s
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pytest\__main__.py", line 9, in <module>
+    raise SystemExit(pytest.console_main())
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 223, in console_main
+    code = main()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 199, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 365, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 360, in wrap_session
+    config._ensure_unconfigure()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1171, in _ensure_unconfigure
+    self._cleanup_stack.close()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 627, in close
+    self.__exit__(None, None, None)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 619, in __exit__
+    raise exc
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 604, in __exit__
+    if cb(*exc_details):
+       ~~^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 482, in _exit_wrapper
+    callback(*args, **kwds)
+    ~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 778, in stop_global_capturing
+    self._global_capturing.pop_outerr_to_orig()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 659, in pop_outerr_to_orig
+    out, err = self.readouterr()
+               ~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 706, in readouterr
+    out = self.out.snap() if self.out else ""
+          ~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 453, in snap
+    res = self.tmpfile.getvalue()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 209, in getvalue
+    return self.buffer.getvalue().decode("UTF-8")
+           ~~~~~~~~~~~~~~~~~~~~^^
+ValueError: I/O operation on closed file.
+
+=== tests\test_idempotency_db.py === exit=0
+..                                                                       [100%]
+2 passed in 0.94s
+
+=== tests\test_integration_billing.py === exit=1
+...........FF                                                            [100%]
+================================== FAILURES ===================================
+_________________ test_early_veto_fractional_without_api_keys _________________
+tests\test_integration_billing.py:275: in test_early_veto_fractional_without_api_keys
+    from brain import run_brain
+brain.py:12: in <module>
+    from core.orchestrator import run_brain as _run_brain_structured
+core\orchestrator.py:60: in <module>
+    from services.compliance_service import planning_note_text
+E   ImportError: cannot import name 'planning_note_text' from 'services.compliance_service' (C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\services\compliance_service.py)
+__________________ test_early_veto_negative_without_api_keys __________________
+tests\test_integration_billing.py:285: in test_early_veto_negative_without_api_keys
+    from brain import run_brain
+brain.py:12: in <module>
+    from core.orchestrator import run_brain as _run_brain_structured
+core\orchestrator.py:60: in <module>
+    from services.compliance_service import planning_note_text
+E   ImportError: cannot import name 'planning_note_text' from 'services.compliance_service' (C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\services\compliance_service.py)
+=========================== short test summary info ===========================
+FAILED tests/test_integration_billing.py::test_early_veto_fractional_without_api_keys
+FAILED tests/test_integration_billing.py::test_early_veto_negative_without_api_keys
+2 failed, 11 passed in 3.72s
+
+=== tests\test_jarvis_compliance.py === exit=0
+........                                                                 [100%]
+8 passed in 0.71s
+
+=== tests\test_life_os.py === exit=0
+...                                                                      [100%]
+3 passed in 0.28s
+
+=== tests\test_migration_sql.py === exit=0
+..                                                                       [100%]
+2 passed in 0.52s
+
+=== tests\test_policy_enforcement.py === exit=1
+
+no tests ran in 2.48s
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pytest\__main__.py", line 9, in <module>
+    raise SystemExit(pytest.console_main())
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 223, in console_main
+    code = main()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 199, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 365, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 360, in wrap_session
+    config._ensure_unconfigure()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1171, in _ensure_unconfigure
+    self._cleanup_stack.close()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 627, in close
+    self.__exit__(None, None, None)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 619, in __exit__
+    raise exc
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 604, in __exit__
+    if cb(*exc_details):
+       ~~^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 482, in _exit_wrapper
+    callback(*args, **kwds)
+    ~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 778, in stop_global_capturing
+    self._global_capturing.pop_outerr_to_orig()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 659, in pop_outerr_to_orig
+    out, err = self.readouterr()
+               ~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 706, in readouterr
+    out = self.out.snap() if self.out else ""
+          ~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 453, in snap
+    res = self.tmpfile.getvalue()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 209, in getvalue
+    return self.buffer.getvalue().decode("UTF-8")
+           ~~~~~~~~~~~~~~~~~~~~^^
+ValueError: I/O operation on closed file.
+
+=== tests\test_production_safety.py === exit=0
+....                                                                     [100%]
+4 passed in 0.05s
+
+=== tests\test_security_limits.py === exit=1
+
+no tests ran in 2.06s
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pytest\__main__.py", line 9, in <module>
+    raise SystemExit(pytest.console_main())
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 223, in console_main
+    code = main()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 199, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 365, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 360, in wrap_session
+    config._ensure_unconfigure()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1171, in _ensure_unconfigure
+    self._cleanup_stack.close()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 627, in close
+    self.__exit__(None, None, None)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 619, in __exit__
+    raise exc
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 604, in __exit__
+    if cb(*exc_details):
+       ~~^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 482, in _exit_wrapper
+    callback(*args, **kwds)
+    ~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 778, in stop_global_capturing
+    self._global_capturing.pop_outerr_to_orig()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 659, in pop_outerr_to_orig
+    out, err = self.readouterr()
+               ~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 706, in readouterr
+    out = self.out.snap() if self.out else ""
+          ~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 453, in snap
+    res = self.tmpfile.getvalue()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 209, in getvalue
+    return self.buffer.getvalue().decode("UTF-8")
+           ~~~~~~~~~~~~~~~~~~~~^^
+ValueError: I/O operation on closed file.
+
+=== tests\test_smoke.py === exit=1
+
+no tests ran in 3.45s
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pytest\__main__.py", line 9, in <module>
+    raise SystemExit(pytest.console_main())
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 223, in console_main
+    code = main()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 199, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 365, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\main.py", line 360, in wrap_session
+    config._ensure_unconfigure()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1171, in _ensure_unconfigure
+    self._cleanup_stack.close()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 627, in close
+    self.__exit__(None, None, None)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 619, in __exit__
+    raise exc
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 604, in __exit__
+    if cb(*exc_details):
+       ~~^^^^^^^^^^^^^^
+  File "C:\Users\murug\AppData\Local\Python\pythoncore-3.14-64\Lib\contextlib.py", line 482, in _exit_wrapper
+    callback(*args, **kwds)
+    ~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 778, in stop_global_capturing
+    self._global_capturing.pop_outerr_to_orig()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 659, in pop_outerr_to_orig
+    out, err = self.readouterr()
+               ~~~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 706, in readouterr
+    out = self.out.snap() if self.out else ""
+          ~~~~~~~~~~~~~^^
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 453, in snap
+    res = self.tmpfile.getvalue()
+  File "C:\Users\murug\OneDrive\Desktop\DOCUMENT\Projects\THIRAMAI_GENESIS\.venv\Lib\site-packages\_pytest\capture.py", line 209, in getvalue
+    return self.buffer.getvalue().decode("UTF-8")
+           ~~~~~~~~~~~~~~~~~~~~^^
+ValueError: I/O operation on closed file.
+
+=== tests\test_sre_services.py === exit=0
+......                                                                   [100%]
+6 passed in 2.68s
+
+=== tests\test_stress_concurrent_sells.py === exit=0
+.s.                                                                      [100%]
+2 passed, 1 skipped in 5.11s

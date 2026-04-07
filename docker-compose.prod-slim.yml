@@ -1,0 +1,48 @@
+# Minimal production-style stack: API + PostgreSQL only (no Redis, no separate worker).
+# Alerts: enable on the web process with THIRAMAI_ENABLE_ALERT_SCHEDULER=1 (see env.production.example).
+#
+# Usage (on server, after copying .env.production.example → .env.production):
+#   docker compose -f docker-compose.prod-slim.yml --env-file .env.production up -d --build
+#
+# Do not publish Postgres to the public internet — omit host ports or bind 127.0.0.1 only.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-thiramai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-thiramai}
+    volumes:
+      - thiramai_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thiramai} -d ${POSTGRES_DB:-thiramai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      # Pass vars via: docker compose -f docker-compose.prod-slim.yml --env-file .env.production up -d
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL e.g. postgresql+psycopg2://USER:PASS@db:5432/DB}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      THIRAMAI_CORS_ORIGINS: ${THIRAMAI_CORS_ORIGINS:?set THIRAMAI_CORS_ORIGINS to your HTTPS app URL}
+      THIRAMAI_SAFE_ERRORS: ${THIRAMAI_SAFE_ERRORS:-1}
+      THIRAMAI_RL_TRUST_X_FORWARDED_FOR: ${THIRAMAI_RL_TRUST_X_FORWARDED_FOR:-0}
+      # No worker-jobs in this stack — always **inline** (in-process BackgroundTasks). Use production compose for DB queue.
+      THIRAMAI_JOB_QUEUE: inline
+      THIRAMAI_ENABLE_ALERT_SCHEDULER: ${THIRAMAI_ENABLE_ALERT_SCHEDULER:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  thiramai_pgdata:

@@ -1,0 +1,24 @@
+{
+  "as_of_utc": "2026-04-07T13:42:37.060020+00:00",
+  "calendar_date": "2026-04-07",
+  "disclaimer": "Simulated indices for planning \u2014 not executable quotes.",
+  "hdpe": {
+    "inr_per_kg": 116.62,
+    "wow_change_pct": 0.58,
+    "label": "HDPE (pipe grade \u2014 Reliance / regional ref. curve)"
+  },
+  "lldpe": {
+    "inr_per_kg": 113.9,
+    "wow_change_pct": 0.59,
+    "label": "LLDPE (film / blend ref. \u2014 Exxon-style curve proxy)"
+  },
+  "hdpe_3m": {
+    "window_days": 90,
+    "min_inr_per_kg": 102.0,
+    "max_inr_per_kg": 117.98,
+    "today_inr_per_kg": 116.62,
+    "at_3m_low": false,
+    "cheaper_days_ratio_pct": 86.7,
+    "near_floor_inr": false
+  }
+}

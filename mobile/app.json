@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "THIRAMAI",
+    "slug": "thiramai-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#030303"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.thiramai.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#030303"
+      },
+      "package": "com.thiramai.mobile"
+    },
+    "scheme": "thiramai",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#7c3aed"
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://127.0.0.1:8000"
+    }
+  }
+}

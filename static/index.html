@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>THIRAMAI Genesis — Command</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['ui-sans-serif', 'system-ui', 'Segoe UI', 'sans-serif'] },
+          colors: {
+            thiramai: { 500: '#0064d9', 600: '#0052b3', 900: '#0f5a8a' }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    /* Base state must be explicit — inactive pills stay visible on dark chrome */
+    header .nav-mode-btn {
+      transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+      background-color: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+    header .nav-mode-btn:hover {
+      background-color: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.45);
+    }
+    header .nav-mode-btn[data-active="true"] {
+      background: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      border-color: #ffffff;
+      box-shadow: none;
+    }
+    header .nav-mode-btn:focus-visible {
+      outline: 2px solid #ffffff;
+      outline-offset: 2px;
+    }
+    .scrollbar-thin::-webkit-scrollbar { height: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 3px; }
+  </style>
+</head>
+<body class="min-h-screen bg-[#f5f6f7] text-[#32363a] antialiased">
+  <div id="app-login" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded border border-[#d9d9d9] bg-white p-8 shadow-sm">
+      <div class="mb-8 text-center">
+        <h1 class="text-2xl font-semibold tracking-tight text-[#32363a]">THIRAMAI Genesis</h1>
+        <p class="mt-1 text-sm text-[#6a6d70]">Sign in to the control tower</p>
+      </div>
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="mb-1 block text-xs font-medium uppercase tracking-wider text-[#354a5e]">Username / Email</label>
+          <input id="login-user" type="text" autocomplete="username" required
+            class="w-full rounded border border-[#d9d9d9] bg-white px-3 py-2.5 text-sm text-[#32363a] placeholder-[#6a6d70] outline-none focus:border-[#0064d9] focus:ring-2 focus:ring-[#0064d9]/25"
+            placeholder="admin_king@thiramai.empire" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium uppercase tracking-wider text-[#354a5e]">Password</label>
+          <input id="login-pass" type="password" autocomplete="current-password" required
+            class="w-full rounded border border-[#d9d9d9] bg-white px-3 py-2.5 text-sm text-[#32363a] outline-none focus:border-[#0064d9] focus:ring-2 focus:ring-[#0064d9]/25" />
+        </div>
+        <p id="login-error" class="hidden text-sm text-[#bb0000]"></p>
+        <button type="submit"
+          class="w-full rounded border border-[#0064d9] bg-[#0064d9] py-2.5 text-sm font-semibold text-white transition hover:bg-[#0052b3]">
+          Sign in
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-dash" class="hidden min-h-screen flex flex-col">
+    <!-- Top navigation -->
+    <header class="sticky top-0 z-50 border-b border-[#d9d9d9] bg-[#1873b4] text-white shadow-sm">
+      <div class="mx-auto max-w-6xl px-3 sm:px-4">
+        <div class="flex flex-wrap items-center gap-2 py-2.5 sm:gap-3">
+          <div class="flex min-w-0 shrink-0 items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-[0.2em] text-white/90">Thiramai</span>
+            <span class="hidden h-4 w-px bg-white/35 sm:block" aria-hidden="true"></span>
+            <span class="hidden text-[11px] font-medium text-white/80 sm:inline">Command</span>
+          </div>
+
+          <!-- Desktop / tablet: horizontal scroll mode switcher -->
+          <div class="order-last flex min-w-0 flex-1 basis-full sm:order-none sm:basis-auto md:max-w-[420px] lg:max-w-none">
+            <div class="scrollbar-thin w-full overflow-x-auto rounded-md bg-white/12 p-1 ring-1 ring-white/25" role="tablist" aria-label="Dashboard mode">
+              <div class="flex w-min min-w-full gap-1 sm:inline-flex">
+                <button type="button" role="tab" data-mode="enterprise" data-nav-mode
+                  class="nav-mode-btn shrink-0 rounded px-3 py-2 text-left text-xs font-semibold sm:px-4 sm:text-[13px]">
+                  Enterprise
+                  <span class="mt-0.5 block text-[10px] font-normal opacity-90 sm:inline sm:mt-0 sm:ml-1">· Org</span>
+                </button>
+                <button type="button" role="tab" data-mode="research" data-nav-mode
+                  class="nav-mode-btn shrink-0 rounded px-3 py-2 text-left text-xs font-semibold sm:px-4 sm:text-[13px]">
+                  Research Hub
+                  <span class="mt-0.5 block text-[10px] font-normal opacity-90 sm:inline sm:mt-0 sm:ml-1">· Intel</span>
+                </button>
+                <button type="button" role="tab" data-mode="personal" data-nav-mode
+                  class="nav-mode-btn shrink-0 rounded px-3 py-2 text-left text-xs font-semibold sm:px-4 sm:text-[13px]">
+                  Personal
+                  <span class="mt-0.5 block text-[10px] font-normal opacity-90 sm:inline sm:mt-0 sm:ml-1">· Life OS</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mobile: compact mode dropdown (synced with pills) -->
+          <label class="flex w-full shrink-0 items-center gap-2 sm:hidden">
+            <span class="text-[10px] font-medium uppercase tracking-wider text-white/80">Mode</span>
+            <select id="mode-select-mobile" aria-label="Switch dashboard mode"
+              class="min-w-0 flex-1 rounded border border-white/35 bg-white/12 px-2 py-2 text-xs font-medium text-white outline-none focus:ring-2 focus:ring-white/40">
+              <option value="enterprise">Enterprise — Org &amp; KPIs</option>
+              <option value="research">Research Hub — Market intel</option>
+              <option value="personal">Personal — Life OS</option>
+            </select>
+          </label>
+
+          <div id="nav-org-wrap" class="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+            <label class="flex min-w-0 max-w-[min(100%,11rem)] items-center gap-2 text-xs text-white/90 sm:max-w-[240px] lg:max-w-none">
+              <span class="hidden shrink-0 lg:inline">Organization</span>
+              <select id="org-switcher"
+                class="min-w-0 max-w-full flex-1 rounded border border-white/35 bg-white/12 px-2 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-white/40 sm:max-w-[200px] lg:max-w-[240px]">
+                <option value="">Loading…</option>
+              </select>
+            </label>
+            <button id="btn-logout" type="button"
+              class="rounded border border-white/35 bg-white/12 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/22">
+              Log out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto w-full max-w-6xl flex-1 p-4">
+      <!-- Enterprise -->
+      <div id="panel-enterprise" class="mode-panel space-y-4">
+        <div class="grid gap-4 lg:grid-cols-3">
+          <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg lg:col-span-1">
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-thiramai-500">System status</h2>
+            <p class="mt-3 text-xs text-slate-500">GET / with <code class="text-slate-400">Accept: application/json</code></p>
+            <div id="status-body" class="mt-4 max-h-48 overflow-auto rounded-lg bg-slate-950/80 p-3 font-mono text-xs text-emerald-400">Loading…</div>
+          </section>
+
+          <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg lg:col-span-2">
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-thiramai-500">KPI &amp; analytics</h2>
+            <p class="mt-1 text-xs text-slate-500">Live · <code class="text-slate-400">GET /analytics/master-dashboard</code></p>
+            <div class="mt-4 grid gap-3 sm:grid-cols-3">
+              <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+                <p class="text-xs text-slate-500">Revenue (INR)</p>
+                <p id="kpi-revenue" class="mt-1 text-xl font-semibold text-white">—</p>
+              </div>
+              <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+                <p class="text-xs text-slate-500">Active alerts</p>
+                <p id="kpi-alerts" class="mt-1 text-xl font-semibold text-amber-400">—</p>
+              </div>
+              <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+                <p class="text-xs text-slate-500">Pending approvals</p>
+                <p id="kpi-approvals" class="mt-1 text-xl font-semibold text-sky-400">—</p>
+              </div>
+            </div>
+            <p id="kpi-note" class="mt-3 text-xs text-slate-600"></p>
+            <div class="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+              <p class="text-xs font-medium text-slate-500">SaaS modules</p>
+              <p id="saas-modules" class="mt-1 text-sm text-slate-300">—</p>
+            </div>
+          </section>
+
+          <section id="solar-dpr-panel-enterprise" class="hidden rounded-xl border border-amber-900/40 bg-slate-900/60 p-5 shadow-lg lg:col-span-3">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 class="text-sm font-semibold uppercase tracking-wide text-amber-400">Solar project (DPR)</h2>
+                <p id="solar-phase-label-e" class="mt-1 text-xs text-slate-500">—</p>
+              </div>
+            </div>
+            <div class="mt-4">
+              <div class="mb-1 flex justify-between text-xs text-slate-400">
+                <span>Progress</span>
+                <span id="solar-progress-pct-e">0%</span>
+              </div>
+              <div class="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+                <div id="solar-progress-bar-e" class="h-full rounded-full bg-gradient-to-r from-amber-600 to-yellow-500 transition-all" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="mt-4 grid gap-3 sm:grid-cols-2">
+              <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+                <p class="text-xs text-slate-500">Initial capex (estimate)</p>
+                <p id="solar-capex-e" class="mt-1 text-lg font-semibold text-white">—</p>
+                <p id="solar-capex-note-e" class="mt-2 text-xs text-slate-500"></p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Research Hub -->
+      <div id="panel-research" class="mode-panel hidden space-y-4">
+        <section class="rounded-xl border border-violet-900/40 bg-slate-900/60 p-5 shadow-lg">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-semibold uppercase tracking-wide text-violet-400">Research Hub</h2>
+              <p class="mt-1 text-xs text-slate-500">Market intel from <code class="text-slate-400">/analytics/master-dashboard</code> · Solar DPR when org #2 is active</p>
+            </div>
+            <button id="btn-solar-refresh" type="button"
+              class="rounded-lg border border-violet-700/50 bg-violet-950/40 px-3 py-2 text-xs font-semibold text-violet-200 transition hover:bg-violet-900/30">
+              Refresh research (Tavily)
+            </button>
+          </div>
+          <p id="research-org-hint" class="mt-3 text-xs text-slate-500"></p>
+        </section>
+
+        <section id="solar-dpr-panel" class="hidden rounded-xl border border-amber-900/40 bg-slate-900/60 p-5 shadow-lg">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-amber-400">Solar manufacturing · DPR track</h2>
+          <p id="solar-phase-label" class="mt-1 text-xs text-slate-500">—</p>
+          <div class="mt-4">
+            <div class="mb-1 flex justify-between text-xs text-slate-400">
+              <span>Progress</span>
+              <span id="solar-progress-pct">0%</span>
+            </div>
+            <div class="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+              <div id="solar-progress-bar" class="h-full rounded-full bg-gradient-to-r from-amber-600 to-yellow-500 transition-all" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+              <p class="text-xs text-slate-500">Initial capex (estimate)</p>
+              <p id="solar-capex" class="mt-1 text-lg font-semibold text-white">—</p>
+              <p id="solar-capex-note" class="mt-2 text-xs text-slate-500"></p>
+            </div>
+            <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-4 sm:col-span-2">
+              <p class="text-xs text-slate-500">SaaS modules (tenant)</p>
+              <p id="saas-modules-r" class="mt-1 text-sm text-slate-300">—</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Query coverage</h3>
+          <div id="research-queries" class="mt-3 space-y-2 text-sm text-slate-300"></div>
+        </section>
+
+        <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">AI forecast snapshot</h3>
+          <pre id="research-forecast" class="mt-3 max-h-56 overflow-auto rounded-lg bg-slate-950/80 p-3 font-mono text-xs text-slate-400">Loading…</pre>
+        </section>
+      </div>
+
+      <!-- Personal -->
+      <div id="panel-personal" class="mode-panel hidden space-y-4">
+        <section class="rounded-xl border border-emerald-900/35 bg-slate-900/60 p-5 shadow-lg">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-emerald-400">Personal · Life OS</h2>
+          <p class="mt-1 text-xs text-slate-500">Live · <code class="text-slate-400">GET /life/dashboard</code></p>
+          <div id="personal-status" class="mt-3 text-xs text-slate-500"></div>
+        </section>
+        <div class="grid gap-4 md:grid-cols-3">
+          <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg md:col-span-1">
+            <h3 class="text-xs font-semibold uppercase text-slate-500">Habits</h3>
+            <p id="personal-habits-pending" class="mt-2 text-2xl font-semibold text-white">—</p>
+            <ul id="personal-habits-list" class="mt-3 max-h-48 space-y-2 overflow-auto text-xs text-slate-400"></ul>
+          </section>
+          <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg md:col-span-1">
+            <h3 class="text-xs font-semibold uppercase text-slate-500">Health today</h3>
+            <ul id="personal-health-list" class="mt-3 max-h-48 space-y-2 overflow-auto text-xs text-slate-400"></ul>
+          </section>
+          <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg md:col-span-1">
+            <h3 class="text-xs font-semibold uppercase text-slate-500">Open missions</h3>
+            <ul id="personal-missions-list" class="mt-3 max-h-56 space-y-2 overflow-auto text-xs text-slate-400"></ul>
+          </section>
+        </div>
+      </div>
+
+      <!-- Shared AI chat -->
+      <section id="section-chat" class="mt-4 rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg flex flex-col min-h-[380px]">
+        <h2 id="chat-heading" class="text-sm font-semibold uppercase tracking-wide text-thiramai-500">AI Manager</h2>
+        <p id="chat-sub" class="text-xs text-slate-500">POST <code class="text-slate-400">/chat/query</code></p>
+        <div id="chat-log" class="mt-4 flex-1 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80 p-3 space-y-3 text-sm max-h-72"></div>
+        <form id="chat-form" class="mt-3 flex gap-2">
+          <input id="chat-input" type="text" placeholder="Ask the AI Manager…"
+            class="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-thiramai-500 focus:ring-1 focus:ring-thiramai-500" />
+          <button type="submit"
+            class="rounded-lg bg-thiramai-600 px-4 py-2 text-sm font-semibold text-white hover:bg-thiramai-500 disabled:opacity-50">
+            Send
+          </button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      var TOKEN_KEY = 'thiramai_jwt';
+      var DEV_ORG_KEY = 'thiramai_dev_org_id';
+      var MODE_KEY = 'thiramai_command_mode';
+      var MOCK_KPI = {
+        revenue_inr: 1250000,
+        alerts: 3,
+        approvals: 2,
+        note: 'Showing mock KPIs (demo).'
+      };
+
+      function getToken() {
+        try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+      }
+      function setToken(t) {
+        try { localStorage.setItem(TOKEN_KEY, t || ''); } catch (e) {}
+      }
+      function clearToken() {
+        try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+      }
+      function getDevOrgId() {
+        try { return localStorage.getItem(DEV_ORG_KEY) || ''; } catch (e) { return ''; }
+      }
+      function setDevOrgId(id) {
+        try {
+          if (id == null || id === '') localStorage.removeItem(DEV_ORG_KEY);
+          else localStorage.setItem(DEV_ORG_KEY, String(id));
+        } catch (e) {}
+      }
+      function getSavedMode() {
+        try {
+          var m = (localStorage.getItem(MODE_KEY) || 'enterprise').trim();
+          if (m === 'research' || m === 'personal' || m === 'enterprise') return m;
+        } catch (e) {}
+        return 'enterprise';
+      }
+      function saveMode(m) {
+        try { localStorage.setItem(MODE_KEY, m); } catch (e) {}
+      }
+
+      function apiFetch(url, options) {
+        options = options || {};
+        var h = new Headers(options.headers || {});
+        var tok = getToken();
+        if (tok) h.set('Authorization', 'Bearer ' + tok);
+        else {
+          var devOrg = getDevOrgId();
+          if (devOrg) h.set('X-THIRAMAI-DEV-ORG-ID', devOrg);
+        }
+        options.headers = h;
+        return fetch(url, options);
+      }
+
+      var loginEl = document.getElementById('app-login');
+      var dashEl = document.getElementById('app-dash');
+      var loginForm = document.getElementById('login-form');
+      var loginErr = document.getElementById('login-error');
+      var chatForm = document.getElementById('chat-form');
+      var chatLog = document.getElementById('chat-log');
+      var chatInput = document.getElementById('chat-input');
+      var chatHeading = document.getElementById('chat-heading');
+      var chatSub = document.getElementById('chat-sub');
+      var orgSwitcherEl = document.getElementById('org-switcher');
+      var navOrgWrap = document.getElementById('nav-org-wrap');
+      var solarPanelEl = document.getElementById('solar-dpr-panel');
+      var solarEnterpriseEl = document.getElementById('solar-dpr-panel-enterprise');
+      var modeSelectMobile = document.getElementById('mode-select-mobile');
+      var currentMode = 'enterprise';
+
+      function showLogin() {
+        loginEl.classList.remove('hidden');
+        dashEl.classList.add('hidden');
+      }
+      function showDash() {
+        loginEl.classList.add('hidden');
+        dashEl.classList.remove('hidden');
+        loadOrgSwitcher();
+        setMode(getSavedMode(), true);
+      }
+
+      if (getToken()) showDash();
+      else showLogin();
+
+      loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        loginErr.classList.add('hidden');
+        var u = document.getElementById('login-user').value.trim();
+        var p = document.getElementById('login-pass').value;
+        var body = new URLSearchParams({ username: u, password: p });
+        fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body
+        }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+          .then(function (x) {
+            if (!x.ok || !x.j.access_token) {
+              loginErr.textContent = (x.j.detail && (typeof x.j.detail === 'string' ? x.j.detail : JSON.stringify(x.j.detail))) || 'Login failed';
+              loginErr.classList.remove('hidden');
+              return;
+            }
+            setToken(x.j.access_token);
+            setDevOrgId('');
+            showDash();
+          })
+          .catch(function () {
+            loginErr.textContent = 'Network error';
+            loginErr.classList.remove('hidden');
+          });
+      });
+
+      document.getElementById('btn-logout').addEventListener('click', function () {
+        clearToken();
+        setDevOrgId('');
+        showLogin();
+      });
+
+      function updateNavActive(mode) {
+        document.querySelectorAll('[data-nav-mode]').forEach(function (btn) {
+          var on = btn.getAttribute('data-mode') === mode;
+          btn.setAttribute('data-active', on ? 'true' : 'false');
+          btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        if (modeSelectMobile && modeSelectMobile.value !== mode) modeSelectMobile.value = mode;
+      }
+
+      function setMode(mode, skipSave) {
+        if (mode !== 'enterprise' && mode !== 'research' && mode !== 'personal') mode = 'enterprise';
+        currentMode = mode;
+        if (!skipSave) saveMode(mode);
+        updateNavActive(mode);
+
+        document.getElementById('panel-enterprise').classList.toggle('hidden', mode !== 'enterprise');
+        document.getElementById('panel-research').classList.toggle('hidden', mode !== 'research');
+        document.getElementById('panel-personal').classList.toggle('hidden', mode !== 'personal');
+
+        var orgLabel = navOrgWrap ? navOrgWrap.querySelector('label') : null;
+        if (orgLabel) {
+          if (mode === 'personal') orgLabel.classList.add('hidden');
+          else orgLabel.classList.remove('hidden');
+        }
+
+        if (mode === 'personal') {
+          chatHeading.textContent = 'Personal copilot';
+          chatSub.textContent = 'Same /chat/query — use for planning, habits, and reflection.';
+        } else if (mode === 'research') {
+          chatHeading.textContent = 'Research assistant';
+          chatSub.textContent = 'Ask follow-ups on market intel · POST /chat/query';
+        } else {
+          chatHeading.textContent = 'AI Manager';
+          chatSub.textContent = 'POST /chat/query · tenant-scoped';
+        }
+
+        loadModeData(mode);
+      }
+
+      document.querySelectorAll('[data-nav-mode]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          setMode(btn.getAttribute('data-mode') || 'enterprise');
+        });
+      });
+      if (modeSelectMobile) {
+        modeSelectMobile.addEventListener('change', function () {
+          setMode(modeSelectMobile.value);
+        });
+      }
+
+      function loadModeData(mode) {
+        if (mode === 'enterprise') loadEnterpriseData();
+        else if (mode === 'research') loadResearchData();
+        else if (mode === 'personal') loadPersonalData();
+      }
+
+      function loadOrgSwitcher() {
+        if (!orgSwitcherEl) return;
+        apiFetch('/me/organizations')
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            if (!x.ok || !Array.isArray(x.j)) return;
+            var cur = null;
+            var html = '';
+            x.j.forEach(function (row) {
+              var o = row.organization || {};
+              var id = o.id;
+              var name = (o.name || 'Org ' + id).slice(0, 48);
+              if (row.is_current) cur = String(id);
+              html += '<option value="' + id + '">' + name + ' (#' + id + ')</option>';
+            });
+            orgSwitcherEl.innerHTML = html || '<option value="">No organizations</option>';
+            var tok = getToken();
+            var want = cur || (getDevOrgId() || (orgSwitcherEl.options[0] && orgSwitcherEl.options[0].value));
+            if (want) {
+              orgSwitcherEl.value = want;
+              if (!tok) setDevOrgId(want);
+            }
+          })
+          .catch(function () {
+            orgSwitcherEl.innerHTML = '<option value="">Orgs unavailable</option>';
+          });
+      }
+
+      orgSwitcherEl.addEventListener('change', function () {
+        var id = orgSwitcherEl.value;
+        if (!id) return;
+        var tok = getToken();
+        if (tok) {
+          apiFetch('/me/switch-organization/' + encodeURIComponent(id), { method: 'POST' })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (x) {
+              if (x.ok && x.j.access_token) setToken(x.j.access_token);
+              setDevOrgId('');
+              loadModeData(currentMode);
+            })
+            .catch(function () { loadModeData(currentMode); });
+        } else {
+          setDevOrgId(id);
+          loadModeData(currentMode);
+        }
+      });
+
+      function applyKpiAndModules(d) {
+        var rev = d.revenue && d.revenue.total_revenue_inr;
+        if (rev == null && d.revenue && typeof d.revenue.invoice_rows_with_revenue_inr === 'number') {
+          rev = d.revenue.invoice_rows_with_revenue_inr;
+        }
+        document.getElementById('kpi-revenue').textContent =
+          rev != null ? Number(rev).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—';
+        var unread = (d.active_alerts && d.active_alerts.unread_count) != null
+          ? d.active_alerts.unread_count
+          : (d.active_alerts && d.active_alerts.items && d.active_alerts.items.length) || 0;
+        document.getElementById('kpi-alerts').textContent = String(unread);
+        var appr = (d.pending_approvals && d.pending_approvals.count) != null ? d.pending_approvals.count : 0;
+        document.getElementById('kpi-approvals').textContent = String(appr);
+        document.getElementById('kpi-note').textContent = 'Live · org ' + (d.organization_id || '') + ' · ' + (d.generated_at_utc || '').slice(0, 19) + 'Z';
+        var mods = d.saas_modules;
+        var smEl = document.getElementById('saas-modules');
+        if (smEl && Array.isArray(mods)) smEl.textContent = mods.join(' · ');
+        var smr = document.getElementById('saas-modules-r');
+        if (smr && Array.isArray(mods)) smr.textContent = mods.join(' · ');
+      }
+
+      function renderSolarDpr(sd, suffix) {
+        suffix = suffix || '';
+        var panel = suffix === '-e' ? solarEnterpriseEl : solarPanelEl;
+        var id = function (x) { return document.getElementById(x + (suffix || '')); };
+        if (!sd || !sd.applicable) {
+          if (panel) panel.classList.add('hidden');
+          return;
+        }
+        if (panel) panel.classList.remove('hidden');
+        var proj = sd.project || {};
+        var lab = id('solar-phase-label');
+        if (lab) lab.textContent = proj.phase_label || '—';
+        var pct = typeof proj.phase_progress_pct === 'number' ? proj.phase_progress_pct : 0;
+        var pEl = id('solar-progress-pct');
+        if (pEl) pEl.textContent = pct + '%';
+        var bar = id('solar-progress-bar');
+        if (bar) bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+        var est = sd.initial_capex_estimate_inr;
+        var low = sd.initial_capex_low_inr;
+        var high = sd.initial_capex_high_inr;
+        var capTxt = '—';
+        if (est != null) {
+          capTxt = '₹' + Number(est).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+          if (low != null && high != null && low !== high) {
+            capTxt += ' (band ₹' + Number(low).toLocaleString('en-IN', { maximumFractionDigits: 0 }) +
+              ' – ₹' + Number(high).toLocaleString('en-IN', { maximumFractionDigits: 0 }) + ')';
+          }
+        }
+        var cx = id('solar-capex');
+        if (cx) cx.textContent = capTxt;
+        var note = id('solar-capex-note');
+        if (note) note.textContent = sd.initial_capex_note || '';
+      }
+
+      function renderResearchQueries(sd) {
+        var el = document.getElementById('research-queries');
+        if (!el) return;
+        el.innerHTML = '';
+        var mr = sd && sd.market_research;
+        var qs = mr && mr.queries;
+        if (!Array.isArray(qs) || !qs.length) {
+          el.innerHTML = '<p class="text-slate-500">No query rows yet. Refresh research or select org #2 for solar DPR.</p>';
+          return;
+        }
+        qs.forEach(function (q) {
+          var ok = q.ok ? 'text-emerald-400' : 'text-amber-400';
+          var row = document.createElement('div');
+          row.className = 'rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2';
+          var title = (q.query || q.key || '').slice(0, 200);
+          row.innerHTML = '<div class="flex flex-wrap items-center justify-between gap-2"><span class="font-medium text-slate-200">' +
+            title + '</span><span class="text-[10px] uppercase ' + ok + '">' + (q.ok ? 'OK' : (q.skipped ? 'Skipped' : 'Issue')) + '</span></div>';
+          if (q.detail) {
+            var d = document.createElement('p');
+            d.className = 'mt-1 text-[11px] text-slate-500';
+            d.textContent = String(q.detail).slice(0, 240);
+            row.appendChild(d);
+          }
+          el.appendChild(row);
+        });
+      }
+
+      var btnSolarRefresh = document.getElementById('btn-solar-refresh');
+      if (btnSolarRefresh) {
+        btnSolarRefresh.addEventListener('click', function () {
+          btnSolarRefresh.disabled = true;
+          apiFetch('/analytics/solar-dpr-research/refresh', { method: 'POST' })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (x) {
+              if (x.ok) {
+                renderSolarDpr(x.j, '');
+                renderResearchQueries(x.j);
+              }
+            })
+            .finally(function () { btnSolarRefresh.disabled = false; });
+        });
+      }
+
+      function fetchMasterDashboard(cb) {
+        apiFetch('/analytics/master-dashboard')
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+          .then(function (x) { cb(x); })
+          .catch(function () { cb({ ok: false, status: 0, j: {} }); });
+      }
+
+      function loadEnterpriseData() {
+        document.getElementById('status-body').textContent = 'Loading…';
+        fetch('/', { headers: { Accept: 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            document.getElementById('status-body').textContent = JSON.stringify(j, null, 2);
+          })
+          .catch(function () {
+            document.getElementById('status-body').textContent = 'Unable to load status';
+          });
+
+        document.getElementById('kpi-revenue').textContent = '…';
+        document.getElementById('kpi-alerts').textContent = '…';
+        document.getElementById('kpi-approvals').textContent = '…';
+        document.getElementById('kpi-note').textContent = '';
+
+        fetchMasterDashboard(function (x) {
+          if (!x.ok) {
+            document.getElementById('kpi-revenue').textContent = MOCK_KPI.revenue_inr.toLocaleString('en-IN');
+            document.getElementById('kpi-alerts').textContent = String(MOCK_KPI.alerts);
+            document.getElementById('kpi-approvals').textContent = String(MOCK_KPI.approvals);
+            document.getElementById('kpi-note').textContent = MOCK_KPI.note + ' HTTP ' + x.status;
+            if (solarEnterpriseEl) solarEnterpriseEl.classList.add('hidden');
+            return;
+          }
+          var d = x.j;
+          applyKpiAndModules(d);
+          if (d.solar_dpr) renderSolarDpr(d.solar_dpr, '-e');
+          else if (solarEnterpriseEl) solarEnterpriseEl.classList.add('hidden');
+        });
+      }
+
+      function loadResearchData() {
+        document.getElementById('research-forecast').textContent = 'Loading…';
+        document.getElementById('research-queries').innerHTML = '';
+        var hint = document.getElementById('research-org-hint');
+        if (hint) hint.textContent = '';
+
+        fetchMasterDashboard(function (x) {
+          if (!x.ok) {
+            document.getElementById('research-forecast').textContent = 'Unable to load forecast (' + x.status + ')';
+            if (solarPanelEl) solarPanelEl.classList.add('hidden');
+            renderResearchQueries(null);
+            return;
+          }
+          var d = x.j;
+          if (hint) {
+            hint.textContent = 'Active tenant · organization_id ' + (d.organization_id || '—') +
+              ' · Switch org under Enterprise to change research context.';
+          }
+          applyKpiAndModules(d);
+          var fc = d.ai_forecast;
+          document.getElementById('research-forecast').textContent =
+            fc ? JSON.stringify(fc, null, 2) : 'No forecast block.';
+          if (d.solar_dpr) {
+            renderSolarDpr(d.solar_dpr, '');
+            renderResearchQueries(d.solar_dpr);
+          } else {
+            if (solarPanelEl) solarPanelEl.classList.add('hidden');
+            renderResearchQueries({ market_research: { queries: [] } });
+          }
+        });
+      }
+
+      function loadPersonalData() {
+        var st = document.getElementById('personal-status');
+        var hList = document.getElementById('personal-habits-list');
+        var hp = document.getElementById('personal-habits-pending');
+        var health = document.getElementById('personal-health-list');
+        var missions = document.getElementById('personal-missions-list');
+        if (st) st.textContent = 'Loading…';
+        if (hList) hList.innerHTML = '';
+        if (health) health.innerHTML = '';
+        if (missions) missions.innerHTML = '';
+
+        apiFetch('/life/dashboard')
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+          .then(function (x) {
+            if (!x.ok) {
+              var msg = (x.j && x.j.detail) ? x.j.detail : JSON.stringify(x.j || {});
+              if (st) st.textContent = 'Life OS needs a signed-in user (not dev id 0). HTTP ' + x.status + ' — ' + msg;
+              if (hp) hp.textContent = '—';
+              return;
+            }
+            var p = x.j;
+            if (st) st.textContent = 'Synced · ' + JSON.stringify(p.sync_counts || {}).slice(0, 120);
+            if (hp) hp.textContent = String(p.habits_pending_today != null ? p.habits_pending_today : '—');
+            if (hList && Array.isArray(p.habits)) {
+              p.habits.slice(0, 12).forEach(function (h) {
+                var li = document.createElement('li');
+                li.textContent = (h.title || '') + (h.completed_today ? ' ✓' : '');
+                hList.appendChild(li);
+              });
+            }
+            if (health && Array.isArray(p.health_today)) {
+              p.health_today.slice(0, 8).forEach(function (m) {
+                var li = document.createElement('li');
+                li.textContent = (m.metric_type || '') + ': ' + String(m.value);
+                health.appendChild(li);
+              });
+            }
+            if (p.legacy_health_log && health && health.children.length === 0) {
+              var lg = p.legacy_health_log;
+              var li = document.createElement('li');
+              li.textContent = 'Sleep ' + (lg.sleep_hours != null ? lg.sleep_hours + 'h' : '—') +
+                ' · Water ' + (lg.water_glasses != null ? lg.water_glasses : '—') +
+                ' · Stress ' + (lg.stress_1_10 != null ? lg.stress_1_10 + '/10' : '—');
+              health.appendChild(li);
+            }
+            if (missions && Array.isArray(p.missions_open)) {
+              p.missions_open.forEach(function (m) {
+                var li = document.createElement('li');
+                li.textContent = (m.title || '') + (m.deadline ? ' · ' + m.deadline.slice(0, 10) : '');
+                missions.appendChild(li);
+              });
+            }
+          })
+          .catch(function () {
+            if (st) st.textContent = 'Network error loading /life/dashboard';
+          });
+      }
+
+      function appendChat(role, text) {
+        var div = document.createElement('div');
+        div.className = role === 'user'
+          ? 'ml-8 rounded-lg bg-thiramai-900/40 border border-thiramai-800/50 px-3 py-2 text-slate-200'
+          : 'mr-8 rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 text-slate-300 whitespace-pre-wrap';
+        div.textContent = text;
+        chatLog.appendChild(div);
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+
+      chatForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var msg = chatInput.value.trim();
+        if (!msg) return;
+        chatInput.value = '';
+        appendChat('user', msg);
+        var btn = chatForm.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        apiFetch('/chat/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            if (!x.ok) {
+              appendChat('ai', 'Error: ' + (x.j.detail || JSON.stringify(x.j)));
+              return;
+            }
+            var narrative = x.j.narrative || x.j.response || JSON.stringify(x.j);
+            appendChat('ai', narrative);
+          })
+          .catch(function () { appendChat('ai', 'Network error'); })
+          .finally(function () { btn.disabled = false; });
+      });
+    })();
+  </script>
+</body>
+</html>

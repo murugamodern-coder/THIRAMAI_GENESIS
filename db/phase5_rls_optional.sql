@@ -1,0 +1,24 @@
+-- Phase 5: optional PostgreSQL row-level security (RLS) for tenant isolation.
+--
+-- Prerequisites:
+--   1. Application must set ``SET LOCAL app.current_org_id = '<id>'`` per transaction
+--      (see ``core.tenant_context.set_tenant_guc`` + ``THIRAMAI_PG_TENANT_GUC=1``).
+--   2. Test on a staging DB first; RLS is strict and can break queries that omit the GUC.
+--
+-- Example policy pattern (inventory_items example; adjust table/column names to match your schema):
+--
+-- CREATE OR REPLACE FUNCTION app.current_org_id_bigint() RETURNS bigint AS $$
+--   SELECT NULLIF(current_setting('app.current_org_id', true), '')::bigint;
+-- $$ LANGUAGE sql STABLE;
+--
+-- ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE inventory_items FORCE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY tenant_isolation_inventory_items ON inventory_items
+--   FOR ALL
+--   USING (organization_id = app.current_org_id_bigint())
+--   WITH CHECK (organization_id = app.current_org_id_bigint());
+--
+-- Grant roles (e.g. ``app_user``) SELECT/INSERT/UPDATE as needed; RLS still applies.
+--
+-- This file is intentionally **not** executed automatically by Alembic; apply manually when ready.

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>THIRAMAI — Sovereign Control</title>
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2332; --text: #e7ecf3; --accent: #3d9eff; --muted: #8b9bb4; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; min-height: 100vh; }
+    header { padding: 1rem 1.25rem; border-bottom: 1px solid #2a3544; display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+    label { font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 0.25rem; }
+    input[type="text"] { width: min(520px, 100%); padding: 0.5rem 0.65rem; border-radius: 6px; border: 1px solid #2a3544; background: var(--panel); color: var(--text); }
+    button { padding: 0.45rem 0.9rem; border-radius: 6px; border: none; background: var(--accent); color: #061018; font-weight: 600; cursor: pointer; }
+    button.secondary { background: #2a3544; color: var(--text); }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem; max-width: 1400px; margin: 0 auto; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+    section { background: var(--panel); border-radius: 10px; padding: 1rem; border: 1px solid #2a3544; min-height: 200px; }
+    section h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.75rem; }
+    #cot-log { font-family: ui-monospace, monospace; font-size: 0.72rem; line-height: 1.45; max-height: 420px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+    .row { color: var(--muted); margin-bottom: 0.35rem; }
+    .row b { color: #9fd0ff; }
+    #summary { font-size: 0.85rem; line-height: 1.5; max-height: 360px; overflow-y: auto; }
+    .status { font-size: 0.75rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Sovereign control — chain of thought</h1>
+    <div>
+      <label for="token">Bearer access token</label>
+      <input id="token" type="text" placeholder="Paste JWT from login…" autocomplete="off" />
+    </div>
+    <div style="align-self:flex-end;">
+      <button type="button" id="btn-refresh">Refresh CoT</button>
+      <button type="button" id="btn-sse" class="secondary">Start live stream</button>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>Live CoT feed</h2>
+      <p class="status" id="sse-status">Polling /sovereign/cot/recent — same-origin API.</p>
+      <div id="cot-log"></div>
+    </section>
+    <section>
+      <h2>Latest executive summary</h2>
+      <button type="button" id="btn-summary">Load summary</button>
+      <div id="summary"></div>
+    </section>
+  </main>
+  <script>
+    const base = "";
+    function authHeaders() {
+      const t = document.getElementById("token").value.trim();
+      return t ? { "Authorization": "Bearer " + t, "Accept": "application/json" } : { "Accept": "application/json" };
+    }
+    async function loadCot() {
+      const el = document.getElementById("cot-log");
+      el.textContent = "Loading…";
+      try {
+        const r = await fetch(base + "/sovereign/cot/recent?limit=80", { headers: authHeaders() });
+        if (!r.ok) { el.textContent = "HTTP " + r.status + " — check token / role (supervisor+)."; return; }
+        const j = await r.json();
+        const lines = (j.items || []).map(function (it) {
+          const ts = new Date((it.ts || 0) * 1000).toISOString();
+          return "[" + ts + "] " + (it.agent || "?") + " / " + (it.phase || "?") + "\n  " + (it.detail || "") + "\n";
+        });
+        el.textContent = lines.length ? lines.join("\n") : "(empty — run a chat query to populate journal)";
+      } catch (e) {
+        el.textContent = String(e);
+      }
+    }
+    async function loadSummary() {
+      const el = document.getElementById("summary");
+      el.textContent = "Loading…";
+      try {
+        const r = await fetch(base + "/sovereign/executive-summary/latest", { headers: authHeaders() });
+        const j = await r.json();
+        el.textContent = j.markdown || j.detail || JSON.stringify(j);
+      } catch (e) {
+        el.textContent = String(e);
+      }
+    }
+    let es = null;
+    function startSse() {
+      const st = document.getElementById("sse-status");
+      if (es) { es.close(); es = null; st.textContent = "Stream stopped."; return; }
+      const t = document.getElementById("token").value.trim();
+      if (!t) { st.textContent = "Set token first (EventSource cannot send Authorization)."; return; }
+      st.textContent = "Note: browsers cannot attach Bearer to EventSource. Use Refresh or a proxy; showing polling fallback.";
+      loadCot();
+      setInterval(loadCot, 4000);
+    }
+    document.getElementById("btn-refresh").onclick = loadCot;
+    document.getElementById("btn-summary").onclick = loadSummary;
+    document.getElementById("btn-sse").onclick = startSse;
+  </script>
+</body>
+</html>

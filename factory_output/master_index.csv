@@ -1,0 +1,17 @@
+timestamp_utc,zone,relative_path,kind,title,size_bytes,note
+2026-03-31T02:46:25.187792+00:00,factory,2026/03/Invoices/invoice_20260331_081625.pdf,invoice,Invoice INV-20260331-01,1776,grade=HDPE; weight_kg=10.0
+2026-03-31T03:03:21.742500+00:00,factory,2026/03/Invoices/invoice_20260331_083321.pdf,invoice,Invoice INV-20260331-01,1769,grade=HDPE; weight_kg=1.0
+2026-03-31T03:12:29.344743+00:00,factory,2026/03/Invoices/invoice_20260331_084229.pdf,invoice,Invoice INV-20260331-01,1766,grade=X; weight_kg=1.0
+2026-03-31T03:21:46.405744+00:00,factory,2026/03/Invoices/invoice_20260331_085146.pdf,invoice,Invoice SMOKE-20260331,1763,grade=HDPE; weight_kg=1.0
+2026-03-31T03:32:54.506703+00:00,factory,2026/03/Invoices/invoice_20260331_090254.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T03:35:06.778502+00:00,factory,2026/03/Invoices/invoice_20260331_090506.pdf,invoice,Invoice INV-20260331-01,1993,grade=G; weight_kg=2.0; revenue_inr=118.00
+2026-03-31T04:06:13.832539+00:00,factory,2026/03/Invoices/invoice_20260331_093613.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T04:12:16.111966+00:00,factory,2026/03/Invoices/invoice_20260331_094216.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T04:19:13.837893+00:00,factory,2026/03/Invoices/invoice_20260331_094913.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T04:25:59.941269+00:00,factory,2026/03/Invoices/invoice_20260331_095559.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T04:33:57.802681+00:00,factory,2026/03/Invoices/invoice_20260331_100357.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T04:37:39.370801+00:00,factory,2026/03/Invoices/invoice_20260331_100739.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T07:53:06.534163+00:00,factory,2026/03/Invoices/invoice_20260331_132306.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T09:45:52.959370+00:00,factory,2026/03/Invoices/invoice_20260331_151552.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T09:54:48.367873+00:00,factory,2026/03/Invoices/invoice_20260331_152448.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00
+2026-03-31T10:03:39.144634+00:00,factory,2026/03/Invoices/invoice_20260331_153339.pdf,invoice,Invoice SMOKE-20260331,1991,grade=HDPE; weight_kg=1.0; revenue_inr=118.00

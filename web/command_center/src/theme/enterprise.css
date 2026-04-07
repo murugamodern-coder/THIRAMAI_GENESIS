@@ -1,0 +1,97 @@
+/**
+ * Command Center React islands — SAP Horizon–aligned tokens (matches static/enterprise-theme.css)
+ */
+:root {
+  --sap-shell: #1873b4;
+  --sap-accent: #0064d9;
+  --sap-accent-hover: #0052b3;
+  --sap-success: #107e3e;
+  --sap-warn: #e9730c;
+  --sap-danger: #bb0000;
+  --sap-bg: #f5f6f7;
+  --sap-surface: #ffffff;
+  --sap-border: #d9d9d9;
+  --sap-text: #32363a;
+  --sap-muted: #6a6d70;
+  --sap-label: #354a5e;
+}
+
+.cc-chart-card {
+  border-radius: 4px !important;
+  border: 1px solid var(--sap-border) !important;
+  background: var(--sap-surface) !important;
+  padding: 8px 10px !important;
+}
+
+.cc-chart-card__label {
+  color: var(--sap-label) !important;
+  font-size: 11px !important;
+  letter-spacing: 0.3px !important;
+}
+
+.cc-charts-panel__title {
+  color: var(--sap-label) !important;
+}
+
+.cc-command-input {
+  border: 1px solid var(--sap-border) !important;
+  background: var(--sap-surface) !important;
+  color: var(--sap-text) !important;
+}
+
+.cc-command-input::placeholder {
+  color: var(--sap-muted) !important;
+}
+
+.cc-command-input:focus {
+  border-color: var(--sap-accent) !important;
+  box-shadow: 0 0 0 2px rgba(0, 100, 217, 0.2) !important;
+}
+
+.cc-command-submit {
+  border: 1px solid var(--sap-accent) !important;
+  background: var(--sap-accent) !important;
+  color: #fff !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.cc-command-submit:hover {
+  background: var(--sap-accent-hover) !important;
+}
+
+.cc-command-status {
+  color: var(--sap-muted) !important;
+}
+
+.cc-badge--ok {
+  border-color: #b7dfb9 !important;
+  color: var(--sap-success) !important;
+  background: #e8f5e9 !important;
+}
+
+.cc-badge--warn {
+  border-color: #f5d4b8 !important;
+  color: var(--sap-warn) !important;
+  background: #fff4e8 !important;
+}
+
+.cc-badge--crit {
+  border-color: #f5c2c2 !important;
+  color: var(--sap-danger) !important;
+  background: #fff5f5 !important;
+}
+
+.cc-status-ok {
+  color: var(--sap-success) !important;
+}
+
+.cc-status-warn {
+  color: var(--sap-warn) !important;
+}
+
+.cc-status-crit {
+  color: var(--sap-danger) !important;
+}

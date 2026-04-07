@@ -1,0 +1,2824 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Leave empty to use this page’s origin (same host as FastAPI). Set to http://localhost:8000 if you use Live Server on another port. -->
+    <meta name="thiramai-api-base" content="" />
+    <title>THIRAMAI · Executive Cockpit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              neon: {
+                DEFAULT: "#00FFFF",
+                dim: "#22d3ee",
+                glow: "#67e8f9",
+              },
+              cockpit: {
+                bg: "#0D1117",
+                orange: "#FF5733",
+              },
+            },
+            fontFamily: {
+              display: ['"IBM Plex Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+              body: ['"IBM Plex Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+              mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
+            },
+            boxShadow: {
+              neon: "0 0 24px rgba(0, 255, 255, 0.22), 0 0 48px rgba(0, 255, 255, 0.08)",
+              panel: "0 0 0 1px rgba(0, 255, 255, 0.12), 0 24px 80px rgba(0,0,0,0.65)",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+      body {
+        background: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(0, 255, 255, 0.07), transparent 55%),
+          radial-gradient(ellipse 80% 50% at 100% 100%, rgba(255, 87, 51, 0.04), transparent 50%),
+          #0d1117;
+      }
+      .grid-bg {
+        background-image: linear-gradient(rgba(0, 255, 255, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 255, 255, 0.035) 1px, transparent 1px);
+        background-size: 48px 48px;
+      }
+      @keyframes thir-ambient-ring {
+        from {
+          box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.45);
+        }
+        to {
+          box-shadow: 0 0 0 12px rgba(34, 211, 238, 0);
+        }
+      }
+      .thir-ambient-flash {
+        animation: thir-ambient-ring 0.7s ease-out 1;
+      }
+      @keyframes thir-ambient-fade-in {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .thir-ambient-fade-in {
+        animation: thir-ambient-fade-in 0.45s ease-out 1;
+      }
+      @keyframes voice-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.35);
+        }
+        50% {
+          box-shadow: 0 0 0 8px rgba(167, 139, 250, 0);
+        }
+      }
+      .voice-listening {
+        animation: voice-pulse 1.1s ease-in-out infinite;
+        border-color: rgba(167, 139, 250, 0.65) !important;
+      }
+      .cc-tab {
+        border-radius: 0.375rem;
+        border: 1px solid rgba(63, 63, 70, 0.9);
+        background: rgba(0, 0, 0, 0.35);
+        padding: 0.35rem 0.65rem;
+        font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: rgba(161, 161, 170, 0.95);
+        transition:
+          border-color 0.15s ease,
+          color 0.15s ease,
+          background 0.15s ease;
+      }
+      .cc-tab:hover {
+        border-color: rgba(34, 211, 238, 0.4);
+        color: rgba(212, 212, 216, 1);
+      }
+      .cc-tab--active {
+        border-color: rgba(0, 255, 255, 0.45);
+        background: rgba(8, 47, 73, 0.45);
+        color: rgba(207, 250, 254, 0.98);
+        box-shadow: 0 0 16px rgba(0, 255, 255, 0.12);
+      }
+      /* High-tech terminal viewport for intelligence output */
+      .report-terminal-shell {
+        position: relative;
+        isolation: isolate;
+        background: linear-gradient(
+          160deg,
+          rgba(6, 14, 22, 0.88) 0%,
+          rgba(4, 10, 18, 0.92) 45%,
+          rgba(8, 18, 26, 0.88) 100%
+        );
+        border: 1px solid rgba(0, 255, 255, 0.38);
+        border-radius: 0.75rem;
+        box-shadow:
+          0 0 0 1px rgba(0, 255, 255, 0.1),
+          0 0 48px rgba(0, 255, 255, 0.07),
+          0 24px 64px rgba(0, 0, 0, 0.55),
+          inset 0 1px 0 rgba(0, 255, 255, 0.12),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        overflow: hidden;
+      }
+      .report-terminal-shell::before {
+        content: "";
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: repeating-linear-gradient(
+          0deg,
+          transparent 0px,
+          transparent 3px,
+          rgba(0, 0, 0, 0.045) 3px,
+          rgba(0, 0, 0, 0.045) 4px
+        );
+        opacity: 0.65;
+        z-index: 0;
+      }
+      .report-terminal-shell::after {
+        content: "";
+        pointer-events: none;
+        position: absolute;
+        inset: 3px;
+        border-radius: 0.55rem;
+        border: 1px solid rgba(0, 255, 255, 0.12);
+        z-index: 0;
+      }
+      .report-terminal-chrome {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.5rem 1rem;
+        background: rgba(0, 0, 0, 0.45);
+        border-bottom: 1px solid rgba(0, 255, 255, 0.22);
+        box-shadow: 0 1px 0 rgba(0, 255, 255, 0.06);
+      }
+      .report-terminal-chrome-dots {
+        display: flex;
+        gap: 0.35rem;
+      }
+      .report-terminal-chrome-dots span {
+        width: 0.4rem;
+        height: 0.4rem;
+        border-radius: 9999px;
+        box-shadow: 0 0 6px currentColor;
+      }
+      .report-terminal-body {
+        position: relative;
+        z-index: 1;
+        padding: 1.25rem 1.25rem 1.5rem;
+      }
+      @media (min-width: 640px) {
+        .report-terminal-body {
+          padding: 1.5rem 1.75rem 1.75rem;
+        }
+      }
+      .report-terminal-viewport {
+        position: relative;
+        border-radius: 0.5rem;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(0, 255, 255, 0.18);
+        box-shadow: inset 0 0 32px rgba(0, 255, 255, 0.04);
+        padding: 1.25rem 1.35rem;
+        font-variant-ligatures: none;
+      }
+      .report-terminal-viewport:not(.hidden)::before {
+        content: "> OUTPUT_STREAM // SOVEREIGN";
+        display: block;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.65rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(0, 255, 255, 0.45);
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px dashed rgba(0, 255, 255, 0.15);
+      }
+
+      .report-md {
+        color: #e4e4e7;
+        line-height: 1.75;
+        font-size: 0.95rem;
+      }
+      .report-md h1 {
+        font-family: "IBM Plex Sans", sans-serif;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #00FFFF;
+        margin: 1.5rem 0 1rem;
+        text-shadow: 0 0 20px rgba(0, 255, 255, 0.35);
+      }
+      .report-md h2 {
+        font-family: "IBM Plex Sans", sans-serif;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #4ade80;
+        margin: 1.75rem 0 0.75rem;
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid rgba(0, 255, 255, 0.25);
+      }
+      .report-md h3 {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #86efac;
+        margin: 1.25rem 0 0.5rem;
+      }
+      .report-md p {
+        margin: 0.65rem 0;
+      }
+      .report-md strong {
+        color: #00FFFF;
+        font-weight: 600;
+      }
+      .report-md ul,
+      .report-md ol {
+        margin: 0.65rem 0 0.65rem 1.25rem;
+      }
+      .report-md li {
+        margin: 0.35rem 0;
+      }
+      .report-md hr {
+        border: none;
+        border-top: 1px dashed rgba(0, 255, 255, 0.3);
+        margin: 1.5rem 0;
+      }
+      .report-md code {
+        background: rgba(0, 255, 255, 0.08);
+        color: #86efac;
+        padding: 0.15rem 0.4rem;
+        border-radius: 0.25rem;
+        font-size: 0.85em;
+      }
+      .report-md pre {
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid rgba(0, 255, 255, 0.2);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        overflow-x: auto;
+        margin: 1rem 0;
+      }
+      .report-md pre code {
+        background: transparent;
+        padding: 0;
+      }
+      /* Sovereign data lattice - futuristic tables inside terminal */
+      .report-md table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin: 1.35rem 0;
+        font-size: 0.82rem;
+        font-variant-numeric: tabular-nums;
+        border: 1px solid rgba(0, 255, 255, 0.42);
+        border-radius: 0.5rem;
+        overflow: hidden;
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.5),
+          0 0 28px rgba(0, 255, 255, 0.12),
+          inset 0 1px 0 rgba(0, 255, 255, 0.15);
+      }
+      .report-md thead {
+        background: linear-gradient(
+          90deg,
+          rgba(0, 255, 255, 0.22) 0%,
+          rgba(255, 87, 51, 0.1) 40%,
+          rgba(0, 255, 255, 0.08) 100%
+        );
+        box-shadow: inset 0 -1px 0 rgba(0, 255, 255, 0.25);
+      }
+      .report-md th,
+      .report-md td {
+        border: none;
+        border-bottom: 1px solid rgba(0, 255, 255, 0.14);
+        border-right: 1px solid rgba(0, 255, 255, 0.1);
+        padding: 0.7rem 0.9rem;
+        text-align: left;
+        vertical-align: top;
+      }
+      .report-md th:last-child,
+      .report-md td:last-child {
+        border-right: none;
+      }
+      .report-md tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .report-md th {
+        font-family: "IBM Plex Sans", sans-serif;
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #00FFFF;
+        text-shadow: 0 0 12px rgba(0, 255, 255, 0.35);
+      }
+      .report-md th:first-child,
+      .report-md td:first-child {
+        border-left: 2px solid rgba(0, 255, 255, 0.35);
+        padding-left: calc(0.9rem - 1px);
+        background: linear-gradient(90deg, rgba(0, 255, 255, 0.06), transparent 60%);
+      }
+      .report-md thead th:first-child {
+        background: linear-gradient(90deg, rgba(0, 255, 255, 0.15), rgba(0, 255, 255, 0.08) 50%, transparent 100%);
+      }
+      .report-md tbody tr {
+        background: rgba(0, 0, 0, 0.2);
+        transition: background 0.15s ease, box-shadow 0.15s ease;
+      }
+      .report-md tbody tr:nth-child(even) {
+        background: rgba(0, 255, 255, 0.035);
+      }
+      .report-md tbody tr:hover {
+        background: rgba(0, 255, 255, 0.1);
+        box-shadow: inset 0 0 0 1px rgba(0, 255, 255, 0.12);
+      }
+      .report-md blockquote {
+        border-left: 3px solid #00FFFF;
+        margin: 1rem 0;
+        padding: 0.5rem 1rem;
+        background: rgba(0, 255, 255, 0.05);
+        color: #d4d4d8;
+      }
+      .chart-card {
+        border: 1px solid rgba(0, 255, 255, 0.2);
+        border-radius: 0.75rem;
+        background: rgba(0, 0, 0, 0.45);
+        padding: 1rem;
+        min-height: 280px;
+      }
+      .chart-card canvas {
+        max-height: 320px;
+      }
+      @keyframes thiramai-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .thiramai-spinner {
+        width: 2.75rem;
+        height: 2.75rem;
+        border: 3px solid rgba(0, 255, 255, 0.15);
+        border-top-color: #00FFFF;
+        border-radius: 50%;
+        animation: thiramai-spin 0.75s linear infinite;
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.25);
+      }
+      /* Quick action — high-contrast neon chips (always above terminal stack) */
+      #quick-actions-panel {
+        position: relative;
+        z-index: 30;
+      }
+      .qa-neon-btn {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        border-radius: 0.75rem;
+        border: 2px solid rgba(0, 255, 255, 0.85);
+        background: rgba(0, 0, 0, 0.65);
+        padding: 0.65rem 1.25rem;
+        font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #00FFFF;
+        text-decoration: none;
+        box-shadow:
+          0 0 18px rgba(0, 255, 255, 0.45),
+          0 0 36px rgba(0, 255, 255, 0.12),
+          inset 0 1px 0 rgba(0, 255, 255, 0.2);
+        transition:
+          box-shadow 0.2s ease,
+          background 0.2s ease,
+          transform 0.15s ease;
+      }
+      .qa-neon-btn:hover {
+        background: rgba(0, 255, 255, 0.12);
+        box-shadow:
+          0 0 26px rgba(0, 255, 255, 0.65),
+          0 0 48px rgba(0, 255, 255, 0.2),
+          inset 0 1px 0 rgba(0, 255, 255, 0.35);
+        transform: translateY(-1px);
+      }
+      /* Latest invoice — high-visibility green (POST /assets/invoice) */
+      .qa-invoice-latest-btn {
+        border-color: rgba(74, 222, 128, 0.95) !important;
+        color: #4ade80 !important;
+        box-shadow:
+          0 0 22px rgba(74, 222, 128, 0.55),
+          0 0 44px rgba(34, 197, 94, 0.25),
+          inset 0 1px 0 rgba(187, 247, 208, 0.35) !important;
+        text-shadow: 0 0 12px rgba(74, 222, 128, 0.45);
+      }
+      .qa-invoice-latest-btn:hover {
+        background: rgba(34, 197, 94, 0.15) !important;
+        box-shadow:
+          0 0 30px rgba(74, 222, 128, 0.75),
+          0 0 56px rgba(34, 197, 94, 0.35),
+          inset 0 1px 0 rgba(187, 247, 208, 0.45) !important;
+      }
+      .qa-folder-icon {
+        flex-shrink: 0;
+        color: rgba(0, 255, 255, 0.85);
+        filter: drop-shadow(0 0 6px rgba(0, 255, 255, 0.35));
+      }
+      @keyframes qa-success-pop {
+        from {
+          opacity: 0;
+          transform: scale(0.94) translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+      .qa-invoice-latest-btn.qa-just-created {
+        animation: qa-success-pop 0.5s ease-out;
+      }
+      .invoice-field-invalid {
+        border-color: rgb(239 68 68 / 0.95) !important;
+        box-shadow: 0 0 0 1px rgb(239 68 68 / 0.45);
+      }
+      .invoice-btn-mini-spinner {
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid rgba(0, 255, 255, 0.2);
+        border-top-color: #00FFFF;
+        border-radius: 50%;
+        animation: thiramai-spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+      .invoice-generate-busy {
+        opacity: 0.85;
+        cursor: not-allowed !important;
+        pointer-events: none;
+      }
+      @keyframes toast-in {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .thiramai-toast {
+        animation: toast-in 0.35s ease-out;
+      }
+      @keyframes procurement-banner-in {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      #procurementAlert.procurement-alert--animate {
+        animation: procurement-banner-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+      .cash-flow-radar-svg-wrap {
+        width: 100%;
+        max-width: min(100%, 22rem);
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .cash-flow-radar-svg-wrap svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: min(50vw, 14rem);
+      }
+      @media (min-width: 640px) {
+        .cash-flow-radar-svg-wrap svg {
+          max-height: 15rem;
+        }
+      }
+      /* Digital Twin — extrusion line schematic */
+      .twin-pipeline {
+        position: relative;
+        padding: 1rem 0.5rem 1.5rem;
+        border-radius: 0.75rem;
+        background: linear-gradient(180deg, rgba(8, 12, 20, 0.9) 0%, rgba(3, 6, 12, 0.95) 100%);
+        border: 1px solid rgba(0, 255, 255, 0.2);
+      }
+      .twin-node {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.35rem;
+        min-width: 4.5rem;
+      }
+      .twin-box {
+        font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.6rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        text-align: center;
+        color: #a1a1aa;
+        padding: 0.45rem 0.35rem;
+        border-radius: 0.35rem;
+        border: 1px solid rgba(63, 63, 70, 0.8);
+        background: rgba(0, 0, 0, 0.45);
+        max-width: 5.5rem;
+        line-height: 1.2;
+      }
+      .twin-arrow {
+        color: rgba(0, 255, 255, 0.35);
+        font-size: 1rem;
+        padding-bottom: 1.5rem;
+        user-select: none;
+      }
+      .twin-led {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 9999px;
+        flex-shrink: 0;
+        transition:
+          background 0.25s ease,
+          box-shadow 0.25s ease;
+      }
+      .twin-led--green {
+        background: #22c55e;
+        box-shadow:
+          0 0 10px #22c55e,
+          0 0 20px rgba(34, 197, 94, 0.45);
+      }
+      .twin-led--red {
+        background: #ef4444;
+        box-shadow:
+          0 0 10px #ef4444,
+          0 0 18px rgba(239, 68, 68, 0.4);
+      }
+      .twin-led--yellow {
+        background: #eab308;
+        box-shadow:
+          0 0 10px #eab308,
+          0 0 18px rgba(234, 179, 8, 0.45);
+      }
+      .twin-led--dim {
+        background: #3f3f46;
+        box-shadow: none;
+      }
+      .twin-sensor-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem;
+      }
+      @media (min-width: 640px) {
+        .twin-sensor-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+      /* Empire Vision roadmap */
+      .vision-roadmap {
+        position: relative;
+        padding: 1.5rem 1rem 2rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(251, 191, 36, 0.25);
+        background: linear-gradient(165deg, rgba(30, 20, 8, 0.92) 0%, rgba(8, 8, 12, 0.95) 100%);
+      }
+      .vision-track {
+        display: flex;
+        flex-direction: column;
+        gap: 1.75rem;
+      }
+      @media (min-width: 768px) {
+        .vision-track {
+          flex-direction: row;
+          align-items: stretch;
+          gap: 0;
+        }
+      }
+      .vision-milestone {
+        flex: 1;
+        position: relative;
+        padding: 1rem 1.1rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(63, 63, 70, 0.85);
+        background: rgba(0, 0, 0, 0.45);
+      }
+      @media (min-width: 768px) {
+        .vision-milestone:not(:last-child)::after {
+          content: "";
+          position: absolute;
+          right: -12px;
+          top: 50%;
+          width: 24px;
+          height: 2px;
+          background: linear-gradient(90deg, rgba(255, 87, 51, 0.45), rgba(0, 255, 255, 0.35));
+          transform: translateY(-50%);
+          z-index: 1;
+        }
+      }
+      .vision-milestone h3 {
+        font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #fbbf24;
+      }
+      .vision-bar-wrap {
+        margin-top: 0.65rem;
+        height: 0.5rem;
+        border-radius: 9999px;
+        background: rgba(39, 39, 42, 0.9);
+        overflow: hidden;
+      }
+      .vision-bar {
+        height: 100%;
+        border-radius: 9999px;
+        background: linear-gradient(90deg, #00ffff, #0891b2);
+        box-shadow: 0 0 12px rgba(0, 255, 255, 0.35);
+        transition: width 0.6s ease;
+      }
+      .rd-lab-grid {
+        margin-top: 1.25rem;
+        display: grid;
+        gap: 1rem;
+      }
+      @media (min-width: 640px) {
+        .rd-lab-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .rd-lab-pillar h4 {
+        font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #22d3ee;
+      }
+      .rd-lab-pillar .vision-bar {
+        background: linear-gradient(90deg, #22d3ee, #ff5733);
+        box-shadow: 0 0 14px rgba(0, 255, 255, 0.2);
+      }
+      .ai-core-stats {
+        display: grid;
+        gap: 1rem;
+      }
+      @media (min-width: 640px) {
+        .ai-core-stats {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .ai-sim-terminal {
+        margin-top: 1rem;
+        max-height: 11rem;
+        overflow-y: auto;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(34, 211, 238, 0.35);
+        background: rgba(4, 12, 18, 0.94);
+        padding: 0.65rem 0.75rem;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 9px;
+        line-height: 1.45;
+        color: rgba(165, 243, 252, 0.92);
+        text-shadow: 0 0 6px rgba(0, 255, 255, 0.2);
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .vision-pct {
+        margin-top: 0.35rem;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.75rem;
+        color: #a1a1aa;
+      }
+      @keyframes twin-sensor-pulse {
+        0%,
+        100% {
+          opacity: 1;
+          text-shadow: 0 0 8px rgba(0, 255, 255, 0.35);
+        }
+        50% {
+          opacity: 0.82;
+          text-shadow: 0 0 14px rgba(34, 211, 238, 0.5);
+        }
+      }
+      .twin-sensor-running .twin-live-val {
+        animation: twin-sensor-pulse 1.25s ease-in-out infinite;
+      }
+
+      /* Workspace mode switcher — explicit colors so buttons stay visible on all viewports */
+      .nav-mode-btn {
+        flex-shrink: 0;
+        font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 0.55rem 0.95rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(63, 63, 70, 0.95);
+        background: rgba(24, 24, 27, 0.96);
+        color: #a1a1aa;
+        cursor: pointer;
+        white-space: nowrap;
+        transition:
+          color 0.15s ease,
+          border-color 0.15s ease,
+          background 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+      .nav-mode-btn:hover {
+        color: #e4e4e7;
+        border-color: rgba(82, 82, 91, 0.95);
+        background: rgba(39, 39, 42, 0.96);
+      }
+      .nav-mode-btn[data-active="true"] {
+        color: #00FFFF;
+        border-color: rgba(0, 255, 255, 0.5);
+        background: linear-gradient(180deg, rgba(0, 255, 255, 0.16), rgba(0, 255, 255, 0.05));
+        box-shadow:
+          0 0 0 1px rgba(0, 255, 255, 0.25),
+          0 0 20px rgba(0, 255, 255, 0.12);
+        text-shadow: 0 0 14px rgba(0, 255, 255, 0.35);
+      }
+      .nav-mode-btn:focus-visible {
+        outline: 2px solid rgba(0, 255, 255, 0.55);
+        outline-offset: 2px;
+      }
+      .nav-mode-scroll {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.4rem;
+        overflow-x: auto;
+        max-width: 100%;
+        padding: 2px 0 4px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 255, 255, 0.35) rgba(24, 24, 27, 0.6);
+      }
+      .nav-mode-scroll::-webkit-scrollbar {
+        height: 6px;
+      }
+      .nav-mode-scroll::-webkit-scrollbar-thumb {
+        background: rgba(0, 255, 255, 0.28);
+        border-radius: 4px;
+      }
+      .nav-mode-scroll::-webkit-scrollbar-track {
+        background: rgba(24, 24, 27, 0.85);
+        border-radius: 4px;
+      }
+      .workspace-mode-nav-inner {
+        border-bottom: 1px solid rgba(0, 255, 255, 0.14);
+        background: linear-gradient(180deg, rgba(13, 17, 23, 0.98), rgba(13, 17, 23, 0.9));
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      }
+      #mode-select-mobile {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.7rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(63, 63, 70, 0.95);
+        background: rgba(24, 24, 27, 0.96);
+        color: #e4e4e7;
+        padding: 0.5rem 0.65rem;
+        max-width: 100%;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen text-zinc-200 font-body antialiased grid-bg">
+    <nav
+      id="workspace-mode-nav"
+      class="sticky top-0 z-[100] workspace-mode-nav-inner backdrop-blur-md"
+      aria-label="Workspace mode"
+    >
+      <div class="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <span class="workspace-mode-bar-label shrink-0 text-zinc-500">Mode</span>
+        <div class="nav-mode-scroll hidden min-w-0 flex-1 sm:flex" id="nav-mode-pills" role="tablist">
+          <button type="button" class="nav-mode-btn" data-nav-mode data-mode="personal" role="tab" aria-selected="true">
+            Today
+          </button>
+          <button type="button" class="nav-mode-btn" data-nav-mode data-mode="research" role="tab" aria-selected="false">
+            Research
+          </button>
+          <button type="button" class="nav-mode-btn" data-nav-mode data-mode="enterprise" role="tab" aria-selected="false">
+            Command deck
+          </button>
+        </div>
+        <label class="flex w-full min-w-0 flex-[1_1_100%] items-center gap-2 sm:hidden">
+          <span class="workspace-mode-bar-label text-zinc-500">Mode</span>
+          <select id="mode-select-mobile" aria-label="Switch workspace mode">
+            <option value="personal">Today — Daily briefing</option>
+            <option value="research">Research — Intel</option>
+            <option value="enterprise">Command deck — Enterprise</option>
+          </select>
+        </label>
+      </div>
+    </nav>
+
+    <div class="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+      <div id="panel-mode-enterprise" class="mode-workspace-panel">
+      <header class="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p class="font-display text-xs uppercase tracking-[0.35em] text-neon-dim/90">Executive OS · 2026</p>
+          <h1 class="font-display mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            THIRAMAI <span class="text-neon">GENESIS</span>
+          </h1>
+          <p class="mt-2 max-w-xl text-sm text-zinc-500">
+            Corporate cockpit entry — sovereign strategy, research vault, and daily command. Submit a directive; receive a
+            formatted intelligence brief from the same surface as the live ops tower.
+          </p>
+        </div>
+        <div
+          class="flex items-center gap-2 rounded-lg border border-neon/25 bg-black/40 px-4 py-2 shadow-neon backdrop-blur"
+        >
+          <span class="relative flex h-2.5 w-2.5">
+            <span
+              class="absolute inline-flex h-full w-full animate-ping rounded-full bg-neon opacity-40"
+            ></span>
+            <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-neon"></span>
+          </span>
+          <span class="font-display text-xs text-neon-dim">CORE LINKED</span>
+        </div>
+      </header>
+
+      <nav
+        class="empire-tab-nav mb-8 flex flex-wrap gap-2 border-b border-zinc-800/80 pb-2"
+        role="tablist"
+        aria-label="Dashboard views"
+      >
+        <button
+          type="button"
+          id="tabBtnCommand"
+          role="tab"
+          aria-selected="true"
+          aria-controls="empire-panel-command"
+          class="empire-tab empire-tab--active font-display rounded-t-lg border border-b-0 border-neon/35 bg-zinc-900/80 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-neon"
+        >
+          Command Deck
+        </button>
+        <button
+          type="button"
+          id="tabBtnVision"
+          role="tab"
+          aria-selected="false"
+          aria-controls="empire-panel-vision"
+          class="empire-tab font-display rounded-t-lg border border-transparent px-4 py-2 text-xs font-semibold uppercase tracking-widest text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
+        >
+          Empire Vision
+        </button>
+      </nav>
+
+      <div id="empire-panel-command" role="tabpanel" aria-labelledby="tabBtnCommand">
+
+      <section
+        id="performance-summary-section"
+        class="mt-8 rounded-2xl border border-neon/30 bg-zinc-950/80 p-5 shadow-panel backdrop-blur-md sm:p-6"
+        aria-labelledby="perfSummaryHeading"
+      >
+        <h2
+          id="perfSummaryHeading"
+          class="font-display text-xs font-semibold uppercase tracking-widest text-neon mb-4"
+        >
+          Performance summary
+        </h2>
+        <div
+          id="procurementAlert"
+          class="mb-4 hidden rounded-xl border border-amber-500/55 bg-gradient-to-br from-amber-950/50 to-zinc-950/80 p-4 shadow-[0_0_24px_rgba(245,158,11,0.12)]"
+          role="status"
+        >
+          <p
+            id="procurementAlertHeadline"
+            class="font-display text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300"
+          >
+            Procurement Alert
+          </p>
+          <p id="procurementAlertMsg" class="mt-2 text-sm font-medium text-amber-100/95"></p>
+          <p id="procurementAlertDetail" class="mt-1 text-[11px] leading-relaxed text-amber-200/75"></p>
+        </div>
+        <div
+          id="materialShortageAlert"
+          class="mb-4 hidden rounded-xl border border-rose-500/50 bg-gradient-to-br from-rose-950/55 to-zinc-950/80 p-4 shadow-[0_0_20px_rgba(244,63,94,0.12)]"
+          role="alert"
+        >
+          <p
+            id="materialShortageHeadline"
+            class="font-display text-[10px] font-bold uppercase tracking-[0.2em] text-rose-300"
+          >
+            Material Shortage
+          </p>
+          <p id="materialShortageMsg" class="mt-2 text-sm font-medium text-rose-100/95"></p>
+          <p id="materialShortageDetail" class="mt-1 text-[11px] leading-relaxed text-rose-200/75"></p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div class="rounded-xl border border-zinc-800/80 bg-black/35 px-4 py-3">
+            <p class="text-[10px] uppercase tracking-wider text-zinc-500">Total tonnage sold</p>
+            <p id="perfTonnage" class="mt-1 font-mono text-lg text-zinc-100">--</p>
+            <p class="mt-0.5 text-[10px] text-zinc-600">From indexed invoices (master_index)</p>
+          </div>
+          <div class="rounded-xl border border-zinc-800/80 bg-black/35 px-4 py-3">
+            <p class="text-[10px] uppercase tracking-wider text-zinc-500">Total revenue (INR)</p>
+            <p id="perfRevenue" class="mt-1 font-mono text-lg text-neon-dim">--</p>
+            <p class="mt-0.5 text-[10px] text-zinc-600">Sum of revenue_inr in index notes</p>
+          </div>
+          <div class="rounded-xl border border-zinc-800/80 bg-black/35 px-4 py-3">
+            <p class="text-[10px] uppercase tracking-wider text-zinc-500">Machine fix status</p>
+            <p id="perfMachine" class="mt-1 text-sm font-semibold text-zinc-200">--</p>
+            <p id="perfMachineDetail" class="mt-1 text-[11px] leading-snug text-zinc-500"></p>
+          </div>
+          <div class="rounded-xl border border-neon/25 bg-black/35 px-4 py-3">
+            <p class="text-[10px] uppercase tracking-wider text-zinc-500">Estimated stock (twin)</p>
+            <p id="perfStock" class="mt-1 font-mono text-lg text-cyan-300">--</p>
+            <p class="mt-0.5 text-[10px] text-zinc-600">Production kg from Digital Twin (vault)</p>
+          </div>
+        </div>
+        <p id="perfMeta" class="mt-3 text-[10px] text-zinc-600"></p>
+
+        <div class="mt-6 grid gap-4 lg:grid-cols-5">
+          <div
+            class="lg:col-span-3 rounded-xl border border-zinc-800/90 bg-black/40 p-4"
+            aria-labelledby="cashFlowRadarHeading"
+          >
+            <h3
+              id="cashFlowRadarHeading"
+              class="font-display text-[10px] font-semibold uppercase tracking-widest text-zinc-400"
+            >
+              Cash flow radar
+            </h3>
+            <p class="mt-1 text-[10px] text-zinc-600">
+              Sovereign liquidity <strong class="text-zinc-400">₹2.5L</strong> vs machine restart
+              <strong class="text-zinc-400">₹1.5L</strong> vs indexed revenue, plus
+              <strong class="text-cyan-400/90">Robotics Fund</strong> (2% of revenue per full
+              <strong class="text-zinc-400">100 kg</strong> pipe tranche).
+            </p>
+            <div class="cash-flow-radar-svg-wrap mt-3">
+            <svg
+              id="cashFlowRadarSvg"
+              viewBox="0 0 260 240"
+              preserveAspectRatio="xMidYMid meet"
+              role="img"
+              aria-label="Cash flow radar: liquidity, restart, sales, robotics fund"
+            >
+              <polygon
+                id="cashFlowRadarGrid"
+                fill="none"
+                stroke="rgba(63,63,70,0.9)"
+                stroke-width="1"
+                points="130,46 204,120 130,194 56,120"
+              />
+              <polygon
+                id="cashFlowRadarFill"
+                fill="rgba(0,255,255,0.18)"
+                stroke="rgba(0,255,255,0.65)"
+                stroke-width="1.5"
+                points="130,120 130,120 130,120 130,120"
+              />
+              <text x="130" y="22" text-anchor="middle" fill="#71717a" style="font-size: 9px">Liquidity</text>
+              <text x="228" y="124" text-anchor="end" fill="#71717a" style="font-size: 9px">Restart</text>
+              <text x="130" y="228" text-anchor="middle" fill="#71717a" style="font-size: 9px">Sales</text>
+              <text x="22" y="124" text-anchor="start" fill="#22d3ee" style="font-size: 9px">R&amp;D fund</text>
+            </svg>
+            </div>
+            <ul id="cashFlowLegend" class="mt-2 space-y-1 text-[10px] text-zinc-500"></ul>
+          </div>
+          <div
+            class="lg:col-span-2 flex flex-col justify-center rounded-xl border border-neon/25 bg-gradient-to-b from-zinc-950 to-black/60 p-5 text-center"
+          >
+            <p class="font-display text-[9px] uppercase tracking-[0.25em] text-neon-dim/90">TSI</p>
+            <p
+              id="perfTsiScore"
+              class="font-display text-5xl font-bold tabular-nums text-neon"
+              style="text-shadow: 0 0 28px rgba(0, 255, 255, 0.35)"
+            >
+              --
+            </p>
+            <p id="perfTsiBand" class="mt-1 text-xs font-semibold text-zinc-300"></p>
+            <p id="perfTsiLabel" class="mt-2 text-[10px] leading-snug text-zinc-600">
+              Total Sovereign Intelligence — ops, vault, twin, procurement signals.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="digital-twin-section"
+        class="mt-8 rounded-2xl border border-cyan-500/25 bg-zinc-950/90 p-5 shadow-panel backdrop-blur-md sm:p-7"
+        aria-labelledby="digitalTwinHeading"
+      >
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2
+              id="digitalTwinHeading"
+              class="font-display text-sm font-bold uppercase tracking-[0.2em] text-cyan-300"
+            >
+              Factory Live: Digital Twin
+            </h2>
+            <p class="mt-1 max-w-2xl text-xs text-zinc-500">
+              HDPE/PVC extrusion line (simulated IoT). Polls
+              <code class="text-cyan-600/90">/factory/live-status</code> every 5s. Mark hydraulic fixed to unlock Run.
+            </p>
+          </div>
+          <p
+            id="twinLineBadge"
+            class="shrink-0 rounded-lg border border-zinc-700 bg-black/50 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-zinc-400"
+          >
+            Line: --
+          </p>
+        </div>
+        <p id="twinHydraulicNote" class="mt-2 text-[11px] text-amber-500/90"></p>
+
+        <div
+          class="twin-pipeline mt-5 overflow-x-auto"
+          role="img"
+          aria-label="Extrusion line schematic with status LEDs"
+        >
+          <div class="flex min-w-[36rem] flex-nowrap items-end justify-center gap-0 px-2 sm:min-w-0 sm:flex-wrap sm:gap-1">
+            <div class="twin-node">
+              <span class="twin-led twin-led--red" data-twin-led="hopper" aria-hidden="true"></span>
+              <div class="twin-box">Hopper</div>
+            </div>
+            <span class="twin-arrow" aria-hidden="true">→</span>
+            <div class="twin-node">
+              <span class="twin-led twin-led--red" data-twin-led="extruder"></span>
+              <div class="twin-box">Extruder</div>
+            </div>
+            <span class="twin-arrow" aria-hidden="true">→</span>
+            <div class="twin-node">
+              <span class="twin-led twin-led--red" data-twin-led="die"></span>
+              <div class="twin-box">Die</div>
+            </div>
+            <span class="twin-arrow" aria-hidden="true">→</span>
+            <div class="twin-node">
+              <span class="twin-led twin-led--red" data-twin-led="cooling_tank"></span>
+              <div class="twin-box">Cooling tank</div>
+            </div>
+            <span class="twin-arrow" aria-hidden="true">→</span>
+            <div class="twin-node">
+              <span class="twin-led twin-led--red" data-twin-led="haul_off"></span>
+              <div class="twin-box">Haul-off</div>
+            </div>
+            <span class="twin-arrow" aria-hidden="true">→</span>
+            <div class="twin-node">
+              <span class="twin-led twin-led--red" data-twin-led="cutter"></span>
+              <div class="twin-box">Cutter</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="twin-sensor-grid mt-5">
+          <div class="rounded-lg border border-zinc-800 bg-black/40 px-3 py-2">
+            <p class="text-[10px] uppercase text-zinc-500">Temperature</p>
+            <p id="twinTemp" class="twin-live-val font-mono text-base text-zinc-100">-- °C</p>
+          </div>
+          <div class="rounded-lg border border-zinc-800 bg-black/40 px-3 py-2">
+            <p class="text-[10px] uppercase text-zinc-500">Pressure</p>
+            <p id="twinPressure" class="twin-live-val font-mono text-base text-zinc-100">-- bar</p>
+          </div>
+          <div class="rounded-lg border border-zinc-800 bg-black/40 px-3 py-2">
+            <p class="text-[10px] uppercase text-zinc-500">Screw speed</p>
+            <p id="twinRpm" class="twin-live-val font-mono text-base text-zinc-100">-- RPM</p>
+          </div>
+          <div class="rounded-lg border border-zinc-800 bg-black/40 px-3 py-2">
+            <p class="text-[10px] uppercase text-zinc-500">Power</p>
+            <p id="twinPower" class="twin-live-val font-mono text-base text-zinc-100">-- kW</p>
+          </div>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-4 text-[11px] text-zinc-500">
+          <span
+            >Production rate: <strong id="twinKgHr" class="font-mono text-zinc-300">--</strong> kg/hr (RUNNING profile
+            @ ~40 RPM)</span
+          >
+          <span
+            >Est. stock (vault): <strong id="twinStock" class="font-mono text-cyan-300/90">--</strong> kg</span
+          >
+        </div>
+
+        <div
+          class="mt-6 rounded-xl border border-zinc-800/90 bg-black/45 p-4"
+          aria-label="Digital twin control panel"
+        >
+          <p class="font-display text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Control panel</p>
+          <div class="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              id="twinBtnStart"
+              class="rounded-lg border border-neon/50 bg-neon/15 px-4 py-2 text-xs font-bold uppercase tracking-wide text-neon transition hover:bg-neon/25"
+            >
+              Start
+            </button>
+            <button
+              type="button"
+              id="twinBtnStop"
+              class="rounded-lg border border-red-500/50 bg-red-950/40 px-4 py-2 text-xs font-bold uppercase tracking-wide text-red-300 transition hover:bg-red-950/60"
+            >
+              Stop
+            </button>
+            <label class="flex cursor-pointer items-center gap-2 text-xs text-zinc-400">
+              <input id="twinHydraulicFixed" type="checkbox" class="h-4 w-4 rounded border-zinc-600 bg-black" />
+              Hydraulic issue fixed
+            </label>
+            <label class="flex cursor-pointer items-center gap-2 text-xs text-zinc-400">
+              <input id="twinMaintenance" type="checkbox" class="h-4 w-4 rounded border-zinc-600 bg-black" />
+              Maintenance mode
+            </label>
+          </div>
+          <p id="twinControlStatus" class="mt-3 min-h-[1rem] text-[10px] text-zinc-600"></p>
+        </div>
+      </section>
+
+      <section class="rounded-2xl border border-neon/20 bg-zinc-950/80 p-6 shadow-panel backdrop-blur-md sm:p-8">
+        <label for="query" class="font-display text-xs uppercase tracking-widest text-neon-dim">Strategy query</label>
+        <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+          <textarea
+            id="query"
+            rows="3"
+            maxlength="5000"
+            placeholder="Describe your market, region, or technical question (up to 5000 characters) - THIRAMAI will synthesize a full report."
+            class="min-h-[5.5rem] flex-1 resize-y rounded-xl border border-zinc-800 bg-black/60 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none ring-neon/30 transition focus:border-neon/50 focus:ring-2"
+          ></textarea>
+          <div class="flex shrink-0 flex-col gap-2 sm:w-44">
+            <button
+              type="button"
+              id="executeBtn"
+              class="font-display rounded-xl bg-neon px-4 py-3 text-sm font-semibold uppercase tracking-wide text-black shadow-neon transition hover:bg-neon-glow hover:shadow-lg"
+            >
+              Execute
+            </button>
+            <button
+              type="button"
+              id="pdfBtn"
+              disabled
+              class="font-display rounded-xl border border-neon/40 bg-transparent px-4 py-3 text-sm font-semibold uppercase tracking-wide text-neon transition enabled:hover:bg-neon/10 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Download PDF
+            </button>
+          </div>
+        </div>
+        <p id="status" class="mt-3 min-h-[1.25rem] text-xs text-zinc-500"></p>
+      </section>
+
+      <section
+        class="mt-8 rounded-2xl border border-neon/25 bg-zinc-950/85 p-6 shadow-panel backdrop-blur-md sm:p-8"
+        aria-labelledby="assetVaultHeading"
+      >
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2
+              id="assetVaultHeading"
+              class="font-display text-sm font-semibold uppercase tracking-widest text-neon"
+            >
+              Sovereign Asset Vault
+            </h2>
+            <p class="mt-1 text-xs text-zinc-500">
+              Factory invoices &amp; vault PDFs — open or download via API
+              <code class="text-neon-dim/80">/assets</code>
+              · same-origin links only.
+            </p>
+          </div>
+          <button
+            type="button"
+            id="assetRefreshBtn"
+            class="font-display shrink-0 rounded-lg border border-neon/35 bg-black/50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-neon transition hover:bg-neon/10"
+          >
+            Refresh
+          </button>
+        </div>
+        <label for="assetSearch" class="sr-only">Search assets</label>
+        <input
+          id="assetSearch"
+          type="search"
+          placeholder="Search assets: HDPE, Invoice, PDF…"
+          class="w-full rounded-xl border border-zinc-800 bg-black/60 px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none ring-neon/30 focus:border-neon/50 focus:ring-2"
+          autocomplete="off"
+        />
+        <p id="assetVaultStatus" class="mt-2 min-h-[1rem] text-xs text-zinc-500"></p>
+        <details class="mt-4 rounded-xl border border-zinc-800/80 bg-black/35 px-4 py-3">
+          <summary class="cursor-pointer font-display text-xs font-semibold uppercase tracking-widest text-neon-dim">
+            Generate invoice (MVP) — view immediately
+          </summary>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <label class="block text-[11px] text-zinc-500"
+              >Length (m)
+              <input
+                id="invLength"
+                type="number"
+                step="0.01"
+                value="6"
+                class="mt-1 w-full rounded-lg border border-zinc-700 bg-black/50 px-3 py-2 text-sm text-zinc-100"
+            /></label>
+            <label class="block text-[11px] text-zinc-500"
+              >Grade
+              <input
+                id="invGrade"
+                type="text"
+                value="HDPE PE100"
+                class="mt-1 w-full rounded-lg border border-zinc-700 bg-black/50 px-3 py-2 text-sm text-zinc-100"
+            /></label>
+            <label class="block text-[11px] text-zinc-500"
+              >Weight (kg)
+              <input
+                id="invWeight"
+                type="text"
+                inputmode="decimal"
+                autocomplete="off"
+                value="42.5"
+                class="inv-num-field mt-1 w-full rounded-lg border border-zinc-700 bg-black/50 px-3 py-2 text-sm text-zinc-100"
+            /></label>
+            <label class="block text-[11px] text-zinc-500"
+              >Rate (INR/kg)
+              <input
+                id="invRate"
+                type="text"
+                inputmode="decimal"
+                autocomplete="off"
+                value="120"
+                class="inv-num-field mt-1 w-full rounded-lg border border-zinc-700 bg-black/50 px-3 py-2 text-sm text-zinc-100"
+            /></label>
+            <label class="block text-[11px] text-zinc-500 sm:col-span-2"
+              >Buyer
+              <input
+                id="invBuyer"
+                type="text"
+                value="Buyer"
+                class="mt-1 w-full rounded-lg border border-zinc-700 bg-black/50 px-3 py-2 text-sm text-zinc-100"
+            /></label>
+          </div>
+          <button
+            type="button"
+            id="invoiceGenerateBtn"
+            class="mt-4 font-display w-full rounded-xl border-2 border-neon bg-neon/10 px-4 py-3 text-xs font-bold uppercase tracking-widest text-neon shadow-[0_0_20px_rgba(0,255,255,0.35)] transition hover:bg-neon/20 inline-flex items-center justify-center gap-2"
+          >
+            <span id="invoiceBtnSpinner" class="invoice-btn-mini-spinner hidden" aria-hidden="true"></span>
+            <span id="invoiceBtnLabel">Create invoice &amp; show Quick Action</span>
+          </button>
+        </details>
+        <ul
+          id="assetList"
+          class="mt-4 max-h-64 space-y-2 overflow-y-auto rounded-lg border border-zinc-800/80 bg-black/40 p-3 text-sm text-zinc-300"
+        ></ul>
+      </section>
+
+      <section
+        id="quick-actions-panel"
+        class="mt-8 rounded-2xl border-2 border-neon/50 bg-black/70 p-5 shadow-[0_0_40px_rgba(0,255,255,0.15)] backdrop-blur-md sm:p-6"
+        aria-live="polite"
+        aria-label="Quick actions"
+      >
+        <h3 class="font-display text-xs font-bold uppercase tracking-[0.28em] text-neon mb-3">
+          Quick actions — SaaS Factory
+        </h3>
+        <p class="mb-4 text-xs text-zinc-400">Open generated PDFs in a new tab (same origin).</p>
+        <p id="quick-actions-placeholder" class="mb-3 text-xs text-zinc-500">
+          No quick actions yet — expand <strong class="text-neon-dim">Generate invoice</strong> below and click
+          <strong class="text-neon-dim">Create invoice</strong>, or run <strong class="text-neon-dim">Execute</strong>.
+        </p>
+        <div id="quick-actions-container" class="flex flex-wrap gap-3"></div>
+      </section>
+
+      <section class="mt-8 rounded-2xl border border-zinc-800/80 bg-black/50 p-6 shadow-panel sm:p-8">
+        <div class="mb-4 flex items-center justify-between gap-2">
+          <h2 class="font-display text-sm font-semibold uppercase tracking-widest text-zinc-400">Intelligence output</h2>
+          <span id="reportMeta" class="text-xs text-zinc-600"></span>
+        </div>
+        <div id="reportShell" class="report-terminal-shell min-h-[220px]">
+          <div class="report-terminal-chrome" aria-hidden="true">
+            <div class="flex min-w-0 items-center gap-3">
+              <div class="report-terminal-chrome-dots shrink-0" aria-hidden="true">
+                <span class="bg-red-500/90 text-red-500"></span>
+                <span class="bg-amber-400/90 text-amber-400"></span>
+                <span class="bg-neon/90 text-neon"></span>
+              </div>
+              <span
+                class="font-display truncate text-[10px] font-semibold uppercase tracking-[0.28em] text-neon/95"
+                >Sovereign terminal</span>
+            </div>
+            <span class="hidden shrink-0 font-mono text-[10px] uppercase tracking-wider text-zinc-500 sm:inline"
+              >enc :: AES-256 - stream</span>
+          </div>
+          <div class="report-terminal-body">
+            <div id="placeholder" class="text-center text-sm text-zinc-500">
+              Awaiting directive. Your Markdown strategy report will render here.
+            </div>
+            <div
+              id="loadingPanel"
+              class="hidden flex flex-col items-center justify-center gap-4 py-10"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <div class="thiramai-spinner" role="status" aria-label="Loading"></div>
+              <p class="font-display text-center text-sm font-bold uppercase tracking-[0.25em] text-neon">
+                THIRAMAI IS SYNTHESIZING…
+              </p>
+              <p class="max-w-md text-center text-xs leading-relaxed text-zinc-500">
+                Contacting <code class="text-neon-dim/90">/chat</code> — multi-pass strategy synthesis may take up to a few
+                minutes.
+              </p>
+            </div>
+            <div id="report" class="report-md report-terminal-viewport hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="analyticsSection"
+        class="mt-8 hidden rounded-2xl border border-[#00008B]/40 bg-black/60 p-6 shadow-panel backdrop-blur-md sm:p-8"
+        aria-hidden="true"
+        data-thiramai-charts-disabled="true"
+      >
+        <div class="mb-6 flex flex-col gap-1 border-b border-neon/15 pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 class="font-display text-sm font-semibold uppercase tracking-widest text-neon">
+              Business Intelligence Analytics
+            </h2>
+            <p class="mt-1 text-xs text-zinc-500">
+              Charts sync when a report is generated — ROI uses baseline model constants; radar pulls from the Robot Specs
+              table when detected.
+            </p>
+          </div>
+          <span id="chartMeta" class="font-mono text-[10px] uppercase tracking-wider text-[#6b8cff]"></span>
+        </div>
+        <div class="grid gap-8 lg:grid-cols-2">
+          <div class="chart-card">
+            <h3 class="font-display mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              ROI — Cumulative profit (₹ Lakhs)
+            </h3>
+            <p class="mb-3 text-[11px] leading-relaxed text-zinc-500">
+              CAPEX <strong class="text-neon">₹15L</strong>, OPEX <strong class="text-[#6b8cff]">₹3.5L/yr</strong>, manual
+              savings <strong class="text-neon">₹8L/yr</strong>. Vertical marker: <strong class="text-[#00008B]">24 mo</strong>
+              payback horizon (baseline).
+            </p>
+            <div class="relative h-[260px] w-full">
+              <canvas id="roiLineChart" aria-label="ROI cumulative profit line chart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3 class="font-display mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              Spec radar — Optimus Gen 3 vs Figure 02
+            </h3>
+            <p class="mb-3 text-[11px] text-zinc-500">
+              Axes: <strong class="text-neon">Actuators</strong>, <strong class="text-neon">Payload</strong>,
+              <strong class="text-[#6b8cff]">NPU speed</strong> (normalized). Parsed from report table or defaults.
+            </p>
+            <div class="relative mx-auto h-[280px] max-w-md">
+              <canvas id="specRadarChart" aria-label="Robot spec radar chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="mt-10 text-center text-xs text-zinc-600">
+        THIRAMAI Genesis · FastAPI <code class="text-neon-dim/80">/chat</code> · Serve UI from
+        <code class="text-neon-dim/80">/dashboard</code> so Execute hits the same origin.
+      </footer>
+      </div>
+
+      <div
+        id="empire-panel-vision"
+        class="hidden"
+        role="tabpanel"
+        aria-labelledby="tabBtnVision"
+      >
+        <section
+          class="rounded-2xl border border-amber-500/30 bg-zinc-950/95 p-6 shadow-panel backdrop-blur-md sm:p-8"
+          aria-labelledby="empireVisionHeading"
+        >
+          <h2
+            id="empireVisionHeading"
+            class="font-display text-sm font-bold uppercase tracking-[0.22em] text-amber-300"
+          >
+            Empire Vision · 2026 Roadmap
+          </h2>
+          <p class="mt-2 max-w-3xl text-xs leading-relaxed text-zinc-500">
+            Strategic progression from <strong class="text-zinc-400">operational sovereignty</strong> (pipe
+            manufacturing) through <strong class="text-zinc-400">solar–agri integration</strong> to
+            <strong class="text-zinc-400">humanoid prototyping</strong> — powered by shared HDPE/PVC capability and
+            <code class="text-amber-600/90">vault/rd_core/</code> R&amp;D files.
+          </p>
+          <div class="vision-roadmap mt-8">
+            <div class="vision-track">
+              <div class="vision-milestone">
+                <h3>1 · Pipe manufacturing</h3>
+                <p class="mt-2 text-[11px] leading-relaxed text-zinc-400">
+                  HDPE/PVC extrusion, invoices, digital twin —
+                  <strong class="text-zinc-300">cash &amp; material base</strong>.
+                </p>
+                <div class="vision-bar-wrap" aria-hidden="true">
+                  <div class="vision-bar" style="width: 82%"></div>
+                </div>
+                <p class="vision-pct">Progress (indicative): <strong class="text-neon">82%</strong></p>
+              </div>
+              <div class="vision-milestone">
+                <h3>2 · Solar integration</h3>
+                <p class="mt-2 text-[11px] leading-relaxed text-zinc-400">
+                  On-site PV, agri pilots, OPEX stability — <code class="text-zinc-500">solar_agri_integration.md</code>
+                </p>
+                <div class="vision-bar-wrap" aria-hidden="true">
+                  <div class="vision-bar" style="width: 38%; opacity: 0.92"></div>
+                </div>
+                <p class="vision-pct">Progress (indicative): <strong class="text-amber-200/90">38%</strong></p>
+              </div>
+              <div class="vision-milestone">
+                <h3>3 · Humanoid prototyping</h3>
+                <p class="mt-2 text-[11px] leading-relaxed text-zinc-400">
+                  Chassis, guards, scrap→print loop — <code class="text-zinc-500">humanoid_robotics_roadmap.md</code>
+                </p>
+                <div class="vision-bar-wrap" aria-hidden="true">
+                  <div class="vision-bar" style="width: 22%; opacity: 0.85"></div>
+                </div>
+                <p class="vision-pct">Progress (indicative): <strong class="text-cyan-300/90">22%</strong></p>
+              </div>
+            </div>
+          </div>
+          <section
+            class="mt-10 rounded-2xl border border-cyan-500/25 bg-black/35 p-5 shadow-panel backdrop-blur-sm sm:p-6"
+            aria-labelledby="rdLabHeading"
+          >
+            <h3
+              id="rdLabHeading"
+              class="font-display text-xs font-bold uppercase tracking-[0.2em] text-cyan-300"
+            >
+              R&amp;D Lab · Prototype 01
+            </h3>
+            <p class="mt-2 max-w-3xl text-[11px] leading-relaxed text-zinc-500">
+              Humanoid chassis from <strong class="text-zinc-400">scrap HDPE/PVC</strong> — CAD library
+              <code class="text-cyan-600/90">humanoid_design_v1.md</code>, PE100 gate
+              <code class="text-cyan-600/90">python factory/design_engine.py</code>.
+            </p>
+            <div class="rd-lab-grid">
+              <div class="rd-lab-pillar rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+                <h4>Mechanical design</h4>
+                <p class="mt-2 text-[11px] leading-relaxed text-zinc-500">
+                  Printable joints, guards, metric stack per vault v1.
+                </p>
+                <div class="vision-bar-wrap mt-3" aria-hidden="true">
+                  <div class="vision-bar" style="width: 45%"></div>
+                </div>
+                <p class="vision-pct">Tracker: <strong class="text-cyan-300">45%</strong></p>
+              </div>
+              <div class="rd-lab-pillar rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+                <h4>Electronics integration</h4>
+                <p class="mt-2 text-[11px] leading-relaxed text-zinc-500">
+                  CAN / power ducts, sensor mounts — post–first print gate.
+                </p>
+                <div class="vision-bar-wrap mt-3" aria-hidden="true">
+                  <div class="vision-bar" style="width: 18%; opacity: 0.9"></div>
+                </div>
+                <p class="vision-pct">Tracker: <strong class="text-zinc-400">18%</strong></p>
+              </div>
+              <div class="rd-lab-pillar rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+                <h4>AI training</h4>
+                <p class="mt-2 text-[11px] leading-relaxed text-zinc-500">
+                  Policy / perception stack — after mechanical MVP freeze.
+                </p>
+                <div class="vision-bar-wrap mt-3" aria-hidden="true">
+                  <div class="vision-bar" style="width: 8%; opacity: 0.85"></div>
+                </div>
+                <p class="vision-pct">Tracker: <strong class="text-zinc-500">8%</strong></p>
+              </div>
+            </div>
+          </section>
+          <section
+            class="mt-8 rounded-2xl border border-cyan-500/25 bg-zinc-950/90 p-5 shadow-panel backdrop-blur-sm sm:p-6"
+            aria-labelledby="aiCoreHeading"
+          >
+            <h3
+              id="aiCoreHeading"
+              class="font-display text-xs font-bold uppercase tracking-[0.2em] text-cyan-300"
+            >
+              AI Core: Neural Training
+            </h3>
+            <p class="mt-2 max-w-3xl text-[11px] leading-relaxed text-zinc-500">
+              <strong class="text-zinc-400">Bushing-joint</strong> sim (PE100 stress model), HQRS scrap at
+              <strong class="text-zinc-400">2%</strong> of twin output @ ~100 kg/hr. API
+              <code class="text-cyan-600/90">/empire/lab-status</code> ·
+              <code class="text-cyan-600/90">python factory/robot_training_sim.py</code>
+            </p>
+            <div class="ai-core-stats mt-4">
+              <div
+                class="flex items-center gap-4 rounded-xl border border-zinc-800/90 bg-black/45 p-4"
+                aria-labelledby="aiSuccessRateLabel"
+              >
+                <svg
+                  width="100"
+                  height="100"
+                  viewBox="0 0 100 100"
+                  class="shrink-0"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="44"
+                    fill="none"
+                    stroke="rgba(39,39,42,0.95)"
+                    stroke-width="8"
+                  />
+                  <circle
+                    id="aiRingProgress"
+                    cx="50"
+                    cy="50"
+                    r="44"
+                    fill="none"
+                    stroke="rgba(34,197,94,0.9)"
+                    stroke-width="8"
+                    stroke-linecap="round"
+                    transform="rotate(-90 50 50)"
+                    stroke-dasharray="276.46"
+                    stroke-dashoffset="276.46"
+                  />
+                </svg>
+                <div>
+                  <p id="aiSuccessRateLabel" class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Current success rate
+                  </p>
+                  <p id="aiSuccessPct" class="mt-1 font-mono text-2xl font-bold tabular-nums text-cyan-300">--</p>
+                  <p id="aiTrainingDetail" class="mt-1 text-[10px] leading-relaxed text-zinc-600"></p>
+                </div>
+              </div>
+              <div class="rounded-xl border border-zinc-800/90 bg-black/45 p-4">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  Usable scrap inventory (HQRS)
+                </p>
+                <p id="aiScrapBig" class="mt-1 font-mono text-2xl font-bold tabular-nums text-cyan-300/95">-- kg</p>
+                <p id="aiScrapDate" class="mt-1 text-[10px] text-zinc-600">last_updated: --</p>
+                <p id="aiScrapRef" class="mt-2 text-[10px] text-zinc-600"></p>
+              </div>
+            </div>
+            <pre id="aiSimTerminal" class="ai-sim-terminal" aria-live="polite">[SIM] Awaiting lab telemetry…</pre>
+          </section>
+          <section
+            class="mt-8 rounded-2xl border border-violet-500/30 bg-zinc-950/90 p-5 shadow-panel backdrop-blur-sm sm:p-6"
+            aria-labelledby="fabQueueHeading"
+          >
+            <h3
+              id="fabQueueHeading"
+              class="font-display text-xs font-bold uppercase tracking-[0.2em] text-violet-300"
+            >
+              R&amp;D Fabrication Queue
+            </h3>
+            <p class="mt-2 max-w-3xl text-[11px] leading-relaxed text-zinc-500">
+              Simulated FDM job for <strong class="text-zinc-400">Bushing-Joint V1</strong> — G-code manifest in
+              <code class="text-violet-400/90">vault/rd_core/fab_queue.json</code>. Sync:
+              <code class="text-violet-400/90">python factory/fab_engine.py</code>
+            </p>
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+              <div class="rounded-xl border border-zinc-800/90 bg-black/45 p-4">
+                <p id="fabQueueProgressLabel" class="font-mono text-sm font-semibold text-violet-200/95">
+                  3D Printing… --%
+                </p>
+                <div class="vision-bar-wrap mt-3 h-3" aria-hidden="true">
+                  <div
+                    id="fabQueueProgressFill"
+                    class="vision-bar h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500"
+                    style="width: 0%"
+                  ></div>
+                </div>
+                <p id="fabQueueJobMeta" class="mt-2 text-[10px] text-zinc-600"></p>
+              </div>
+              <div class="rounded-xl border border-zinc-800/90 bg-black/45 p-4">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  Print success estimate
+                </p>
+                <p id="fabPrintSuccessEst" class="mt-1 font-mono text-xl font-bold text-violet-300">--</p>
+                <p class="mt-1 text-[10px] text-zinc-600">From AI joint-movement sim (PE100-weighted).</p>
+              </div>
+            </div>
+            <pre id="fabGcodeMini" class="ai-sim-terminal mt-3 text-[8px]" aria-live="polite">; G-code manifest tail…</pre>
+          </section>
+          <p class="mt-6 text-[10px] text-zinc-600">
+            Indicative bars for leadership storytelling — align with vault milestones and live project gates.
+            Resin tape: run <code class="text-zinc-500">python factory/market_watch.py</code> from project root.
+          </p>
+        </section>
+      </div>
+      </div>
+
+      <div id="panel-mode-research" class="mode-workspace-panel hidden space-y-8">
+        <section
+          class="rounded-2xl border border-cyan-500/30 bg-zinc-950/90 p-6 shadow-panel backdrop-blur-md"
+          aria-labelledby="researchHubHeading"
+        >
+          <h2 id="researchHubHeading" class="font-display text-sm font-bold uppercase tracking-[0.2em] text-cyan-300">
+            Research Hub
+          </h2>
+          <p class="mt-2 max-w-3xl text-xs text-zinc-500">
+            Live signals from the API (no page reload). Use the Command SPA at <code class="text-cyan-600/90">/</code> for
+            org-scoped Tavily DPR + solar widgets when authenticated.
+          </p>
+          <p id="research-hub-status" class="mt-4 font-mono text-[11px] text-zinc-400">Loading API snapshot…</p>
+        </section>
+        <section class="rounded-2xl border border-violet-500/25 bg-zinc-950/80 p-5 shadow-panel">
+          <h3 class="font-display text-[10px] font-bold uppercase tracking-widest text-violet-300">Liveness</h3>
+          <pre
+            id="research-liveness-json"
+            class="ai-sim-terminal mt-3 max-h-48 text-[10px]"
+            aria-live="polite"
+          ></pre>
+        </section>
+      </div>
+
+      <div id="panel-mode-personal" class="mode-workspace-panel hidden space-y-6">
+        <section
+          id="exec-os-entry"
+          class="rounded-2xl border border-cyan-500/25 bg-gradient-to-br from-[#0d1117] via-zinc-950/95 to-[#0d1117] p-6 shadow-[0_0_48px_rgba(0,255,255,0.07)] backdrop-blur-md sm:p-7"
+          aria-labelledby="execOsEntryTitle"
+        >
+          <p class="font-display text-[10px] uppercase tracking-[0.3em] text-cyan-300/90">Executive OS</p>
+          <h2 id="execOsEntryTitle" class="font-display mt-2 text-xl font-bold tracking-tight text-white sm:text-2xl">
+            Welcome to the cockpit
+          </h2>
+          <p class="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
+            Today is your daily command surface. For the full Personal AI stack — JWT sign-in, life missions, research
+            vault, and the Corporate Cockpit tower — open the live dashboard. Everything here runs on the same Genesis
+            core.
+          </p>
+          <div class="mt-5 flex flex-wrap items-center gap-3">
+            <a
+              href="/dashboard/live"
+              class="font-display inline-flex items-center justify-center rounded-xl bg-[#FF5733] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-[0_0_24px_rgba(255,87,51,0.35)] transition hover:bg-[#ff6b47]"
+              >Live ops cockpit</a
+            >
+            <span class="text-[11px] text-zinc-500">Same host · <code class="text-cyan-600/90">/dashboard/live</code></span>
+          </div>
+        </section>
+
+        <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="font-display text-[10px] uppercase tracking-[0.25em] text-cyan-300/90">Daily</p>
+            <h2 id="personalHubHeading" class="font-display mt-1 text-xl font-bold tracking-tight text-white">
+              Your day
+            </h2>
+            <p id="personal-hub-status" class="mt-1 font-mono text-[10px] text-zinc-500">Loading…</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              id="btn-open-command-deck"
+              class="rounded-lg border border-zinc-600 bg-zinc-900/80 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200"
+            >
+              Command deck
+            </button>
+            <button
+              type="button"
+              id="btn-evening-summary"
+              class="rounded-lg border border-orange-500/40 bg-orange-950/35 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-orange-200 hover:bg-orange-950/55"
+            >
+              Evening summary
+            </button>
+          </div>
+          <div class="flex w-full flex-wrap items-center gap-x-4 gap-y-2 border-t border-zinc-800/80 pt-3 text-[10px] text-zinc-500 sm:border-0 sm:pt-0">
+            <label class="inline-flex cursor-pointer select-none items-center gap-2">
+              <input type="checkbox" id="ambient-notify-pref" class="rounded border-zinc-600 bg-zinc-900" />
+              <span>Quiet notes when tab is hidden</span>
+            </label>
+            <button
+              type="button"
+              id="btn-ambient-read-aloud"
+              class="rounded-md border border-zinc-600/80 bg-zinc-900/60 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 hover:border-cyan-500/35 hover:text-cyan-200"
+            >
+              Read aloud
+            </button>
+          </div>
+          <div
+            id="personal-voice-panel"
+            class="flex w-full flex-col gap-2 rounded-xl border border-violet-500/20 bg-violet-950/20 px-3 py-3 text-[10px] text-zinc-400"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="font-display font-bold uppercase tracking-widest text-violet-300/90">Voice</span>
+              <span id="voice-status" class="font-mono text-zinc-500" aria-live="polite">Idle</span>
+            </div>
+            <p id="voice-transcript" class="min-h-[2.5rem] text-[11px] leading-relaxed text-zinc-300"></p>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                id="btn-voice-push"
+                class="inline-flex items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-950/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-violet-100 hover:bg-violet-900/40"
+                aria-pressed="false"
+              >
+                <span id="voice-push-label">Tap to speak</span>
+              </button>
+              <label class="inline-flex cursor-pointer select-none items-center gap-2">
+                <input type="checkbox" id="voice-wake-pref" class="rounded border-zinc-600 bg-zinc-900" />
+                <span>Listen for &quot;Hey Thiramai&quot;</span>
+              </label>
+              <label class="inline-flex cursor-pointer select-none items-center gap-2">
+                <input type="checkbox" id="voice-local-first" class="rounded border-zinc-600 bg-zinc-900" checked />
+                <span>Local brain first (Ollama)</span>
+              </label>
+            </div>
+            <p id="voice-hint" class="text-[9px] text-zinc-600">
+              Uses your browser speech recognition (Chrome / Edge). One utterance per tap unless wake mode is on.
+            </p>
+          </div>
+        </header>
+
+        <aside
+          id="personal-ambient-strip"
+          class="hidden rounded-xl border border-cyan-500/20 bg-cyan-950/20 px-4 py-3 shadow-[0_0_24px_rgba(0,255,255,0.06)] backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-relevant="additions text"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div id="personal-ambient-body" class="min-w-0 flex-1 space-y-1.5 text-[11px] leading-relaxed text-cyan-100/88"></div>
+            <button
+              type="button"
+              id="personal-ambient-dismiss"
+              class="shrink-0 rounded px-1.5 py-0.5 text-lg leading-none text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-300"
+              aria-label="Dismiss ambient notes"
+            >
+              ×
+            </button>
+          </div>
+        </aside>
+
+        <div
+          class="rounded-xl border border-zinc-800/90 bg-gradient-to-r from-zinc-950/95 via-zinc-950/80 to-black/60 p-4 shadow-panel backdrop-blur-sm"
+          aria-label="THIRAMAI Command Center"
+        >
+          <div class="flex flex-col gap-4 border-b border-zinc-800/80 pb-4 lg:flex-row lg:items-center lg:justify-between lg:border-0 lg:pb-0">
+            <div>
+              <p class="font-display text-[9px] uppercase tracking-[0.35em] text-cyan-300/80">THIRAMAI</p>
+              <h3 class="font-display mt-0.5 text-sm font-bold uppercase tracking-[0.18em] text-white">
+                Command Center
+              </h3>
+            </div>
+            <nav id="command-center-nav" class="flex flex-wrap gap-1.5" role="tablist" aria-label="Command center zones">
+              <button type="button" class="cc-tab cc-tab--active" data-cc-tab="life" aria-selected="true">Life</button>
+              <button type="button" class="cc-tab" data-cc-tab="business" aria-selected="false">Business</button>
+              <button type="button" class="cc-tab" data-cc-tab="ai" aria-selected="false">AI</button>
+              <button type="button" class="cc-tab" data-cc-tab="analytics" aria-selected="false">Analytics</button>
+            </nav>
+          </div>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-3">
+          <section
+            id="cc-life-dashboard"
+            class="rounded-2xl border border-cyan-500/25 bg-zinc-950/90 p-5 shadow-panel backdrop-blur-md"
+            aria-labelledby="ccLifeHeading"
+          >
+            <h3 id="ccLifeHeading" class="font-display text-[10px] font-bold uppercase tracking-widest text-cyan-300">
+              Life dashboard
+            </h3>
+            <p class="mt-4 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Focus</p>
+            <p id="personal-today-date" class="mt-0.5 text-[10px] text-zinc-600"></p>
+            <p
+              id="personal-top-focus"
+              class="mt-1 text-base font-semibold leading-snug text-white sm:text-[1.05rem]"
+            ></p>
+            <p id="personal-companion-message" class="mt-2 hidden text-[11px] leading-relaxed text-zinc-400"></p>
+            <p id="personal-secondary" class="mt-2 text-[11px] leading-relaxed text-zinc-500"></p>
+            <p id="personal-low-priority" class="mt-1 text-[10px] leading-relaxed text-zinc-600"></p>
+            <p id="personal-focus" class="mt-2 hidden text-xs text-zinc-500" aria-hidden="true"></p>
+
+            <p class="mt-5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Score</p>
+            <div class="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-zinc-400">
+              <span
+                >Streak:
+                <strong id="personal-streak-val" class="font-mono text-cyan-300">—</strong>
+                days</span
+              >
+              <span
+                >Daily score:
+                <strong id="personal-score-val" class="font-mono text-cyan-300">—</strong>
+                /100</span
+              >
+            </div>
+
+            <p class="mt-5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Alerts</p>
+            <ul
+              id="personal-alerts-list"
+              class="mt-2 max-h-44 list-inside list-disc space-y-1 overflow-y-auto text-[11px] text-amber-100/90"
+            ></ul>
+            <p id="personal-alerts-empty" class="mt-2 hidden text-[11px] text-zinc-500">No alerts right now.</p>
+          </section>
+
+          <section
+            id="cc-business-snapshot"
+            class="rounded-2xl border border-sky-500/25 bg-zinc-950/90 p-5 shadow-panel backdrop-blur-md"
+            aria-labelledby="ccBizHeading"
+          >
+            <h3 id="ccBizHeading" class="font-display text-[10px] font-bold uppercase tracking-widest text-sky-300">
+              Business snapshot
+            </h3>
+            <p class="mt-5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Revenue</p>
+            <p id="personal-sales-line" class="mt-1 text-sm font-mono leading-relaxed text-sky-100/95"></p>
+            <p class="mt-5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Inventory</p>
+            <p id="personal-inventory-line" class="mt-1 text-sm leading-relaxed text-zinc-300">—</p>
+          </section>
+
+          <section
+            id="cc-ai-director"
+            class="rounded-2xl border border-violet-500/25 bg-zinc-950/90 p-5 shadow-panel backdrop-blur-md"
+            aria-labelledby="ccAiHeading"
+          >
+            <h3 id="ccAiHeading" class="font-display text-[10px] font-bold uppercase tracking-widest text-violet-300">
+              AI director
+            </h3>
+            <p id="personal-director-mode" class="mt-2 min-h-[1rem] text-[10px] uppercase tracking-wider text-violet-400/80"></p>
+            <p class="mt-4 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Next move</p>
+            <p id="personal-next-move" class="mt-1 text-[13px] leading-relaxed text-violet-100/95"></p>
+            <p class="mt-5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Suggestions</p>
+            <ul
+              id="personal-director-suggestions"
+              class="mt-2 max-h-40 list-inside list-disc space-y-1.5 overflow-y-auto text-[11px] text-violet-200/90"
+            ></ul>
+            <p id="personal-director-suggestions-empty" class="mt-2 hidden text-[11px] text-zinc-500">
+              No pattern hints yet — keep using Today.
+            </p>
+          </section>
+        </div>
+
+        <section
+          class="rounded-2xl border border-cyan-500/20 bg-zinc-950/90 p-5 shadow-panel backdrop-blur-md"
+          aria-label="Actions"
+        >
+          <h3 class="font-display text-[10px] font-bold uppercase tracking-widest text-cyan-200/90">Actions</h3>
+          <ul id="personal-actions-list" class="mt-3 space-y-3 text-xs text-cyan-100/90"></ul>
+          <p id="personal-actions-empty" class="mt-2 hidden text-xs text-zinc-500">No suggested actions.</p>
+          <p class="mt-4 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Tasks</p>
+          <ul id="personal-missions-list" class="mt-2 max-h-36 space-y-1 overflow-auto text-[11px] text-zinc-400"></ul>
+        </section>
+
+        <section
+          id="personal-evening-panel"
+          class="hidden rounded-2xl border border-zinc-700/80 bg-black/50 p-5 shadow-panel"
+          aria-live="polite"
+        >
+          <h3 class="font-display text-[10px] font-bold uppercase tracking-widest text-zinc-400">Evening</h3>
+          <p id="personal-evening-summary" class="mt-3 text-sm leading-relaxed text-zinc-300"></p>
+          <div class="mt-3 grid gap-2 sm:grid-cols-2">
+            <div>
+              <p class="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Wins</p>
+              <ul id="personal-evening-wins" class="mt-1 list-inside list-disc text-[11px] text-cyan-200/85"></ul>
+            </div>
+            <div>
+              <p class="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Carry over</p>
+              <ul id="personal-evening-carry" class="mt-1 list-inside list-disc text-[11px] text-zinc-400"></ul>
+            </div>
+          </div>
+          <p id="personal-evening-tomorrow" class="mt-4 text-xs text-zinc-500"></p>
+        </section>
+      </div>
+    </div>
+
+    <div
+      id="errorModal"
+      class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="errorModalTitle"
+    >
+      <div
+        id="errorModalBackdrop"
+        class="absolute inset-0 bg-black/75 backdrop-blur-sm"
+        tabindex="-1"
+      ></div>
+      <div
+        class="relative z-10 w-full max-w-md rounded-2xl border border-red-500/40 bg-zinc-950 p-6 shadow-[0_0_40px_rgba(239,68,68,0.15)]"
+      >
+        <h3 id="errorModalTitle" class="font-display text-sm font-bold uppercase tracking-widest text-red-400">
+          Something went wrong
+        </h3>
+        <p id="errorModalBody" class="mt-3 text-sm leading-relaxed text-zinc-300 whitespace-pre-wrap"></p>
+        <button
+          type="button"
+          id="errorModalClose"
+          class="mt-6 w-full rounded-xl border border-zinc-600 bg-zinc-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-200 transition hover:border-neon/50 hover:text-neon"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+    <div
+      id="toastRoot"
+      class="pointer-events-none fixed top-4 right-4 z-[210] flex max-w-sm flex-col gap-2 sm:right-8"
+      aria-live="polite"
+    ></div>
+
+    <script>
+      (function () {
+        var MODE_KEY = 'thiramai_genesis_dashboard_mode';
+
+        function $(id) {
+          return document.getElementById(id);
+        }
+
+        function loadResearchHub() {
+          var st = $('research-hub-status');
+          var pre = $('research-liveness-json');
+          if (st) st.textContent = 'Fetching GET / (Accept: application/json)…';
+          if (pre) pre.textContent = '';
+          fetch(window.location.origin + '/', { headers: { Accept: 'application/json' } })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, j: j };
+              });
+            })
+            .then(function (x) {
+              if (st)
+                st.textContent =
+                  'Research snapshot · ' + (x.ok ? 'core API OK' : 'HTTP issue') + ' · ' + new Date().toISOString().slice(0, 19) + 'Z';
+              if (pre) pre.textContent = JSON.stringify(x.j, null, 2);
+            })
+            .catch(function (err) {
+              if (st) st.textContent = 'Liveness fetch failed: ' + (err && err.message ? err.message : String(err));
+            });
+          fetch(window.location.origin + '/analytics/master-dashboard', { headers: { Accept: 'application/json' } }).then(
+            function (r) {
+              if (r.status === 401 && st) {
+                st.textContent +=
+                  ' · /analytics/master-dashboard requires Bearer JWT (use Command SPA at / for KPIs + solar DPR).';
+              }
+            }
+          );
+        }
+
+        function getPersonalAuthHeaders() {
+          var h = { Accept: 'application/json' };
+          try {
+            var t = (localStorage.getItem('thiramai_jwt') || sessionStorage.getItem('thiramai_jwt') || '').trim();
+            if (t) h['Authorization'] = 'Bearer ' + t;
+          } catch (e) {}
+          return h;
+        }
+
+        var AMBIENT_NOTIFY_KEY = 'thir_ambient_notify';
+        var AMBIENT_DISMISS_HASH_KEY = 'thir_ambient_dismiss_hash';
+
+        function ambientDismissHash(s) {
+          var t = String(s || '');
+          var h = 0;
+          for (var i = 0; i < t.length; i++) h = (((h << 5) - h + t.charCodeAt(i)) | 0);
+          return String(h);
+        }
+
+        function renderAmbientStrip(ambient, guidance) {
+          var strip = $('personal-ambient-strip');
+          var body = $('personal-ambient-body');
+          var dismissBtn = $('personal-ambient-dismiss');
+          if (!strip || !body) return;
+          var lines = [];
+          if (ambient && Array.isArray(ambient.background_reminders)) {
+            ambient.background_reminders.forEach(function (x) {
+              if (x) lines.push(String(x));
+            });
+          }
+          if (ambient && ambient.focus_lock_nudge) lines.push(String(ambient.focus_lock_nudge));
+          if (!lines.length) {
+            strip.classList.add('hidden');
+            return;
+          }
+          var combined = lines.join('\n');
+          var hash = ambientDismissHash(combined);
+          try {
+            if (localStorage.getItem(AMBIENT_DISMISS_HASH_KEY) === hash) {
+              strip.classList.add('hidden');
+              return;
+            }
+          } catch (e) {}
+          strip.classList.remove('hidden');
+          strip.classList.remove('thir-ambient-fade-in');
+          void strip.offsetWidth;
+          strip.classList.add('thir-ambient-fade-in');
+          body.innerHTML = '';
+          lines.forEach(function (line) {
+            var p = document.createElement('p');
+            p.className = 'text-cyan-100/90';
+            p.textContent = line;
+            body.appendChild(p);
+          });
+          if (dismissBtn) {
+            dismissBtn.onclick = function () {
+              strip.classList.add('hidden');
+              try {
+                localStorage.setItem(AMBIENT_DISMISS_HASH_KEY, hash);
+              } catch (e) {}
+            };
+          }
+        }
+
+        var _ambientNotifyOnce = false;
+        function maybeAmbientNotify(ambient, guidance) {
+          if (_ambientNotifyOnce) return;
+          var pref = $('ambient-notify-pref');
+          if (!pref || !pref.checked) return;
+          if (!('Notification' in window)) return;
+          if (Notification.permission !== 'granted') return;
+          if (!document.hidden) return;
+          var body =
+            (guidance && guidance.message) ||
+            (ambient && ambient.voice_script) ||
+            (ambient && ambient.focus_lock_nudge) ||
+            '';
+          if (!body) return;
+          _ambientNotifyOnce = true;
+          try {
+            new Notification('THIRAMAI', {
+              body: String(body).slice(0, 200),
+              silent: true,
+              tag: 'thir-ambient-soft',
+            });
+          } catch (e) {}
+        }
+
+        function speakAmbientBriefing(text) {
+          if (!text || !window.speechSynthesis) return;
+          try {
+            window.speechSynthesis.cancel();
+            var u = new SpeechSynthesisUtterance(String(text).slice(0, 800));
+            u.rate = 0.97;
+            u.pitch = 1;
+            u.volume = 0.82;
+            window.speechSynthesis.speak(u);
+          } catch (e) {}
+        }
+
+        var _voiceRec = null;
+        var _voiceWakeRec = null;
+        var _voicePushActive = false;
+        var _voiceWakeMode = false;
+
+        function getSpeechRecognitionCtor() {
+          return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+        }
+
+        function setVoiceStatus(t) {
+          var el = $('voice-status');
+          if (el) el.textContent = t || '';
+        }
+
+        function setVoiceTranscript(t) {
+          var el = $('voice-transcript');
+          if (el) el.textContent = t || '';
+        }
+
+        function speakVoiceOut(text) {
+          if (!text || !window.speechSynthesis) return;
+          try {
+            window.speechSynthesis.cancel();
+            var u = new SpeechSynthesisUtterance(String(text).slice(0, 500));
+            u.rate = 0.96;
+            u.pitch = 1;
+            u.volume = 0.88;
+            window.speechSynthesis.speak(u);
+          } catch (e) {}
+        }
+
+        function voiceOutcomeMessage(j) {
+          if (j && j.message) return j.message;
+          var p = j && j.parsed;
+          if (j && j.executed && p) {
+            if (p.action === 'add_task' && p.title) return 'Added task: ' + p.title;
+            if (p.action === 'restock' && p.item) return 'Restocked ' + p.item + '.';
+            return 'Done.';
+          }
+          if (p && p.action === 'record_sale') return 'Open Command deck to record a sale.';
+          return j && j.executed ? 'Done.' : 'OK.';
+        }
+
+        function postQuickIntent(phrase) {
+          var h = getPersonalAuthHeaders();
+          if (!h['Authorization']) {
+            speakVoiceOut('Sign in first.');
+            setVoiceStatus('Sign in required');
+            return;
+          }
+          setVoiceStatus('Sending…');
+          h['Content-Type'] = 'application/json';
+          fetch(window.location.origin + '/personal/quick-intent', {
+            method: 'POST',
+            headers: h,
+            body: JSON.stringify({ phrase: String(phrase).slice(0, 2000) }),
+          })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, j: j, status: r.status };
+              });
+            })
+            .then(function (x) {
+              if (!x.ok) {
+                var err =
+                  typeof x.j.detail === 'string'
+                    ? x.j.detail
+                    : Array.isArray(x.j.detail)
+                      ? x.j.detail.map(function (d) {
+                          return d.msg || '';
+                        }).join(' ')
+                      : 'Could not do that.';
+                speakVoiceOut(err);
+                setVoiceStatus('Error');
+                return;
+              }
+              speakVoiceOut(voiceOutcomeMessage(x.j));
+              setVoiceStatus('Done');
+              loadPersonalHub();
+            })
+            .catch(function () {
+              speakVoiceOut('Network error.');
+              setVoiceStatus('Network error');
+            });
+        }
+
+        function runVoiceUnifiedPipeline(phrase) {
+          var p = String(phrase || '').trim();
+          if (!p) {
+            setVoiceStatus('Idle');
+            return;
+          }
+          var h = getPersonalAuthHeaders();
+          if (!h['Authorization']) {
+            speakVoiceOut('Sign in first.');
+            setVoiceStatus('Sign in required');
+            return;
+          }
+          var localFirst = !$('voice-local-first') || $('voice-local-first').checked;
+          if (!localFirst) {
+            postQuickIntent(p);
+            return;
+          }
+          setVoiceStatus('Local AI…');
+          h['Content-Type'] = 'application/json';
+          fetch(window.location.origin + '/ai/local/chat', {
+            method: 'POST',
+            headers: h,
+            body: JSON.stringify({ message: p.slice(0, 12000) }),
+          })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, j: j, status: r.status };
+              });
+            })
+            .then(function (x) {
+              if (x.ok && x.j && x.j.reply) {
+                speakVoiceOut(x.j.reply);
+                setVoiceStatus('Done · ' + (x.j.model || 'local'));
+                loadPersonalHub();
+                return;
+              }
+              postQuickIntent(p);
+            })
+            .catch(function () {
+              postQuickIntent(p);
+            });
+        }
+
+        function stopWakeRecognitionOnly() {
+          if (_voiceWakeRec) {
+            try {
+              _voiceWakeRec.onresult = null;
+              _voiceWakeRec.onend = null;
+              _voiceWakeRec.onerror = null;
+              _voiceWakeRec.stop();
+            } catch (e) {}
+            _voiceWakeRec = null;
+          }
+        }
+
+        function stopWakeListener() {
+          _voiceWakeMode = false;
+          stopWakeRecognitionOnly();
+          var chk = $('voice-wake-pref');
+          if (chk) chk.checked = false;
+        }
+
+        function startWakeListener() {
+          var Ctor = getSpeechRecognitionCtor();
+          if (!Ctor) return;
+          stopWakeRecognitionOnly();
+          _voiceWakeMode = true;
+          var chk = $('voice-wake-pref');
+          if (chk) chk.checked = true;
+          if (_voicePushActive && _voiceRec) {
+            try {
+              _voiceRec.stop();
+            } catch (e) {}
+          }
+          _voiceWakeRec = new Ctor();
+          _voiceWakeRec.continuous = true;
+          _voiceWakeRec.interimResults = false;
+          _voiceWakeRec.lang = 'en-US';
+          _voiceWakeRec.onresult = function (ev) {
+            var t = '';
+            for (var i = ev.resultIndex; i < ev.results.length; i++) {
+              t += ev.results[i][0].transcript;
+            }
+            t = t.trim();
+            if (!t) return;
+            var wakeRe = /hey\s*,?\s*thira?mai\b/i;
+            if (!wakeRe.test(t)) return;
+            var cmd = t.replace(/^.*?hey\s*,?\s*thira?mai\s*[,.!]?\s*/i, '').trim();
+            setVoiceTranscript(cmd || t);
+            if (!cmd) {
+              speakVoiceOut('What would you like me to do?');
+              return;
+            }
+            runVoiceUnifiedPipeline(cmd);
+          };
+          _voiceWakeRec.onend = function () {
+            if (_voiceWakeMode && $('voice-wake-pref') && $('voice-wake-pref').checked && _voiceWakeRec) {
+              try {
+                _voiceWakeRec.start();
+              } catch (e) {}
+            }
+          };
+          _voiceWakeRec.onerror = function (ev) {
+            if (ev.error === 'not-allowed') {
+              speakVoiceOut('Microphone permission denied.');
+              stopWakeListener();
+            }
+            if (ev.error !== 'aborted') setVoiceStatus(ev.error || 'Mic error');
+          };
+          try {
+            _voiceWakeRec.start();
+            setVoiceStatus('Say: Hey Thiramai…');
+          } catch (e) {
+            stopWakeListener();
+            setVoiceStatus('Wake start failed');
+          }
+        }
+
+        function resetVoicePushButton() {
+          var btn = $('btn-voice-push');
+          var lbl = $('voice-push-label');
+          _voicePushActive = false;
+          if (btn) {
+            btn.classList.remove('voice-listening');
+            btn.setAttribute('aria-pressed', 'false');
+          }
+          if (lbl) lbl.textContent = 'Tap to speak';
+        }
+
+        function toggleVoicePush() {
+          var Ctor = getSpeechRecognitionCtor();
+          if (!Ctor) {
+            setVoiceStatus('Not supported');
+            return;
+          }
+          if (_voicePushActive) {
+            try {
+              if (_voiceRec) _voiceRec.stop();
+            } catch (e) {}
+            return;
+          }
+          stopWakeRecognitionOnly();
+          _voiceWakeMode = false;
+          var wpref = $('voice-wake-pref');
+          if (wpref) wpref.checked = false;
+          _voiceRec = new Ctor();
+          _voiceRec.continuous = false;
+          _voiceRec.interimResults = true;
+          _voiceRec.lang = 'en-US';
+          _voicePushActive = true;
+          var btn = $('btn-voice-push');
+          var lbl = $('voice-push-label');
+          if (btn) {
+            btn.classList.add('voice-listening');
+            btn.setAttribute('aria-pressed', 'true');
+          }
+          if (lbl) lbl.textContent = 'Listening… tap to stop';
+          setVoiceStatus('Listening');
+          setVoiceTranscript('');
+          _voiceRec.onresult = function (ev) {
+            var text = '';
+            for (var r = 0; r < ev.results.length; r++) {
+              text += ev.results[r][0].transcript;
+            }
+            setVoiceTranscript(text.trim());
+          };
+          _voiceRec.onend = function () {
+            resetVoicePushButton();
+            var finalText = ($('voice-transcript') && $('voice-transcript').textContent) || '';
+            finalText = finalText.trim();
+            if (!finalText) {
+              setVoiceStatus('Idle');
+              return;
+            }
+            runVoiceUnifiedPipeline(finalText);
+          };
+          _voiceRec.onerror = function (ev) {
+            resetVoicePushButton();
+            if (ev.error === 'aborted') {
+              setVoiceStatus('Idle');
+              return;
+            }
+            if (ev.error === 'not-allowed') speakVoiceOut('Allow the microphone in your browser.');
+            setVoiceStatus(ev.error || 'Error');
+          };
+          try {
+            _voiceRec.start();
+          } catch (e) {
+            resetVoicePushButton();
+            setVoiceStatus('Could not start');
+          }
+        }
+
+        function initPersonalVoiceUi() {
+          var panel = $('personal-voice-panel');
+          var hint = $('voice-hint');
+          if (!getSpeechRecognitionCtor()) {
+            if (panel) panel.classList.add('opacity-60');
+            setVoiceStatus('Unavailable');
+            if (hint) hint.textContent = 'Voice needs Chrome, Edge, or Safari with speech recognition.';
+            return;
+          }
+          if (hint)
+            hint.textContent =
+              'Tap to speak one command, or enable wake mode only when you want hands-free.';
+        }
+
+        function fillList(el, items, emptyEl) {
+          if (!el) return;
+          el.innerHTML = '';
+          if (!items || !items.length) {
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            return;
+          }
+          if (emptyEl) emptyEl.classList.add('hidden');
+          items.forEach(function (t) {
+            var li = document.createElement('li');
+            li.textContent = typeof t === 'string' ? t : String(t);
+            el.appendChild(li);
+          });
+        }
+
+        function runPersonalAction(body, statusEl, flashLi) {
+          var h = getPersonalAuthHeaders();
+          h['Content-Type'] = 'application/json';
+          fetch(window.location.origin + '/personal/action', {
+            method: 'POST',
+            headers: h,
+            body: JSON.stringify(body || {}),
+          })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, j: j, status: r.status };
+              });
+            })
+            .then(function (x) {
+              if (!x.ok) {
+                if (statusEl)
+                  statusEl.textContent =
+                    (x.j && x.j.detail) ? String(x.j.detail) : 'Action failed (' + x.status + ')';
+                return;
+              }
+              if (statusEl)
+                statusEl.textContent = x.j.message || (x.j.executed ? 'Done.' : 'OK.');
+              if (flashLi && flashLi.classList) {
+                flashLi.classList.add('thir-ambient-flash');
+                setTimeout(function () {
+                  flashLi.classList.remove('thir-ambient-flash');
+                }, 750);
+              }
+              loadPersonalHub();
+            })
+            .catch(function () {
+              if (statusEl) statusEl.textContent = 'Network error';
+            });
+        }
+
+        function sendSuggestionFeedback(text, helpful, statusEl, flashLi) {
+          var h = getPersonalAuthHeaders();
+          h['Content-Type'] = 'application/json';
+          fetch(window.location.origin + '/personal/feedback', {
+            method: 'POST',
+            headers: h,
+            body: JSON.stringify({ suggestion: String(text).slice(0, 4000), helpful: !!helpful }),
+          })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, j: j };
+              });
+            })
+            .then(function (x) {
+              if (statusEl)
+                statusEl.textContent = x.ok ? 'Thanks — feedback saved.' : ((x.j && x.j.detail) || 'Feedback failed');
+              if (x.ok && flashLi && flashLi.classList) {
+                flashLi.classList.add('thir-ambient-flash');
+                setTimeout(function () {
+                  flashLi.classList.remove('thir-ambient-flash');
+                }, 750);
+              }
+            })
+            .catch(function () {
+              if (statusEl) statusEl.textContent = 'Network error';
+            });
+        }
+
+        function fillActionableSuggestions(ul, items, emptyEl, statusEl) {
+          if (!ul) return;
+          ul.innerHTML = '';
+          if (!items || !items.length) {
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            return;
+          }
+          if (emptyEl) emptyEl.classList.add('hidden');
+          items.forEach(function (sug) {
+            if (!sug || typeof sug !== 'object') return;
+            var li = document.createElement('li');
+            li.className = 'rounded-lg border border-zinc-800/80 bg-black/30 p-3';
+            var row = document.createElement('div');
+            row.className = 'flex flex-wrap items-start justify-between gap-2';
+            var txt = document.createElement('p');
+            txt.className = 'min-w-0 flex-1 text-cyan-100/95';
+            txt.textContent = sug.text || '';
+            row.appendChild(txt);
+            var btnRow = document.createElement('div');
+            btnRow.className = 'flex shrink-0 flex-wrap gap-1';
+            if (sug.action_type === 'api_call' && sug.body) {
+              var run = document.createElement('button');
+              run.type = 'button';
+              run.className =
+                'rounded-md border border-cyan-500/40 bg-cyan-950/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-200 hover:bg-cyan-900/60';
+              run.textContent = 'Run';
+              run.addEventListener('click', function (ev) {
+                var li = ev.target && ev.target.closest ? ev.target.closest('li') : null;
+                runPersonalAction(sug.body, statusEl, li);
+              });
+              btnRow.appendChild(run);
+            } else if (sug.action_type === 'ui') {
+              var go = document.createElement('button');
+              go.type = 'button';
+              go.className =
+                'rounded-md border border-zinc-600 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 hover:border-zinc-500';
+              go.textContent = 'Open';
+              go.addEventListener('click', function () {
+                var ba = sug.body && sug.body.action;
+                if (sug.action === 'record_sale' || ba === 'record_sale') setMode('enterprise');
+                else setMode('enterprise');
+              });
+              btnRow.appendChild(go);
+            }
+            var stext = String(sug.text || '');
+            [true, false].forEach(function (h) {
+              var fb = document.createElement('button');
+              fb.type = 'button';
+              fb.setAttribute('aria-label', h ? 'Helpful' : 'Not helpful');
+              fb.className = 'rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:text-zinc-300';
+              fb.textContent = h ? '👍' : '👎';
+              fb.addEventListener('click', function (ev) {
+                var li = ev.target && ev.target.closest ? ev.target.closest('li') : null;
+                sendSuggestionFeedback(stext, h, statusEl, li);
+              });
+              btnRow.appendChild(fb);
+            });
+            row.appendChild(btnRow);
+            li.appendChild(row);
+            ul.appendChild(li);
+          });
+        }
+
+        function resetCommandCenterTabs() {
+          var nav = $('command-center-nav');
+          if (!nav) return;
+          nav.querySelectorAll('[data-cc-tab]').forEach(function (b) {
+            var on = b.getAttribute('data-cc-tab') === 'life';
+            b.classList.toggle('cc-tab--active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+        }
+
+        function initCommandCenterTabs() {
+          var nav = $('command-center-nav');
+          if (!nav || nav.getAttribute('data-cc-bound') === '1') return;
+          nav.setAttribute('data-cc-bound', '1');
+          nav.querySelectorAll('[data-cc-tab]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var t = btn.getAttribute('data-cc-tab') || 'life';
+              nav.querySelectorAll('[data-cc-tab]').forEach(function (b) {
+                var on = b === btn;
+                b.classList.toggle('cc-tab--active', on);
+                b.setAttribute('aria-selected', on ? 'true' : 'false');
+              });
+              if (t === 'business') {
+                setMode('enterprise');
+                return;
+              }
+              if (t === 'analytics') {
+                setMode('research');
+                return;
+              }
+              var map = { life: 'cc-life-dashboard', ai: 'cc-ai-director', business: 'cc-business-snapshot' };
+              var id = map[t];
+              if (id) {
+                var el = document.getElementById(id);
+                if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            });
+          });
+        }
+
+        function loadPersonalHub() {
+          _ambientNotifyOnce = false;
+          resetCommandCenterTabs();
+          var status = $('personal-hub-status');
+          var missions = $('personal-missions-list');
+          var topFocus = $('personal-top-focus');
+          var secEl = $('personal-secondary');
+          var lowEl = $('personal-low-priority');
+          var legacyFocus = $('personal-focus');
+          var dateEl = $('personal-today-date');
+          var salesEl = $('personal-sales-line');
+          var alertsUl = $('personal-alerts-list');
+          var alertsEmpty = $('personal-alerts-empty');
+          var actionsUl = $('personal-actions-list');
+          var actionsEmpty = $('personal-actions-empty');
+          var streakEl = $('personal-streak-val');
+          var scoreEl = $('personal-score-val');
+          var companionEl = $('personal-companion-message');
+          var invLine = $('personal-inventory-line');
+          var nextMoveEl = $('personal-next-move');
+          var dirModeEl = $('personal-director-mode');
+          var dirSugUl = $('personal-director-suggestions');
+          var dirSugEmpty = $('personal-director-suggestions-empty');
+          if (status) status.textContent = 'Fetching your day…';
+          if (missions) missions.innerHTML = '';
+          if (topFocus) topFocus.textContent = '';
+          if (secEl) secEl.textContent = '';
+          if (lowEl) lowEl.textContent = '';
+          if (legacyFocus) legacyFocus.textContent = '';
+          if (dateEl)
+            dateEl.textContent = new Date().toLocaleDateString(undefined, {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
+          if (salesEl) salesEl.textContent = '';
+          if (streakEl) streakEl.textContent = '—';
+          if (scoreEl) scoreEl.textContent = '—';
+          fetch(window.location.origin + '/personal/today', { headers: getPersonalAuthHeaders() })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, status: r.status, j: j };
+              });
+            })
+            .then(function (x) {
+              if (!x.ok) {
+                if (status)
+                  status.textContent =
+                    'Could not load today (' + x.status + '). Sign in for full briefing.';
+                fillList(alertsUl, ['Sign in with JWT (e.g. from dashboard) to sync tasks and shop data.'], alertsEmpty);
+                fillList(dirSugUl, [], dirSugEmpty);
+                if (invLine) invLine.textContent = '—';
+                if (nextMoveEl) nextMoveEl.textContent = '—';
+                if (dirModeEl) dirModeEl.textContent = '';
+                fillActionableSuggestions(actionsUl, [], actionsEmpty, status);
+                var asFail = $('personal-ambient-strip');
+                if (asFail) asFail.classList.add('hidden');
+                var compFail = $('personal-companion-message');
+                if (compFail) {
+                  compFail.textContent = '';
+                  compFail.classList.add('hidden');
+                }
+                window.__thirLastVoiceScript = '';
+                return;
+              }
+              var p = x.j;
+              if (status) status.textContent = 'Updated · ' + new Date().toISOString().slice(0, 19) + 'Z';
+              if (streakEl) streakEl.textContent = String(p.streak_days != null ? p.streak_days : '—');
+              if (scoreEl) scoreEl.textContent = String(p.daily_score != null ? p.daily_score : '—');
+              var g = p.guidance || {};
+              var tf = g.top_focus || g.focus || '—';
+              if (topFocus) topFocus.textContent = tf;
+              if (legacyFocus) legacyFocus.textContent = tf;
+              if (companionEl) {
+                var cm = g.message || '';
+                if (cm) {
+                  companionEl.textContent = cm;
+                  companionEl.classList.remove('hidden');
+                } else {
+                  companionEl.textContent = '';
+                  companionEl.classList.add('hidden');
+                }
+              }
+              var amb = p.ambient || {};
+              var vs = amb.voice_script || g.message || g.encouragement || '';
+              window.__thirLastVoiceScript = vs;
+              renderAmbientStrip(amb, g);
+              maybeAmbientNotify(amb, g);
+              if (secEl) secEl.textContent = Array.isArray(g.secondary) ? g.secondary.join(' · ') : '';
+              if (lowEl) lowEl.textContent = Array.isArray(g.low_priority) ? g.low_priority.join(' · ') : '';
+              var sales = p.sales || p.today_sales || {};
+              if (salesEl) {
+                if (sales && sales.ok && sales.revenue_inr) {
+                  var tv = sales.revenue_inr.today;
+                  salesEl.textContent = 'Today: ' + (tv != null && tv !== '' ? tv : '—');
+                } else if (!p.authenticated) {
+                  salesEl.textContent = 'Sign in to load revenue.';
+                } else {
+                  salesEl.textContent = 'No revenue row yet — log sales from Command deck.';
+                }
+              }
+              if (invLine) {
+                var stock = p.stock || p.low_stock || {};
+                var nLow = parseInt(String(stock.count != null ? stock.count : 0), 10) || 0;
+                if (!p.authenticated) {
+                  invLine.textContent = 'Sign in for inventory signals.';
+                } else if (parseInt(String(p.organization_id || 0), 10) <= 0) {
+                  invLine.textContent = 'No organization on this session — business snapshot idle.';
+                } else if (nLow <= 0) {
+                  invLine.textContent = 'No low-stock SKUs at current threshold.';
+                } else {
+                  invLine.textContent =
+                    nLow + ' SKU(s) below threshold — details in Life alerts & Command deck.';
+                }
+              }
+              if (nextMoveEl) {
+                var nm = g.next_best_move || '';
+                if (!nm && g.actionable_suggestions && g.actionable_suggestions[0]) {
+                  nm = g.actionable_suggestions[0].text || '';
+                }
+                nextMoveEl.textContent = nm || tf || '—';
+              }
+              if (dirModeEl) {
+                var lc = p.life_context || {};
+                var md = lc.mode || g.director_mode || '';
+                dirModeEl.textContent = md ? 'Mode · ' + String(md) : '';
+              }
+              fillList(dirSugUl, g.memory_based_suggestions || [], dirSugEmpty);
+              fillList(alertsUl, g.alerts || [], alertsEmpty);
+              fillActionableSuggestions(
+                actionsUl,
+                g.actionable_suggestions || [],
+                actionsEmpty,
+                status
+              );
+              if (missions && Array.isArray(p.tasks)) {
+                if (!p.tasks.length) {
+                  var li0 = document.createElement('li');
+                  li0.textContent = 'No open tasks — add one from Life OS.';
+                  missions.appendChild(li0);
+                } else {
+                  p.tasks.slice(0, 12).forEach(function (m) {
+                    var li = document.createElement('li');
+                    li.textContent =
+                      (m.title || '') + (m.deadline ? ' · due ' + String(m.deadline).slice(0, 10) : '');
+                    missions.appendChild(li);
+                  });
+                }
+              }
+            })
+            .catch(function (err) {
+              if (status) status.textContent = 'Request failed: ' + (err && err.message ? err.message : String(err));
+            });
+        }
+
+        function loadEveningSummary() {
+          var panel = $('personal-evening-panel');
+          var sumEl = $('personal-evening-summary');
+          var winsUl = $('personal-evening-wins');
+          var carryUl = $('personal-evening-carry');
+          var tomEl = $('personal-evening-tomorrow');
+          var streakEl = $('personal-streak-val');
+          var scoreEl = $('personal-score-val');
+          if (panel) panel.classList.remove('hidden');
+          if (sumEl) sumEl.textContent = 'Loading…';
+          fetch(window.location.origin + '/personal/summary', { headers: getPersonalAuthHeaders() })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, j: j };
+              });
+            })
+            .then(function (x) {
+              var j = x.j || {};
+              var ev = j.evening || {};
+              if (sumEl) sumEl.textContent = ev.summary || '—';
+              fillList(winsUl, ev.wins || [], null);
+              fillList(carryUl, ev.carry_over || [], null);
+              if (tomEl) tomEl.textContent = ev.tomorrow_hint ? 'Tomorrow: ' + ev.tomorrow_hint : '';
+              if (j.streak_days != null && streakEl) streakEl.textContent = String(j.streak_days);
+              if (j.daily_score != null && scoreEl) scoreEl.textContent = String(j.daily_score);
+            })
+            .catch(function () {
+              if (sumEl) sumEl.textContent = 'Could not load evening summary.';
+            });
+        }
+
+        function updateNavUi(mode) {
+          document.querySelectorAll('[data-nav-mode]').forEach(function (btn) {
+            var on = btn.getAttribute('data-mode') === mode;
+            btn.setAttribute('data-active', on ? 'true' : 'false');
+            btn.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          var sel = $('mode-select-mobile');
+          if (sel && sel.value !== mode) sel.value = mode;
+        }
+
+        function setMode(mode) {
+          if (mode !== 'enterprise' && mode !== 'research' && mode !== 'personal') mode = 'personal';
+          try {
+            localStorage.setItem(MODE_KEY, mode);
+          } catch (e) {}
+          updateNavUi(mode);
+          var pe = $('panel-mode-enterprise');
+          var pr = $('panel-mode-research');
+          var pp = $('panel-mode-personal');
+          if (pe) pe.classList.toggle('hidden', mode !== 'enterprise');
+          if (pr) pr.classList.toggle('hidden', mode !== 'research');
+          if (pp) pp.classList.toggle('hidden', mode !== 'personal');
+          if (mode === 'research') loadResearchHub();
+          if (mode === 'personal') loadPersonalHub();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+          document.querySelectorAll('[data-nav-mode]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              setMode(btn.getAttribute('data-mode') || 'personal');
+            });
+          });
+          var sel = $('mode-select-mobile');
+          if (sel) sel.addEventListener('change', function () {
+            setMode(sel.value);
+          });
+          var btnDeck = $('btn-open-command-deck');
+          if (btnDeck) btnDeck.addEventListener('click', function () { setMode('enterprise'); });
+          var btnEve = $('btn-evening-summary');
+          if (btnEve) btnEve.addEventListener('click', function () { loadEveningSummary(); });
+
+          var ambientPref = $('ambient-notify-pref');
+          if (ambientPref) {
+            try {
+              ambientPref.checked = localStorage.getItem(AMBIENT_NOTIFY_KEY) === '1';
+            } catch (e) {}
+            ambientPref.addEventListener('change', function () {
+              try {
+                localStorage.setItem(AMBIENT_NOTIFY_KEY, ambientPref.checked ? '1' : '0');
+              } catch (e) {}
+              if (ambientPref.checked && 'Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+              }
+            });
+          }
+          var readAloud = $('btn-ambient-read-aloud');
+          if (readAloud) {
+            readAloud.addEventListener('click', function () {
+              var t = window.__thirLastVoiceScript || '';
+              if (!t) {
+                var st = $('personal-hub-status');
+                if (st) st.textContent = 'Open Today first — nothing to read yet.';
+                return;
+              }
+              speakAmbientBriefing(t);
+            });
+          }
+
+          initPersonalVoiceUi();
+          initCommandCenterTabs();
+          var voiceBtn = $('btn-voice-push');
+          if (voiceBtn) voiceBtn.addEventListener('click', function () { toggleVoicePush(); });
+          var wakeChk = $('voice-wake-pref');
+          if (wakeChk) {
+            wakeChk.addEventListener('change', function () {
+              if (wakeChk.checked) startWakeListener();
+              else stopWakeListener();
+            });
+          }
+          document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+              stopWakeListener();
+              if (_voicePushActive && _voiceRec) {
+                try {
+                  _voiceRec.stop();
+                } catch (e) {}
+              }
+            }
+          });
+
+          var saved = 'personal';
+          try {
+            var raw = localStorage.getItem(MODE_KEY);
+            if (raw === null || raw === '') saved = 'personal';
+            else saved = raw;
+          } catch (e) {}
+          if (saved !== 'enterprise' && saved !== 'research' && saved !== 'personal') saved = 'personal';
+          setMode(saved);
+        });
+      })();
+    </script>
+    <!-- Load after DOM; same-origin /script.js from FastAPI -->
+    <script src="/script.js?v=20260331k" charset="utf-8"></script>
+  </body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>THIRAMAI — Live SRE &amp; Scaling</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: { 950: '#0c1222', 900: '#111827', 800: '#1e293b' },
+            accent: { DEFAULT: '#38bdf8', dim: '#0ea5e9' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+  <div class="max-w-5xl mx-auto px-4 py-10">
+    <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-10">
+      <div>
+        <p class="text-sky-400 text-sm font-medium tracking-wide uppercase">Operations</p>
+        <h1 class="text-3xl font-bold text-white mt-1">Live SRE &amp; Scaling Intelligence</h1>
+        <p class="text-slate-400 mt-2 text-sm">Profile: <span class="text-slate-200 font-mono">{{ report.profile }}</span>
+          · Generated {{ generated_at }}</p>
+      </div>
+      {% if report.ok %}
+      <span class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 text-sm font-semibold">
+        <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span> Overall GREEN
+      </span>
+      {% else %}
+      <span class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/40 text-sm font-semibold">
+        <span class="h-2 w-2 rounded-full bg-rose-400"></span> Overall RED
+      </span>
+      {% endif %}
+    </header>
+
+    {% if si and si.get('predictive_active') %}
+    <div class="mb-8 rounded-2xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-transparent px-6 py-5 shadow-lg shadow-amber-500/10">
+      <div class="flex items-center gap-3">
+        <span class="text-4xl leading-none" aria-hidden="true">⚡</span>
+        <div>
+          <p class="text-amber-200 font-bold text-lg tracking-tight">Predictive Mode Active</p>
+          <p class="text-amber-100/90 text-sm mt-1">Autoscale threshold is lowered for: <span class="font-mono text-white">{{ predictive_reasons_display }}</span></p>
+          <p class="text-amber-200/70 text-xs mt-2">Timezone: {{ si.get('predictive_timezone') or '—' }} · Effective threshold <span class="font-mono">{{ si.get('predictive_effective_threshold') }}</span> (drop {{ si.get('predictive_threshold_drop') }})</p>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="mb-8 rounded-2xl border border-slate-700 bg-slate-900/60 px-6 py-4">
+      <p class="text-slate-400 text-sm"><span class="text-slate-500 font-mono mr-2">○</span> Predictive Mode <span class="text-slate-300">inactive</span> — no calendar/memory threshold reduction right now.</p>
+    </div>
+    {% endif %}
+
+    {% set chk = report.get('checks') or {} %}
+    {% set db_chk = chk.get('database') if chk.get('database') is mapping else {} %}
+    {% set mem_audit = db_chk.get('memory_audit') if db_chk is mapping else {} %}
+    {% set wounds = report.get('recovered_wounds') or [] %}
+
+    <section class="mb-10 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 px-6 py-5" aria-labelledby="self-heal-heading">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <h2 id="self-heal-heading" class="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Self-heal &amp; SRE recovery</h2>
+          <p class="text-slate-400 text-sm mt-2 max-w-3xl">
+            Highlights <span class="text-emerald-200/90">automated infra recovery</span> (production worker heal path) and the
+            <span class="text-slate-300">memory-aware DB latency</span> probe versus the rolling 7-day baseline.
+          </p>
+        </div>
+        {% if wounds %}
+        <span class="shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-semibold border border-emerald-500/40">Active recovery signal</span>
+        {% endif %}
+      </div>
+      {% if wounds %}
+      <ul class="mt-4 space-y-3">
+        {% for w in wounds %}
+        <li class="rounded-xl border border-emerald-500/25 bg-slate-950/40 px-4 py-3 text-sm">
+          <p class="text-emerald-200 font-medium">{{ w.get('component') or 'recovered' }}</p>
+          <p class="text-slate-300 mt-1">{{ w.get('summary') or w.get('kind') or '—' }}</p>
+          {% if w.get('triggered_at_utc') %}
+          <p class="text-xs text-slate-500 mt-2 font-mono">{{ w.get('triggered_at_utc') }}</p>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-slate-500 text-sm mt-4">No recent infra self-heal events in this window{% if report.profile != 'production' %} (self-heal wounds are only surfaced for <span class="font-mono text-slate-400">production</span> profile){% endif %}.</p>
+      {% endif %}
+      {% if mem_audit is mapping and mem_audit.get('performance_status') %}
+      <div class="mt-4 pt-4 border-t border-slate-800/80">
+        {% if mem_audit.get('performance_ok') and mem_audit.get('performance_status') == 'healthy' %}
+        <p class="text-sm text-cyan-300/90"><span class="font-mono text-cyan-400 mr-2">●</span> Core DB path: latency within <span class="font-mono">7d</span> baseline ({{ mem_audit.get('baseline_samples', 0) }} samples).</p>
+        {% elif not mem_audit.get('performance_ok', True) %}
+        <p class="text-sm text-rose-300/90"><span class="font-mono text-rose-400 mr-2">●</span> SRE audit: DB latency <span class="font-semibold">degraded</span> vs memory baseline — investigate load or indexing.</p>
+        {% else %}
+        <p class="text-sm text-amber-200/90"><span class="font-mono text-amber-400 mr-2">●</span> DB memory baseline: <span class="font-mono">{{ mem_audit.get('performance_status') }}</span></p>
+        {% endif %}
+      </div>
+      {% endif %}
+    </section>
+
+    <div class="grid lg:grid-cols-3 gap-6 mb-10">
+      <div class="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-col min-h-[280px]">
+        <div class="flex items-center justify-between gap-4 mb-4">
+          <h2 class="text-sm font-semibold text-sky-400 uppercase tracking-wider">AI Chain of Thought</h2>
+          <span id="jarvis-thought-updated" class="text-xs text-slate-500 font-mono">—</span>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">Live feed from <span class="font-mono">/logs/thought_stream.json</span> (orchestrator + autoscale). Polls every 2s.</p>
+        <div id="jarvis-thought-feed" class="flex-1 overflow-y-auto max-h-[340px] space-y-2 pr-1 font-mono text-xs text-slate-300">
+          <p class="text-slate-500">Loading thought stream…</p>
+        </div>
+      </div>
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-col min-h-[280px]">
+        <h2 class="text-sm font-semibold text-violet-400 uppercase tracking-wider mb-4">Action ticker</h2>
+        <p class="text-xs text-slate-500 mb-3">Last 5 successful rows from <span class="font-mono">experience_buffer.jsonl</span>.</p>
+        <ul id="jarvis-experience-ticker" class="flex-1 space-y-3 text-sm text-slate-300">
+          <li class="text-slate-500">Loading experiences…</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-6 mb-10">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+        <h2 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">Experience buffer</h2>
+        <div class="flex items-end gap-3">
+          <p class="text-5xl font-bold text-white tabular-nums">{{ exp_count }}</p>
+          <p class="text-slate-400 text-sm pb-2">successful experiences</p>
+        </div>
+        <div class="mt-4 h-3 rounded-full bg-slate-800 overflow-hidden">
+          {% set pct = buffer_bar_pct %}
+          <div class="h-full rounded-full bg-gradient-to-r from-sky-600 to-cyan-400 transition-all" style="width: {{ buffer_bar_pct | round(1) }}%;"></div>
+        </div>
+        <p class="text-xs text-slate-500 mt-2">Scanned <span class="text-slate-400 font-mono">{{ exp_scanned }}</span> lines{% if exp_trunc %} <span class="text-amber-400/90">(truncated)</span>{% endif %}</p>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+        <h2 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">Autoscale thresholds</h2>
+        <dl class="space-y-3 text-sm">
+          <div class="flex justify-between gap-4 border-b border-slate-800 pb-2">
+            <dt class="text-slate-500">Base (env)</dt>
+            <dd class="font-mono text-slate-200">{{ si.get('base_pending_threshold') if si else '—' }}</dd>
+          </div>
+          <div class="flex justify-between gap-4 border-b border-slate-800 pb-2">
+            <dt class="text-slate-500">Learned</dt>
+            <dd class="font-mono text-emerald-300">{{ si.get('learned_pending_threshold') if si else '—' }}</dd>
+          </div>
+          <div class="flex justify-between gap-4">
+            <dt class="text-slate-500">Predictive effective</dt>
+            <dd class="font-mono text-sky-300">{{ si.get('predictive_effective_threshold') if si else '—' }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 mb-10">
+      <h2 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">Infrastructure budget (monthly est.)</h2>
+      {% if ib and ib.get('budget_configured') %}
+      <div class="grid sm:grid-cols-3 gap-4 text-center">
+        <div class="rounded-xl bg-slate-950/50 p-4 border border-slate-800">
+          <p class="text-xs text-slate-500 uppercase">Remaining</p>
+          <p class="text-2xl font-bold text-emerald-300 mt-1 font-mono">₹{{ ib.get('remaining_infra_budget_inr') }}</p>
+        </div>
+        <div class="rounded-xl bg-slate-950/50 p-4 border border-slate-800">
+          <p class="text-xs text-slate-500 uppercase">Cap</p>
+          <p class="text-xl font-semibold text-slate-200 mt-1 font-mono">₹{{ ib.get('budget_cap_inr') }}</p>
+        </div>
+        <div class="rounded-xl bg-slate-950/50 p-4 border border-slate-800">
+          <p class="text-xs text-slate-500 uppercase">Est. spend</p>
+          <p class="text-xl font-semibold text-slate-200 mt-1 font-mono">₹{{ ib.get('estimated_current_infra_inr') }}</p>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">Assumes <span class="font-mono text-slate-400">{{ ib.get('current_worker_nodes') }}</span> worker(s) · est. ₹{{ ib.get('worker_monthly_cost_inr_est') }}/worker/mo</p>
+      {% else %}
+      <p class="text-slate-400 text-sm">{{ ib.get('reason') if ib else 'Budget not configured.' }}</p>
+      {% endif %}
+    </div>
+
+    <section class="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+      <h2 class="text-sm font-semibold text-sky-400 uppercase tracking-wider mb-4">SRE checks</h2>
+      <ul class="space-y-2">
+        {% for name, body in check_items %}
+        <li class="flex items-start justify-between gap-4 py-2 border-b border-slate-800/80 last:border-0">
+          <span class="text-slate-300 font-medium">{{ name }}</span>
+          {% if body is mapping and 'ok' in body %}
+            {% if body.ok %}
+            <span class="shrink-0 text-xs font-semibold px-2 py-1 rounded bg-emerald-500/20 text-emerald-300">PASS</span>
+            {% else %}
+            <span class="shrink-0 text-xs font-semibold px-2 py-1 rounded bg-rose-500/20 text-rose-300">FAIL</span>
+            {% endif %}
+          {% else %}
+            <span class="text-xs text-slate-500 font-mono">n/a</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <p class="text-center text-slate-600 text-xs mt-10">JSON API shape matches <span class="font-mono">scripts/sre_health_check.py</span> · Refresh to re-run probes.</p>
+  </div>
+  <script>
+    (function () {
+      function fmtTs(ts) {
+        if (ts == null || ts === '') return '';
+        var n = Number(ts);
+        if (!isFinite(n)) return '';
+        try {
+          return new Date(n * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        } catch (e) { return ''; }
+      }
+      function renderThoughts(data) {
+        var box = document.getElementById('jarvis-thought-feed');
+        var stamp = document.getElementById('jarvis-thought-updated');
+        if (!box) return;
+        var thoughts = (data && data.thoughts) ? data.thoughts : [];
+        var updated = data && data.updated_at;
+        if (stamp && updated != null) {
+          stamp.textContent = 'updated ' + fmtTs(updated);
+        } else if (stamp) {
+          stamp.textContent = '—';
+        }
+        if (!thoughts.length) {
+          box.innerHTML = '<p class="text-slate-500">No thoughts yet. Run the orchestrator or autoscale worker to populate the stream.</p>';
+          return;
+        }
+        var slice = thoughts.slice(-80);
+        var html = '';
+        for (var i = slice.length - 1; i >= 0; i--) {
+          var t = slice[i] || {};
+          var phase = (t.phase || 'think');
+          var agent = (t.agent || '');
+          var msg = (t.message || '').replace(/</g, '&lt;');
+          var line = '<div class="rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">';
+          line += '<div class="flex flex-wrap gap-2 text-[10px] uppercase tracking-wide text-slate-500 mb-1">';
+          line += '<span class="text-sky-500/90">' + phase + '</span>';
+          if (agent) line += '<span class="text-slate-600">' + agent + '</span>';
+          line += '<span class="text-slate-600">' + fmtTs(t.ts) + '</span>';
+          line += '</div>';
+          line += '<p class="text-slate-200 leading-relaxed">' + msg + '</p></div>';
+          html += line;
+        }
+        box.innerHTML = html;
+      }
+      function pollThoughts() {
+        fetch('/logs/thought_stream.json', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+          .then(renderThoughts)
+          .catch(function () {
+            var box = document.getElementById('jarvis-thought-feed');
+            if (box) box.innerHTML = '<p class="text-rose-400/90">Could not load thought stream.</p>';
+          });
+      }
+      function renderTicker(data) {
+        var ul = document.getElementById('jarvis-experience-ticker');
+        if (!ul) return;
+        var items = (data && data.items) ? data.items : [];
+        if (!items.length) {
+          ul.innerHTML = '<li class="text-slate-500">No successful experiences in the buffer tail yet.</li>';
+          return;
+        }
+        var html = '';
+        for (var j = 0; j < items.length; j++) {
+          var it = items[j] || {};
+          var sum = (it.summary || '').replace(/</g, '&lt;');
+          var prev = (it.result_preview || '').replace(/</g, '&lt;');
+          html += '<li class="rounded-lg border border-violet-500/20 bg-slate-950/40 px-3 py-2">';
+          html += '<p class="text-violet-200/90 text-xs font-medium">' + sum + '</p>';
+          html += '<p class="text-slate-500 text-[11px] mt-1 font-mono truncate" title="' + prev.replace(/"/g, '&quot;') + '">' + prev + '</p>';
+          html += '<p class="text-slate-600 text-[10px] mt-1">' + fmtTs(it.ts) + '</p>';
+          html += '</li>';
+        }
+        ul.innerHTML = html;
+      }
+      function pollTicker() {
+        fetch('/dashboard/recent_experiences.json', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+          .then(renderTicker)
+          .catch(function () {
+            var ul = document.getElementById('jarvis-experience-ticker');
+            if (ul) ul.innerHTML = '<li class="text-rose-400/90">Could not load experience ticker.</li>';
+          });
+      }
+      pollThoughts();
+      pollTicker();
+      setInterval(pollThoughts, 2000);
+      setInterval(pollTicker, 5000);
+    })();
+  </script>
+</body>
+</html>

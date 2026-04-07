@@ -1,0 +1,15 @@
+{
+  "name": "@thiramai/react-integration",
+  "version": "0.1.0",
+  "private": true,
+  "description": "THIRAMAI FastAPI client hooks for React / Next.js (chat, dashboard, alert listener)",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "typescript": "^5.3.0"
+  }
+}

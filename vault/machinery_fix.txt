@@ -1,0 +1,80 @@
+# THIRAMAI Empire — Hydraulic troubleshooting (single-screw extruder class ~100 kg/hr)
+
+Context: HDPE/PVC pipe extrusion lines in this size class often use hydraulics for **hydraulic screen changers**, **melt-pump / gear arrangements** (where a hydraulic motor is used), **die / breaker-plate actuation**, or auxiliary **haul-off** tensioning. Symptoms described as “hydraulic system down” usually map to **no pressure**, **slow/leaking actuators**, **overheating oil**, or **interlocks** that prevent the extruder from starting.
+
+---
+
+## A. Same-day DIY checks (safe, non-invasive)
+
+1. **Oil level & breather**  
+   - Sight glass / dipstick at **cold** and **warm** (where OEM allows). Low oil → cavitation, weak pressure, pump damage.  
+   - Clogged breather cap → tank vacuum → pump starvation.
+
+2. **Visual leak triage**  
+   - Trace fresh oil at: pump outlet, flex hoses, cylinder rods, manifold blocks, screen-changer cartridge.  
+   - Pinhole mist often means **high-pressure line** or **seal** failure — do not run at full pressure until replaced.
+
+3. **Filter condition**  
+   - Note **pressure gauges** across return / pressure filters (if fitted). Rising ΔP across filter → bypass or change element per manual.  
+   - Never remove a high-pressure fitting under load.
+
+4. **Electrical interlocks**  
+   - Many lines **block screw start** if hydraulic pump contactor is off, **low oil**, **high oil temp**, or **E-stop** latched.  
+   - Confirm **HPU (power unit) motor** runs, no thermal overload tripped, emergency chain closed.
+
+5. **Relief valve sanity**  
+   - If pressure reads **zero** but pump runs: stuck open relief, sheared pump drive, or **severe internal leak**.  
+   - If pressure **hunts**: air in oil, failing relief, or marginal pump.
+
+6. **Temperature**  
+   - Oil >~65–70 °C sustained → varnish, seal hardening, viscosity drop. Check cooler flow, ambient fans, and whether the HPU ran dry.
+
+7. **Screen changer–specific**  
+   - If **bolt / slide** type: mechanical bind can mimic “hydraulic fault.”  
+   - If **double-piston** type: one side not building pressure often = **leaking cartridge valve** or **damaged seal kit** — log serial and call OEM for seal part numbers.
+
+---
+
+## B. Common failure modes (100 kg/hr class, hydraulic subsystems)
+
+| Symptom | Likely causes | First actions |
+|--------|----------------|---------------|
+| No system pressure | Pump failure, relief stuck open, severe leak, coupler shear | Verify pump rotation, case drain flow, gauge at test port |
+| Slow screen change | Weak pressure, internal bypass, contaminated oil | Change filter; sample oil clarity; pressure test per manual |
+| Cylinder drift | Leaking piston seal, holding valve fault | Isolate circuit; OEM seal kit |
+| Overheating | Undersized cooler, wrong oil grade, continuous relief | Check cooler, set pressures to spec, reduce idle time |
+| Noise / vibration | Cavitation, aeration, misalignment | Bleed air, verify suction line tightness, level HPU |
+
+*(Industry references: general extruder troubleshooting covers **feed, temperature, and drive** as primary variables; **hydraulic faults** are diagnosed like any industrial HPU once you identify **which actuator** is in the safety chain.)*
+
+---
+
+## C. Local service channels (India — generic; verify for your district)
+
+Use these **categories** rather than a single unknown vendor name:
+
+1. **OEM / importer field service** — First call for **screen changer** and **integrated HPU**: they hold **seal kits**, **proportional valve** calibrations, and torque specs.  
+2. **Fluid power / hydraulic hose shops** — Parker-Enerpac class distributors, local **hose crimp** shops for **temporary** line replacement (pressure rating must match stamped hose).  
+3. **Industrial maintenance contractors** — Search “hydraulic service plastic extrusion [city]” or “hydraulic power pack repair [state].”  
+4. **In-house capability** — If you have a maintenance fitter: **pressure test kit**, **clean fill** oil (ISO VG per manual), and **contamination-controlled** filter changes are the highest ROI DIY steps.
+
+**Do not** operate at rated pressure with **unrated** replacement hose or **ad hoc** fittings — burst risk and downtime are worse than a 24–48 h OEM part wait.
+
+---
+
+## D. Log template (for daily_log / EPA)
+
+```
+HYDRAULIC CHECK: oil level OK/Y | leaks Y/N | pump amps ___ | system pressure ___ bar | screen change cycle OK/FAIL | notes: ___
+```
+
+---
+
+*This file is operational guidance only, not a substitute for the machine manual or licensed pressure-equipment work.*
+
+
+---
+## Digital Twin — Hydraulic marked FIXED (2026-03-31 03:59 UTC)
+
+Operator acknowledged **Hydraulic issue fixed** via dashboard control panel. Extrusion line **eligible for RUNNING**; target profile: **~150 bar** head pressure, **~40 RPM** screw (simulated).
+

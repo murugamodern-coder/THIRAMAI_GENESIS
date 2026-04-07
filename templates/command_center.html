@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>THIRAMAI · AI Control Room</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              cc: {
+                bg: "#f5f6f7",
+                panel: "#ffffff",
+                line: "#d9d9d9",
+                ok: "#107e3e",
+                warn: "#e9730c",
+                bad: "#bb0000",
+                accent: "#0064d9",
+                violet: "#354a5e",
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      html {
+        scroll-behavior: smooth;
+      }
+      .sig-green {
+        border-color: rgba(34, 197, 94, 0.45);
+        box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.12);
+      }
+      .sig-amber {
+        border-color: rgba(245, 158, 11, 0.5);
+        box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1);
+      }
+      .sig-red {
+        border-color: rgba(239, 68, 68, 0.55);
+        box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.12);
+      }
+      .nav-pill {
+        border-radius: 0.375rem;
+        border: 1px solid rgba(51, 65, 85, 0.9);
+        padding: 0.35rem 0.75rem;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #94a3b8;
+        transition: border-color 0.15s, color 0.15s, background 0.15s;
+      }
+      .nav-pill:hover {
+        border-color: rgba(56, 189, 248, 0.35);
+        color: #e2e8f0;
+      }
+      .nav-pill--on {
+        border-color: rgba(56, 189, 248, 0.55);
+        background: rgba(14, 165, 233, 0.12);
+        color: #7dd3fc;
+      }
+    </style>
+  </head>
+  <body class="cc-jarvis-body min-h-screen bg-[#f5f6f7] text-[#32363a] antialiased">
+    <div class="cc-jarvis-bg min-h-screen">
+      <div class="mx-auto max-w-[1680px] px-3 pb-8 pt-4 sm:px-5 sm:pt-5">
+        <header
+          class="mb-4 flex flex-col gap-4 border-b border-cyan-500/15 pb-4 lg:flex-row lg:items-center lg:justify-between"
+        >
+          <div class="min-w-0">
+            <p class="text-[10px] font-semibold uppercase tracking-[0.35em] text-cyan-400/95">THIRAMAI</p>
+            <h1 class="mt-0.5 text-xl font-bold tracking-tight text-white sm:text-2xl">AI Control Room</h1>
+            <p id="cc-meta" class="mt-1 font-mono text-[9px] text-slate-500">Awaiting data…</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <span
+              class="inline-flex items-center gap-2 rounded-md border border-emerald-500/35 bg-emerald-950/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-200"
+              title="Real-time link active"
+            >
+              <span class="cc-live-dot" aria-hidden="true"></span>
+              LIVE
+            </span>
+            <span id="cc-clock" class="font-mono text-xs tabular-nums text-slate-300" aria-live="polite"></span>
+            <button
+              type="button"
+              id="cc-ai-mode-btn"
+              class="cc-ai-mode-badge rounded border border-violet-500/40 bg-violet-950/40 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-200 transition hover:border-violet-400/60"
+              title="Toggle display mode (local only)"
+            >
+              AUTO
+            </button>
+            <span
+              id="cc-system-status-pill"
+              class="cc-sys-pill cc-sys-pill--ok rounded border px-2 py-1 text-[10px] font-bold uppercase tracking-wider"
+              >Operational</span
+            >
+            <span id="cc-last-updated" class="max-w-[140px] text-[10px] leading-tight text-slate-500">—</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              id="cc-auth-badge"
+              class="rounded border border-amber-500/30 bg-amber-950/40 px-2 py-1 text-[10px] text-amber-200/90"
+              >No JWT</span
+            >
+            <button
+              type="button"
+              id="cc-refresh-btn"
+              class="rounded border border-slate-600 bg-slate-900/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 hover:border-cyan-500/40 hover:text-cyan-200"
+            >
+              Refresh
+            </button>
+            <a
+              href="/analytics/master-dashboard"
+              class="cc-quick-link inline-flex items-center !no-underline"
+              >Analytics</a
+            >
+          </div>
+        </header>
+
+        <div class="mb-5 flex justify-center px-1">
+          <div id="cc-command-bar-root" class="w-full"></div>
+        </div>
+
+        <div id="cc-control-shell" class="cc-control-shell">
+          <div id="cc-main-grid" class="cc-control-grid cc-dashboard-grid">
+            <!-- LIFE (left) -->
+            <aside
+              id="cc-panel-life"
+              class="cc-glass cc-order-life sig-green flex flex-col rounded-2xl border p-4 shadow-lg lg:min-h-[320px]"
+            >
+              <h2 class="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-400/95">Life system</h2>
+              <div class="mt-3 flex-1 space-y-3 text-sm">
+                <div>
+                  <p class="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Focus lock</p>
+                  <p id="cc-focus-lock" class="mt-1 font-semibold leading-snug text-white">—</p>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-[11px]">
+                  <div class="rounded-lg border border-emerald-500/15 bg-black/35 p-2">
+                    <p class="text-[9px] uppercase text-slate-500">Health</p>
+                    <p id="cc-life-health" class="mt-0.5 font-mono font-semibold">—</p>
+                  </div>
+                  <div class="rounded-lg border border-emerald-500/15 bg-black/35 p-2">
+                    <p class="text-[9px] uppercase text-slate-500">Productivity</p>
+                    <p id="cc-life-prod" class="mt-0.5 font-mono font-semibold">—</p>
+                  </div>
+                  <div class="rounded-lg border border-slate-700/60 bg-black/30 p-2">
+                    <p class="text-[9px] uppercase text-slate-500">Workload</p>
+                    <p id="cc-life-workload" class="mt-0.5 text-amber-100/90">—</p>
+                  </div>
+                  <div class="rounded-lg border border-slate-700/60 bg-black/30 p-2">
+                    <p class="text-[9px] uppercase text-slate-500">Mode</p>
+                    <p id="cc-life-mode" class="mt-0.5 text-violet-200/90">—</p>
+                  </div>
+                </div>
+                <div>
+                  <p class="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Priority tasks</p>
+                  <ul id="cc-priority-tasks" class="mt-1 space-y-1.5 text-[12px] font-medium leading-snug text-slate-200"></ul>
+                </div>
+                <div>
+                  <p class="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Proactive</p>
+                  <ul id="cc-proactive-list" class="mt-1 max-h-24 space-y-1 overflow-y-auto text-[11px] text-slate-400"></ul>
+                </div>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2 border-t border-white/5 pt-3">
+                <a href="/" class="cc-quick-link">Main OS</a>
+                <button type="button" data-cc-action="evening" class="cc-quick-btn">Evening</button>
+              </div>
+            </aside>
+
+            <!-- CENTER: React AI Director -->
+            <section class="cc-order-director min-w-0" id="cc-panel-director">
+              <div id="cc-director-root" class="min-h-[280px]"></div>
+            </section>
+
+            <!-- BUSINESS (right) -->
+            <aside
+              id="cc-panel-business"
+              class="cc-glass cc-order-business sig-amber flex flex-col rounded-2xl border p-4 shadow-lg lg:min-h-[320px]"
+            >
+              <h2 class="text-[10px] font-bold uppercase tracking-[0.22em] text-sky-400/95">Business system</h2>
+              <div class="mt-3 grid flex-1 grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                <div class="rounded-lg border border-sky-500/15 bg-black/35 p-2">
+                  <p class="text-[9px] uppercase text-slate-500">Revenue today</p>
+                  <p id="cc-rev-today" class="mt-1 font-mono text-sm font-semibold text-sky-200">—</p>
+                </div>
+                <div class="rounded-lg border border-sky-500/15 bg-black/35 p-2">
+                  <p class="text-[9px] uppercase text-slate-500">Net (month)</p>
+                  <p id="cc-profit-net" class="mt-1 font-mono text-sm font-semibold text-emerald-200/90">—</p>
+                </div>
+                <div class="rounded-lg border border-sky-500/15 bg-black/35 p-2">
+                  <p class="text-[9px] uppercase text-slate-500">Low stock</p>
+                  <p id="cc-inv-count" class="mt-1 font-mono text-sm font-semibold text-amber-200">—</p>
+                </div>
+              </div>
+              <div class="mt-3 flex-1">
+                <p class="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Inventory alerts</p>
+                <ul id="cc-inv-alerts" class="mt-1 max-h-28 space-y-1 overflow-y-auto text-[11px] text-slate-300"></ul>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2 border-t border-white/5 pt-3">
+                <a href="/dashboard" class="cc-quick-link">Legacy dashboard</a>
+                <button type="button" data-cc-action="deck" class="cc-quick-btn">Command deck</button>
+              </div>
+            </aside>
+
+            <!-- BOTTOM: tabs — alerts + compact charts -->
+            <section
+              id="cc-panel-alerts"
+              class="cc-glass cc-col-bottom sig-red rounded-2xl border p-4 shadow-lg"
+            >
+              <div class="flex flex-wrap items-center gap-2 border-b border-white/10 pb-3">
+                <button
+                  type="button"
+                  class="cc-tab cc-tab--on rounded-t-md border border-b-0 border-cyan-500/30 bg-slate-950/50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-cyan-200"
+                  data-cc-tab="alerts"
+                >
+                  Alert stream
+                </button>
+                <button
+                  type="button"
+                  class="cc-tab rounded-t-md border border-transparent px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-300"
+                  data-cc-tab="signals"
+                >
+                  Signals
+                </button>
+                <span id="cc-alert-severity" class="ml-auto text-[10px] text-slate-500"></span>
+              </div>
+              <div id="cc-tab-panel-alerts" class="cc-tab-panel pt-3">
+                <ul
+                  id="cc-alerts-list"
+                  class="cc-alert-stream max-h-[min(52vh,420px)] space-y-2 overflow-y-auto pr-1"
+                ></ul>
+              </div>
+              <div id="cc-tab-panel-signals" class="cc-tab-panel cc-tab-panel--hidden pt-3">
+                <p class="mb-2 text-[9px] font-bold uppercase tracking-[0.15em] text-sky-400/80">Telemetry</p>
+                <div id="cc-charts-root" class="min-h-[140px]"></div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      .cc-jarvis-bg {
+        background: #f5f6f7;
+      }
+      .cc-jarvis-body {
+        background: #f5f6f7;
+      }
+
+      .cc-control-grid {
+        display: grid;
+        gap: 0.85rem;
+        grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.35fr) minmax(220px, 1fr);
+        grid-template-areas:
+          "life director business"
+          "stream stream stream";
+      }
+      .cc-order-life {
+        grid-area: life;
+      }
+      .cc-order-director {
+        grid-area: director;
+      }
+      .cc-order-business {
+        grid-area: business;
+      }
+      .cc-col-bottom {
+        grid-area: stream;
+      }
+      @media (max-width: 1100px) {
+        .cc-control-grid {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "director"
+            "life"
+            "business"
+            "stream";
+        }
+      }
+
+      .cc-glass {
+        background: #ffffff;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        border-color: #d9d9d9 !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      }
+
+      @keyframes cc-live-blink {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.35;
+          transform: scale(0.9);
+        }
+      }
+      .cc-live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 9999px;
+        background: #22c55e;
+        box-shadow: 0 0 10px rgba(34, 197, 94, 0.75);
+        animation: cc-live-blink 1.15s ease-in-out infinite;
+      }
+
+      .cc-sys-pill--ok {
+        border-color: rgba(34, 197, 94, 0.45);
+        color: rgb(167 243 208);
+        background: rgba(6, 78, 59, 0.28);
+      }
+      .cc-sys-pill--warn {
+        border-color: rgba(245, 158, 11, 0.5);
+        color: rgb(253 224 71);
+        background: rgba(120, 53, 15, 0.28);
+      }
+      .cc-sys-pill--crit {
+        border-color: rgba(239, 68, 68, 0.55);
+        color: rgb(254 202 202);
+        background: rgba(127, 29, 29, 0.32);
+      }
+
+      .cc-tab-panel--hidden {
+        display: none;
+      }
+
+      @keyframes cc-director-glow-kf {
+        0%,
+        100% {
+          box-shadow: 0 0 24px rgba(34, 211, 238, 0.12), inset 0 0 50px rgba(56, 189, 248, 0.04);
+        }
+        50% {
+          box-shadow: 0 0 36px rgba(34, 211, 238, 0.22), inset 0 0 70px rgba(56, 189, 248, 0.07);
+        }
+      }
+      .cc-director-glow {
+        animation: cc-director-glow-kf 4.5s ease-in-out infinite;
+      }
+
+      @keyframes alert-pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+      .alert-critical {
+        color: rgb(254 202 202) !important;
+        animation: alert-pulse 1.5s ease-in-out infinite;
+      }
+      .alert-warning {
+        color: rgb(253 224 71) !important;
+      }
+      .alert-normal {
+        color: rgb(167 243 208) !important;
+      }
+      .cc-alert-row--crit {
+        border-color: rgba(239, 68, 68, 0.5) !important;
+      }
+      .cc-alert-row--warn {
+        border-color: rgba(245, 158, 11, 0.38) !important;
+      }
+      .cc-alert-row--ok {
+        border-color: rgba(16, 185, 129, 0.2) !important;
+      }
+
+      .cc-control-shell.cc-data-flash {
+        animation: cc-fade-in 0.38s ease-out;
+      }
+
+      /* React islands: styles here (Tailwind CDN does not scan bundled JSX). */
+      .cc-director {
+        border-radius: 1rem;
+        border: 1px solid rgba(34, 211, 238, 0.35);
+        background: rgba(2, 6, 23, 0.65);
+        padding: 1.25rem 1.5rem;
+      }
+      .cc-director--loading {
+        min-height: 200px;
+      }
+      .cc-director-eyebrow {
+        margin: 0;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.35em;
+        text-transform: uppercase;
+        color: rgba(34, 211, 238, 0.85);
+      }
+      .cc-director-next {
+        margin: 0.75rem 0 0;
+        font-size: clamp(1.15rem, 2.8vw, 1.85rem);
+        font-weight: 800;
+        line-height: 1.25;
+        color: #f8fafc;
+        letter-spacing: -0.02em;
+      }
+      .cc-director-why {
+        margin: 1rem 0 0;
+        padding-left: 0.75rem;
+        border-left: 2px solid rgba(34, 211, 238, 0.4);
+        font-size: 0.875rem;
+        line-height: 1.55;
+        color: #cbd5e1;
+      }
+      .cc-director-list {
+        margin: 1.1rem 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .cc-director-list li {
+        display: flex;
+        gap: 0.35rem;
+        margin-bottom: 0.35rem;
+        font-size: 12px;
+        line-height: 1.45;
+        color: #94a3b8;
+      }
+      .cc-director-list .cc-li-mark {
+        font-family: ui-monospace, monospace;
+        color: rgba(34, 211, 238, 0.65);
+      }
+      .cc-director-actions {
+        margin-top: 1.25rem;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem;
+      }
+      .cc-director-run {
+        cursor: pointer;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(34, 211, 238, 0.55);
+        background: rgba(8, 51, 68, 0.45);
+        padding: 0.55rem 1.35rem;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #cffafe;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      .cc-director-run:hover {
+        border-color: rgba(103, 232, 249, 0.75);
+        background: rgba(14, 116, 144, 0.35);
+      }
+      .cc-director-run-status {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        color: #64748b;
+      }
+
+      .cc-command-bar-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+      }
+      @media (min-width: 640px) {
+        .cc-command-bar-inner {
+          flex-direction: row;
+          align-items: center;
+          gap: 0.65rem;
+        }
+      }
+      .cc-command-input {
+        flex: 1;
+        min-width: 0;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(34, 211, 238, 0.28);
+        background: rgba(2, 6, 23, 0.75);
+        padding: 0.7rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #f1f5f9;
+      }
+      .cc-command-input::placeholder {
+        color: #475569;
+      }
+      .cc-command-input:focus {
+        outline: none;
+        border-color: rgba(34, 211, 238, 0.55);
+        box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.2);
+      }
+      .cc-command-submit {
+        flex-shrink: 0;
+        cursor: pointer;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(34, 211, 238, 0.5);
+        background: rgba(8, 51, 68, 0.5);
+        padding: 0.7rem 1.1rem;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #cffafe;
+        transition: background 0.2s;
+      }
+      .cc-command-submit:hover {
+        background: rgba(14, 116, 144, 0.4);
+      }
+      .cc-command-status {
+        margin-top: 0.35rem;
+        text-align: center;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        color: #64748b;
+      }
+      .cc-voice-slot {
+        display: flex;
+        flex-shrink: 0;
+        justify-content: center;
+      }
+      @media (min-width: 640px) {
+        .cc-voice-slot {
+          justify-content: flex-end;
+        }
+      }
+
+      .cc-quick-btn {
+        border-radius: 0.25rem;
+        border: 1px solid rgba(71, 85, 105, 0.9);
+        padding: 0.25rem 0.5rem;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #cbd5e1;
+        background: rgba(0, 0, 0, 0.25);
+      }
+      .cc-quick-btn:hover {
+        border-color: rgba(56, 189, 248, 0.4);
+        color: #e0f2fe;
+      }
+      .cc-quick-link {
+        border-radius: 0.25rem;
+        border: 1px solid rgba(71, 85, 105, 0.9);
+        padding: 0.25rem 0.5rem;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #cbd5e1;
+        text-decoration: none;
+      }
+      .cc-quick-link:hover {
+        border-color: rgba(56, 189, 248, 0.4);
+        color: #e0f2fe;
+      }
+
+      @keyframes cc-shimmer {
+        100% {
+          transform: translateX(100%);
+        }
+      }
+      .cc-skeleton-root {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .cc-skeleton {
+        position: relative;
+        overflow: hidden;
+        border-radius: 0.5rem;
+        background: linear-gradient(90deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.55) 50%, rgba(30, 41, 59, 0.9) 100%);
+        background-size: 200% 100%;
+        animation: cc-skeleton-bg 1.4s ease-in-out infinite;
+      }
+      @keyframes cc-skeleton-bg {
+        0% {
+          background-position: 100% 0;
+        }
+        100% {
+          background-position: -100% 0;
+        }
+      }
+      .cc-skeleton--wide {
+        height: 0.65rem;
+        width: 40%;
+      }
+      .cc-skeleton-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+      }
+      .cc-skeleton--chart {
+        height: 200px;
+      }
+
+      .cc-dashboard-grid.cc-fade-ready > * {
+        animation: cc-fade-in 0.45s ease-out both;
+      }
+      @keyframes cc-fade-in {
+        from {
+          opacity: 0.35;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes cc-alert-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35);
+        }
+        50% {
+          box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+        }
+      }
+      .cc-alert-critical {
+        animation: cc-alert-pulse 1.25s ease-in-out infinite;
+        border-color: rgba(239, 68, 68, 0.65) !important;
+      }
+
+      .cc-status-ok {
+        color: rgb(167 243 208);
+      }
+      .cc-status-warn {
+        color: rgb(253 224 71);
+      }
+      .cc-status-crit {
+        color: rgb(254 202 202);
+      }
+
+      .cc-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 0.25rem;
+        border: 1px solid rgba(71, 85, 105, 0.85);
+        padding: 0.15rem 0.45rem;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .cc-badge--ok {
+        border-color: rgba(34, 197, 94, 0.45);
+        color: rgb(167 243 208);
+        background: rgba(6, 78, 59, 0.25);
+      }
+      .cc-badge--warn {
+        border-color: rgba(245, 158, 11, 0.5);
+        color: rgb(253 224 71);
+        background: rgba(120, 53, 15, 0.25);
+      }
+      .cc-badge--crit {
+        border-color: rgba(239, 68, 68, 0.55);
+        color: rgb(254 202 202);
+        background: rgba(127, 29, 29, 0.28);
+      }
+
+      .cc-charts-panel__head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .cc-charts-panel__head--end {
+        justify-content: flex-end;
+      }
+      .cc-charts-panel__title {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: rgba(56, 189, 248, 0.85);
+        margin: 0;
+      }
+      .cc-charts-panel__badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+      }
+      .cc-charts-panel__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+      .cc-charts-panel--compact .cc-charts-panel__grid {
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 0.5rem;
+      }
+      .cc-charts-badges-compact {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.35rem;
+        margin-bottom: 0.4rem;
+      }
+      .cc-chart-card {
+        border-radius: 0.5rem;
+        border: 1px solid rgba(51, 65, 85, 0.85);
+        background: rgba(0, 0, 0, 0.28);
+        padding: 0.5rem;
+      }
+      .cc-chart-card__label {
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748b;
+        margin: 0 0 0.35rem;
+      }
+      .cc-chart-card__plot {
+        width: 100%;
+        height: 200px;
+      }
+      .cc-fade-in {
+        animation: cc-fade-in 0.4s ease-out both;
+      }
+
+      .cc-mic-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(139, 92, 246, 0.45);
+        background: rgba(76, 29, 149, 0.35);
+        color: #e9d5ff;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+      }
+      .cc-mic-btn:hover {
+        border-color: rgba(167, 139, 250, 0.65);
+        background: rgba(91, 33, 182, 0.45);
+      }
+      .cc-mic-btn--on {
+        border-color: rgba(248, 113, 113, 0.65);
+        background: rgba(127, 29, 29, 0.45);
+        box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25);
+      }
+      .cc-mic-icon {
+        font-size: 14px;
+        line-height: 1;
+      }
+      .cc-mic-icon-svg {
+        display: block;
+        width: 18px;
+        height: 18px;
+      }
+      .cc-voice-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        min-width: 5rem;
+      }
+      .cc-voice-status {
+        margin: 0;
+        max-width: 12rem;
+        font-family: ui-monospace, monospace;
+        font-size: 9px;
+        color: #94a3b8;
+        text-align: center;
+        word-break: break-word;
+      }
+    </style>
+
+    <script>
+      (function () {
+        var REFRESH_MS = 15000;
+        var timer = null;
+        var ws = null;
+        var wsRetryCount = 0;
+        var MAX_WS_RETRIES = 6;
+        var liveTransport = 'http';
+        var reactDebounce = null;
+        var gridAnimated = false;
+
+        function $(id) {
+          return document.getElementById(id);
+        }
+
+        function token() {
+          try {
+            return (
+              localStorage.getItem('thiramai_jwt') ||
+              sessionStorage.getItem('thiramai_jwt') ||
+              ''
+            ).trim();
+          } catch (e) {
+            return '';
+          }
+        }
+
+        function authHeaders() {
+          var t = token();
+          var h = { Accept: 'application/json' };
+          if (t) h['Authorization'] = 'Bearer ' + t;
+          return h;
+        }
+
+        function stopPoll() {
+          if (timer) clearInterval(timer);
+          timer = null;
+        }
+
+        function schedule() {
+          stopPoll();
+          timer = setInterval(load, REFRESH_MS);
+        }
+
+        function pushDashboardReact(data) {
+          if (reactDebounce) clearTimeout(reactDebounce);
+          reactDebounce = setTimeout(function () {
+            window.dispatchEvent(new CustomEvent('cc-dashboard-data', { detail: data }));
+          }, 160);
+        }
+
+        function ensureFadeGrid() {
+          var grid = $('cc-main-grid');
+          if (!grid || gridAnimated) return;
+          gridAnimated = true;
+          grid.classList.add('cc-fade-ready');
+        }
+
+        function flashDataShell() {
+          var shell = $('cc-control-shell');
+          if (!shell) return;
+          shell.classList.remove('cc-data-flash');
+          void shell.offsetWidth;
+          shell.classList.add('cc-data-flash');
+        }
+
+        function classifyAlertLine(line) {
+          var low = String(line).toLowerCase();
+          if (
+            low.indexOf('emergency') >= 0 ||
+            low.indexOf('[ops:emergency]') >= 0 ||
+            low.indexOf('stock out') >= 0
+          )
+            return 'critical';
+          if (
+            low.indexOf('urgent') >= 0 ||
+            low.indexOf('low stock') >= 0 ||
+            low.indexOf('overdue') >= 0 ||
+            low.indexOf('no revenue') >= 0
+          )
+            return 'warning';
+          return 'normal';
+        }
+
+        function tickClock() {
+          var el = $('cc-clock');
+          if (!el) return;
+          var d = new Date();
+          el.textContent = d.toLocaleTimeString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+          });
+        }
+
+        function tickLastUpdated() {
+          var el = $('cc-last-updated');
+          if (!el || !window.__cc_lastPayloadAt) return;
+          var s = Math.floor((Date.now() - window.__cc_lastPayloadAt) / 1000);
+          el.textContent = 'Updated ' + s + 's ago';
+        }
+
+        function syncAiModeBtn() {
+          var b = $('cc-ai-mode-btn');
+          if (!b) return;
+          var m = (localStorage.getItem('cc_ai_mode') || 'AUTO').toUpperCase();
+          if (m !== 'MANUAL' && m !== 'AUTO') m = 'AUTO';
+          b.textContent = m;
+        }
+
+        function bindTabs() {
+          document.querySelectorAll('[data-cc-tab]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var tab = btn.getAttribute('data-cc-tab');
+              document.querySelectorAll('[data-cc-tab]').forEach(function (b) {
+                var on = b.getAttribute('data-cc-tab') === tab;
+                b.classList.toggle('cc-tab--on', on);
+              });
+              var pa = $('cc-tab-panel-alerts');
+              var ps = $('cc-tab-panel-signals');
+              if (pa) pa.classList.toggle('cc-tab-panel--hidden', tab !== 'alerts');
+              if (ps) ps.classList.toggle('cc-tab-panel--hidden', tab !== 'signals');
+            });
+          });
+        }
+
+        function scoreToneClass(score) {
+          if (score == null || score === '') return 'text-slate-200';
+          var n = Number(score);
+          if (!isFinite(n)) return 'text-slate-200';
+          if (n < 40) return 'cc-status-crit';
+          if (n < 70) return 'cc-status-warn';
+          return 'cc-status-ok';
+        }
+
+        function applyLifePanelBorder(ld) {
+          var el = $('cc-panel-life');
+          if (!el) return;
+          var ls = (ld && ld.life_score) || {};
+          var h = Number(ls.health_score);
+          var p = Number(ls.productivity_score);
+          var scores = [];
+          if (isFinite(h)) scores.push(h);
+          if (isFinite(p)) scores.push(p);
+          var worst = scores.length ? Math.min.apply(null, scores) : 100;
+          el.classList.remove('sig-green', 'sig-amber', 'sig-red');
+          if (worst < 40) el.classList.add('sig-red');
+          else if (worst < 70) el.classList.add('sig-amber');
+          else el.classList.add('sig-green');
+        }
+
+        function applyBusinessPanelClass(bs, invCount) {
+          var el = $('cc-panel-business');
+          if (!el) return;
+          var n = Number(invCount);
+          el.classList.remove('sig-green', 'sig-amber', 'sig-red');
+          if (bs && bs.ok === false) {
+            el.classList.add('sig-red');
+          } else if (isFinite(n) && n > 5) {
+            el.classList.add('sig-amber');
+          } else {
+            el.classList.add('sig-green');
+          }
+        }
+
+        function severityClass(nCritical) {
+          var root = document.getElementById('cc-panel-alerts');
+          if (!root) return;
+          root.classList.remove('sig-green', 'sig-amber', 'sig-red');
+          if (nCritical >= 2) root.classList.add('sig-red');
+          else if (nCritical >= 1) root.classList.add('sig-amber');
+          else root.classList.add('sig-green');
+        }
+
+        function render(data) {
+          var ld = data.life_dashboard || {};
+          var ls = ld.life_score || {};
+          $('cc-focus-lock').textContent = ld.focus_lock || ld.top_focus || '—';
+
+          var hEl = $('cc-life-health');
+          if (hEl) {
+            hEl.textContent = ls.health_score != null ? String(ls.health_score) : '—';
+            hEl.className = 'mt-0.5 font-mono ' + scoreToneClass(ls.health_score);
+          }
+          var pEl = $('cc-life-prod');
+          if (pEl) {
+            pEl.textContent =
+              ls.productivity_score != null
+                ? String(ls.productivity_score)
+                : String(ld.daily_score != null ? ld.daily_score : '—');
+            pEl.className =
+              'mt-0.5 font-mono ' + scoreToneClass(ls.productivity_score != null ? ls.productivity_score : ld.daily_score);
+          }
+
+          $('cc-life-workload').textContent = ls.workload_level || '—';
+          $('cc-life-mode').textContent = ld.director_mode || (data.life_context && data.life_context.mode) || '—';
+
+          applyLifePanelBorder(ld);
+
+          var ptasks = $('cc-priority-tasks');
+          if (ptasks) {
+            ptasks.innerHTML = '';
+            (data.priority_tasks || []).slice(0, 3).forEach(function (t) {
+              var li = document.createElement('li');
+              li.className = 'rounded-md border border-emerald-500/10 bg-black/25 px-2 py-1.5';
+              var title = '';
+              if (t && typeof t === 'object') title = t.title || t.text || '';
+              else title = String(t || '');
+              li.textContent = (title || '—').slice(0, 160);
+              ptasks.appendChild(li);
+            });
+          }
+
+          var pr = $('cc-proactive-list');
+          if (pr) {
+            pr.innerHTML = '';
+            (data.proactive_alerts || []).slice(0, 8).forEach(function (a) {
+              var li = document.createElement('li');
+              var p = parseInt(a.priority, 10) || 99;
+              li.className = p <= 2 ? 'text-rose-200/90' : p <= 3 ? 'text-amber-200/90' : 'text-slate-400';
+              li.textContent = (a.message || '').slice(0, 200);
+              pr.appendChild(li);
+            });
+          }
+
+          var bs = data.business_summary || {};
+          var rev = bs.revenue_inr || {};
+          $('cc-rev-today').textContent = rev.today != null ? String(rev.today) : '—';
+          var pm = bs.profit_month || {};
+          $('cc-profit-net').textContent = pm.net_profit_inr != null ? String(pm.net_profit_inr) : '—';
+
+          var inv = data.inventory_summary || {};
+          var invCount = inv.count != null ? inv.count : 0;
+          $('cc-inv-count').textContent = String(invCount);
+          applyBusinessPanelClass(bs, invCount);
+
+          var ial = $('cc-inv-alerts');
+          if (ial) {
+            ial.innerHTML = '';
+            (inv.items_preview || []).slice(0, 6).forEach(function (row) {
+              var li = document.createElement('li');
+              li.textContent =
+                (row.sku_name || '?') + ' · qty ' + (row.quantity != null ? row.quantity : '?');
+              ial.appendChild(li);
+            });
+          }
+
+          var al = $('cc-alerts-list');
+          var crit = 0;
+          if (al) {
+            al.innerHTML = '';
+            var lines = (data.alerts || []).slice(0, 32);
+            var rev = lines.slice().reverse();
+            rev.forEach(function (line) {
+              var li = document.createElement('li');
+              li.className = 'cc-alert-row rounded-lg border border-slate-600/90 bg-black/40 px-3 py-2.5 text-xs font-medium leading-snug sm:text-sm';
+              var low = String(line).toLowerCase();
+              if (low.indexOf('low stock') >= 0 || low.indexOf('overdue') >= 0 || low.indexOf('[ops:emergency]') >= 0)
+                crit++;
+              var lvl = classifyAlertLine(line);
+              if (lvl === 'critical') {
+                li.classList.add('alert-critical', 'cc-alert-critical', 'cc-alert-row--crit');
+              } else if (lvl === 'warning') {
+                li.classList.add('alert-warning', 'cc-alert-row--warn');
+              } else {
+                li.classList.add('alert-normal', 'cc-alert-row--ok');
+              }
+              li.textContent = line;
+              al.appendChild(li);
+            });
+            var sev = $('cc-alert-severity');
+            if (sev) sev.textContent = crit ? crit + ' hot signal(s)' : 'Stable';
+            severityClass(crit);
+          }
+
+          var pill = $('cc-system-status-pill');
+          if (pill) {
+            pill.classList.remove('cc-sys-pill--ok', 'cc-sys-pill--warn', 'cc-sys-pill--crit');
+            if (crit >= 2 || (bs && bs.ok === false)) {
+              pill.classList.add('cc-sys-pill--crit');
+              pill.textContent = 'Critical';
+            } else if (crit >= 1 || (isFinite(Number(invCount)) && Number(invCount) > 5)) {
+              pill.classList.add('cc-sys-pill--warn');
+              pill.textContent = 'Degraded';
+            } else {
+              pill.classList.add('cc-sys-pill--ok');
+              pill.textContent = 'Operational';
+            }
+          }
+
+          var meta = $('cc-meta');
+          if (meta) {
+            var prefix =
+              liveTransport === 'ws' ? 'WS live · ' : liveTransport === 'poll' ? 'Poll · ' : 'Live · ';
+            meta.textContent =
+              prefix +
+              (data.as_of_utc ? 'UTC ' + String(data.as_of_utc).slice(0, 19) : '') +
+              (data.organization_id != null ? ' · org ' + data.organization_id : '');
+          }
+
+          window.__cc_lastPayloadAt = Date.now();
+          tickLastUpdated();
+          pushDashboardReact(data);
+          ensureFadeGrid();
+          flashDataShell();
+        }
+
+        function wsUrl() {
+          var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          return proto + '//' + location.host + '/ws/dashboard';
+        }
+
+        function fallbackToPolling() {
+          liveTransport = 'poll';
+          schedule();
+          load();
+        }
+
+        function connectWebSocket() {
+          if (!token()) return;
+          try {
+            if (ws) {
+              try {
+                ws.close();
+              } catch (e) {}
+              ws = null;
+            }
+            ws = new WebSocket(wsUrl());
+          } catch (e) {
+            fallbackToPolling();
+            return;
+          }
+
+          ws.onopen = function () {
+            wsRetryCount = 0;
+            liveTransport = 'ws';
+            stopPoll();
+            try {
+              ws.send(JSON.stringify({ token: token() }));
+            } catch (e) {
+              fallbackToPolling();
+            }
+          };
+
+          ws.onmessage = function (ev) {
+            var msg;
+            try {
+              msg = JSON.parse(ev.data);
+            } catch (e) {
+              return;
+            }
+            if (msg.type === 'dashboard_tick') {
+              render(msg);
+            } else if (msg.type === 'error') {
+              var m = $('cc-meta');
+              if (m) m.textContent = 'WS error: ' + (msg.detail || msg.message || 'unknown');
+            }
+          };
+
+          ws.onclose = function () {
+            ws = null;
+            if (!token()) return;
+            wsRetryCount++;
+            if (wsRetryCount <= MAX_WS_RETRIES) {
+              var delay = Math.min(25000, 800 * Math.pow(2, wsRetryCount - 1));
+              setTimeout(connectWebSocket, delay);
+            } else {
+              liveTransport = 'poll';
+              fallbackToPolling();
+            }
+          };
+
+          ws.onerror = function () {};
+        }
+
+        function load() {
+          var meta = $('cc-meta');
+          var t = token();
+          var badge = $('cc-auth-badge');
+          if (badge) {
+            if (t) {
+              badge.textContent = 'JWT OK';
+              badge.className =
+                'rounded border border-emerald-500/35 bg-emerald-950/40 px-2 py-1 text-[10px] text-emerald-200/90';
+            } else {
+              badge.textContent = 'No JWT — set thiramai_jwt';
+              badge.className =
+                'rounded border border-amber-500/30 bg-amber-950/40 px-2 py-1 text-[10px] text-amber-200/90';
+            }
+          }
+          fetch(window.location.origin + '/dashboard/command-center', { headers: authHeaders() })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { ok: r.ok, j: j, status: r.status };
+              });
+            })
+            .then(function (x) {
+              if (!x.ok) {
+                if (meta) meta.textContent = 'Error ' + x.status + (x.j.detail ? ': ' + JSON.stringify(x.j.detail) : '');
+                return;
+              }
+              if (liveTransport !== 'ws') liveTransport = liveTransport === 'poll' ? 'poll' : 'http';
+              render(x.j);
+            })
+            .catch(function (e) {
+              if (meta) meta.textContent = 'Network: ' + (e && e.message ? e.message : 'fail');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+          window.__cc_lastPayloadAt = 0;
+          tickClock();
+          setInterval(tickClock, 1000);
+          setInterval(tickLastUpdated, 1000);
+          syncAiModeBtn();
+          var modeBtn = $('cc-ai-mode-btn');
+          if (modeBtn) {
+            modeBtn.addEventListener('click', function () {
+              var cur = (localStorage.getItem('cc_ai_mode') || 'AUTO').toUpperCase();
+              localStorage.setItem('cc_ai_mode', cur === 'AUTO' ? 'MANUAL' : 'AUTO');
+              syncAiModeBtn();
+            });
+          }
+          bindTabs();
+          window.addEventListener('cc-request-refresh', load);
+          $('cc-refresh-btn').addEventListener('click', load);
+          document.querySelectorAll('[data-cc-action]').forEach(function (b) {
+            b.addEventListener('click', function () {
+              var a = b.getAttribute('data-cc-action');
+              if (a === 'deck') window.location.href = '/';
+              if (a === 'evening') window.location.href = '/';
+            });
+          });
+          liveTransport = token() ? 'http' : 'poll';
+          load();
+          if (token()) connectWebSocket();
+          else schedule();
+        });
+      })();
+    </script>
+    <script src="/static/command_center/cc-island.js" defer></script>
+  </body>
+</html>

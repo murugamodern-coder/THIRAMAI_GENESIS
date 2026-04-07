@@ -1,0 +1,13 @@
+# Optional: build Command Center SPA only (same output as root Dockerfile `frontend` stage).
+# Example: docker build -f docker/Dockerfile.frontend -t thiramai-cc-assets .
+# Artifacts: image layer at /app/static/command_center — copy with `docker cp` or multi-stage COPY.
+
+FROM node:20-bookworm-slim
+
+WORKDIR /app/web/command_center
+COPY web/command_center/package.json web/command_center/package-lock.json ./
+RUN npm ci
+COPY web/command_center/ ./
+RUN npm run build
+
+# Keeps build output at /app/static/command_center (Vite base /static/command_center/)

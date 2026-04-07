@@ -1,0 +1,70 @@
+# THIRAMAI policy bundle v1 — routing, limits, timeouts.
+# Versioned system instructions (agent prompts) live in prompts_v1.md; this file references them via prompts_markdown.
+version: "1"
+prompts_markdown: prompts_v1.md
+
+limits:
+  max_user_message_chars: 5000
+  tavily_api_query_limit: 200
+  groq_search_summarizer_user_max: 4000
+  council_prior_clip: 6500
+  vault_max_chars: 4000
+  max_tokens: 4096
+  ceo_max_tokens: 768
+
+model:
+  groq_model: llama-3.3-70b-versatile
+  completion_temperature: 0.35
+
+timeouts_sec:
+  groq_chat: 120
+  tavily_search: 90
+  groq_search_seed: 45
+
+tamil_watch:
+  words:
+    - "முன்னோடி"
+    - "பயன்படும்"
+  max_per_word: 3
+
+routing:
+  industrial_route_keywords:
+    - manufacturing
+    - factory
+    - factories
+    - company
+    - companies
+  personal_vault_substrings:
+    - "today's plan"
+    - todays plan
+    - today plan
+    - my business
+    - my health
+    - daily plan
+    - morning agenda
+    - இன்றைய திட்டம்
+    - என் வணிகம்
+    - என் ஆரோக்கியம்
+  next_rd_step_substrings:
+    - next r&d step
+    - next rd step
+    - next research step
+    - next r&d
+    - next rd
+    - r&d step
+    - rd step
+  robot_learning_substrings:
+    - how is the robot learning
+    - robot learning
+    - how's the robot learning
+    - neural training
+    - joint movement training
+    - training success rate
+  build_robot_substrings:
+    - can we build the robot now
+    - can we build the robot
+    - build the robot now
+
+vault_safe_mode_ascii: >-
+  [VAULT_SAFE_MODE] Knowledge Vault load failed; using ASCII placeholder.
+  Ensure vault/*.txt are valid UTF-8 and retry.

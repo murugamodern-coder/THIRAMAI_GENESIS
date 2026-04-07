@@ -1,0 +1,3 @@
+# Production ASGI process manager (used by multi-stage Dockerfile).
+# Install alongside requirements.txt in release images only.
+gunicorn>=22.0.0

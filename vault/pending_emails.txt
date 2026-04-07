@@ -1,0 +1,45 @@
+# THIRAMAI Empire — Pending outbound emails (drafts)
+
+---
+
+## DRAFT 1 — CRM provider: restoration of access (GST / statutory records)
+
+**To:** [CRM Provider Support / Legal / Account Manager — insert official address]  
+**Cc:** [Your CA / internal compliance — optional]  
+**Subject:** Formal demand — immediate restoration of access to financial and transaction data (GST compliance)
+
+Dear Sir/Madam,
+
+We are writing on behalf of **[Your registered legal entity name]**, a customer under **[contract / subscription identifier]**, in respect of the hosted CRM / business-management platform you provide.
+
+**1. Background**  
+Our organisation relies on your system to hold and process **sales, purchase, customer, and invoicing records** that form part of our **books of account** and **GST return** preparation. Access to these records is **materially obstructed** due to **[describe: login denial / API revocation / account suspension / data export blocked — insert facts]**. This situation has persisted since **[date]** and is **unacceptable**.
+
+**2. Legal and compliance position**  
+Under applicable Indian law, including the **Information Technology Act, 2000**, and rules thereunder, and our rights as **data principal / contractual counterparty**, we require **unfettered access** to **personal data and business records** processed on your platform, including the ability to **export** data in a **machine-readable** form suitable for **GST compliance** and **statutory audit**.  
+Obstructing or unreasonably delaying such access exposes our business to **penalties**, **interest**, and **non-compliance** under the **Goods and Services Tax** regime and other fiscal laws. Any contractual limitation that purports to deny timely access to **our own business records** for **compliance** will be contested to the fullest extent permitted by law.
+
+**3. Formal demands**  
+Within **forty-eight (48) hours** of this communication, you are required to:
+
+(a) **Restore full administrative and user access** to our instance, or provide **equivalent substitute access** that allows complete visibility of all financial and transactional data;  
+(b) Provide a **complete data export** (including master data, invoices, receipts, ledgers, and audit trails) in **open, standard formats** (e.g. CSV, JSON, or equivalent);  
+(c) Confirm in writing the **root cause** of the outage and the **remediation** steps taken;  
+(d) Provide a **single point of contact** (email and phone) for **escalation** until the matter is closed.
+
+**4. Reservation of rights**  
+Failure to comply will leave us no option but to escalate to **consumer forums**, **regulatory authorities**, and **judicial remedies**, including claims for **damages** arising from **GST filing delays**, **penalties**, and **loss of business continuity**. We reserve all rights and remedies.
+
+We expect your **immediate** written acknowledgment and **timeline** for compliance.
+
+Yours faithfully,  
+
+**[Authorised signatory name]**  
+**[Designation]**  
+**[Legal entity name]**  
+**[Address, phone, email]**  
+**Date:** [YYYY-MM-DD]
+
+---
+
+*Edit bracketed fields before sending. Retain a copy in your records and consider sending from a traceable corporate email.*

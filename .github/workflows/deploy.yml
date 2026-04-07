@@ -1,0 +1,93 @@
+# CI: install deps, smoke tests.
+# CD: deploy to staging when pushing to `main` (requires GitHub Secrets on the repo).
+#
+# Required secrets for deploy (Settings → Secrets → Actions):
+#   STAGING_SSH_KEY     — private key (PEM) for SSH to the staging host
+#   STAGING_HOST        — hostname or IP
+#   STAGING_USER        — SSH user (e.g. deploy)
+#   STAGING_DEPLOY_PATH — absolute path on server where repo/docker-compose live (e.g. /opt/thiramai)
+#
+# SSH uses port 22 by default; fork the workflow to pass a custom port to appleboy/ssh-action if needed.
+
+name: CI and deploy
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest httpx
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short --import-mode=importlib --capture=no
+
+      - name: Docker build (CI only)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: thiramai-genesis:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy staging
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          envs: STAGING_DEPLOY_PATH
+          script_stop: true
+          script: |
+            set -euo pipefail
+            if [ -z "${STAGING_DEPLOY_PATH}" ]; then
+              echo "STAGING_DEPLOY_PATH secret is not set"
+              exit 1
+            fi
+            cd "$STAGING_DEPLOY_PATH"
+            git fetch origin main
+            git checkout main
+            git pull origin main
+            docker compose pull || true
+            docker compose build --pull
+            docker compose up -d --remove-orphans
+            docker compose ps

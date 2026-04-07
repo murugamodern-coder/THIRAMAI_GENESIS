@@ -1,0 +1,2443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>THIRAMAI — Executive Cockpit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="/public/css/enterprise-theme.css"/>
+  <link rel="stylesheet" href="/public/css/dashboard-layout.css"/>
+</head>
+<body class="sap-body">
+  {% set ci = corporate_identity | default({}, true) %}
+  <div class="sap-app" id="cockpit-main">
+    <header class="sap-shell-header" role="banner">
+      <div class="sap-shell-brand">
+        <span class="sap-shell-product">THIRAMAI Genesis</span>
+        <span class="sap-shell-divider" aria-hidden="true"></span>
+        <nav class="sap-shell-nav" aria-label="Primary">
+          <a href="#tower-panel" class="sap-shell-nav-link is-active" aria-current="page">Dashboard</a>
+          <a href="#cockpit-grid" class="sap-shell-nav-link">Operations</a>
+          <a href="#research-hub-title" class="sap-shell-nav-link">Research</a>
+        </nav>
+      </div>
+      <div class="sap-shell-tools">
+        <div id="pulse-badge" class="sap-shell-status badge {% if report.ok %}ok{% else %}bad{% endif %}">
+          {% if report.ok %}
+          <span class="dot ok" aria-hidden="true"></span>
+          <span>Systems nominal</span>
+          {% else %}
+          <span class="dot bad" aria-hidden="true"></span>
+          <span>Attention needed</span>
+          {% endif %}
+        </div>
+        <div class="bell-wrap hidden" id="bell-wrap">
+          <button type="button" class="bell-btn" id="btn-bell" aria-expanded="false" aria-haspopup="true" title="Alerts" aria-label="Open alerts">
+            <i class="fa-regular fa-bell" aria-hidden="true"></i>
+            <span class="bell-badge hidden" id="bell-badge">0</span>
+          </button>
+          <div class="bell-panel" id="bell-panel" role="menu"></div>
+        </div>
+        <button type="button" class="jarvis-ptt hidden" id="btn-jarvis-ptt" title="Hold to speak">
+          <i class="fa-solid fa-microphone" aria-hidden="true"></i> Push-to-talk
+        </button>
+        <label class="wake-lock-toggle" id="wake-lock-label" title="Request screen wake lock (supported browsers only)">
+          <input type="checkbox" id="wake-lock-toggle" aria-describedby="wake-lock-hint"/>
+          <span>Keep awake</span>
+        </label>
+        <span id="wake-lock-hint" class="hidden">Uses the Screen Wake Lock API where available.</span>
+        <button type="button" class="btn-signin-google sap-btn-ghost" id="btn-open-login" aria-haspopup="dialog">Sign in</button>
+        <div class="auth-signed hidden" id="auth-signed-bar">
+          <span class="auth-email" id="auth-email-label" title=""></span>
+          <button type="button" class="btn-signout" id="btn-sign-out">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="sap-subheader">
+      <div class="sap-breadcrumb">Home › Financial Control Tower › Live Dashboard</div>
+      <div class="sap-subheader-center">
+        Profile <strong>{{ report.profile }}</strong>
+        · <span id="dash-generated-at">{{ generated_at }}</span>
+      </div>
+      <div class="sap-subheader-actions">
+        <button type="button" class="btn-secondary" id="btn-subheader-export">Export</button>
+        <button type="button" class="btn-secondary" id="btn-subheader-filter">Filter</button>
+        <button type="button" class="btn-primary" id="btn-subheader-new">+ New Entry</button>
+      </div>
+    </div>
+
+    {% if config_warnings %}
+    <div class="sap-inline-alert" id="config-alert-bar" role="alert">
+      <span class="sap-inline-alert-icon" aria-hidden="true"></span>
+      <div class="sap-inline-alert-text">
+        <strong>Configuration</strong>
+        <ul>
+          {% for w in config_warnings %}
+          <li>{{ w }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <a class="sap-inline-alert-resolve" href="#tower-panel" id="config-alert-resolve">Resolve ›</a>
+      <button type="button" class="sap-inline-alert-dismiss" id="config-alert-dismiss" aria-label="Dismiss configuration notice">×</button>
+    </div>
+    {% endif %}
+
+    <div class="sap-main">
+    <div class="wrap">
+    <div class="sap-page-head">
+      <h1 class="page-title" id="dash-org-title">{{ (ci.get('company_name', '') or ci.get('name', '') or 'Your workspace') | e }}</h1>
+      <p class="page-subtitle">Advanced Executive OS · Corporate Cockpit</p>
+    </div>
+
+    <!-- Financial Control Tower: primary cockpit surface (full width, top) -->
+    <section class="card cockpit-tower cockpit-tower-hero tower-panel" id="tower-panel" aria-labelledby="tower-main-title">
+      <p class="cockpit-eyebrow">Financial Control Tower</p>
+      <div class="tower-hero-header">
+        <div>
+          <h2 class="tower-hero-title" id="tower-main-title">Live financial intelligence</h2>
+          <p class="sub" style="font-size:12px;margin:8px 0 0;max-width:760px;line-height:1.55;">Revenue from bills · estimated operating expenses · solar ROI projection index. Charts animate on load; sign in to stream tenant data.</p>
+        </div>
+      </div>
+      <div class="sap-kpi-row" id="tower-kpi-row" aria-label="Financial key metrics">
+        <div class="sap-kpi-card">
+          <p class="sap-kpi-label">Revenue spotlight</p>
+          <p class="sap-kpi-value" id="kpi-tower-rev">—</p>
+          <p class="sap-kpi-delta sap-kpi-delta--up" id="kpi-tower-rev-delta">Indexed / bills</p>
+        </div>
+        <div class="sap-kpi-card sap-kpi-card--warn">
+          <p class="sap-kpi-label">Open missions</p>
+          <p class="sap-kpi-value" id="kpi-tower-missions">—</p>
+          <p class="sap-kpi-delta" id="kpi-tower-missions-sub">Life OS</p>
+        </div>
+        <div class="sap-kpi-card sap-kpi-card--muted">
+          <p class="sap-kpi-label">Inventory signals</p>
+          <p class="sap-kpi-value" id="kpi-tower-stock">—</p>
+          <p class="sap-kpi-delta" id="kpi-tower-stock-sub">Low-stock notifications</p>
+        </div>
+        <div class="sap-kpi-card sap-kpi-card--success">
+          <p class="sap-kpi-label">Platform health</p>
+          <p class="sap-kpi-value" id="kpi-tower-health">—</p>
+          <p class="sap-kpi-delta" id="kpi-tower-health-sub"><span class="sr-only">Status: </span>Operational</p>
+        </div>
+      </div>
+      <div class="tower-skeleton-grid" id="tower-skeleton" aria-hidden="true">
+        <div class="skeleton-chart-block"></div>
+        <div class="skeleton-chart-block"></div>
+        <div class="skeleton-chart-block"></div>
+      </div>
+      <div class="tower-grid" id="tower-live-charts">
+        <div class="tower-chart-box">
+          <div class="tower-chart-head">
+            <i class="fa-solid fa-coins" aria-hidden="true"></i>
+            <h3>Revenue (INR)</h3>
+            <span class="tower-chart-badge tower-chart-badge--info">Live</span>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="tower-revenue"></canvas></div>
+        </div>
+        <div class="tower-chart-box">
+          <div class="tower-chart-head">
+            <i class="fa-solid fa-building-columns tower-icon-opex" aria-hidden="true"></i>
+            <h3>Expenses (est.)</h3>
+            <span class="tower-chart-badge tower-chart-badge--warn">Est.</span>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="tower-expenses"></canvas></div>
+        </div>
+        <div class="tower-chart-box">
+          <div class="tower-chart-head">
+            <i class="fa-solid fa-bolt tower-icon-solar" aria-hidden="true"></i>
+            <h3>Solar ROI projection</h3>
+            <span class="tower-chart-badge tower-chart-badge--ok">Index</span>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="tower-solar"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <div id="cockpit-fetch-bar" class="cockpit-fetch-bar hidden" aria-hidden="true"></div>
+
+    <div class="grid cockpit-grid" id="cockpit-grid">
+      <!-- Card A: Daily Brief -->
+      <section class="card" aria-labelledby="card-a-title">
+        <div class="row-head" style="margin-bottom:8px;">
+          <div class="card-title-with-icon">
+            <span class="card-head-icon" aria-hidden="true"><i class="fa-solid fa-sun"></i></span>
+            <h2 id="card-a-title">Daily brief</h2>
+          </div>
+          <button type="button" class="btn-expand-card" data-expand-card title="Expand card" aria-label="Expand card"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+        </div>
+        <div class="clock" id="clock-line">—:—:—</div>
+        <p class="greeting" id="ai-greeting">Good day.</p>
+        <ul class="brief-list">
+          <li>
+            <span class="lbl">Today's tasks</span>
+            <span id="brief-tasks">—</span>
+          </li>
+          <li>
+            <span class="lbl">Low stock alerts</span>
+            <span id="brief-stock">—</span>
+          </li>
+          <li>
+            <span class="lbl">Revenue</span>
+            <span id="brief-revenue">—</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Card B: Daily agenda + missions -->
+      <section class="card" aria-labelledby="card-b-title">
+        <div class="row-head">
+          <div class="card-title-with-icon">
+            <span class="card-head-icon" aria-hidden="true"><i class="fa-solid fa-bullseye"></i></span>
+            <h2 id="card-b-title">Mission Hub &amp; agenda</h2>
+          </div>
+          <div class="card-head-tools">
+            <button type="button" class="btn-icon-label" id="btn-planner" title="Open daily agenda editor">
+              <i class="fa-regular fa-calendar-days" aria-hidden="true"></i> Planner
+            </button>
+            <button type="button" class="icon-btn" id="btn-mission-add" title="Add mission" aria-label="Add mission"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+            <button type="button" class="btn-expand-card" data-expand-card title="Expand card" aria-label="Expand card"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+          </div>
+        </div>
+        <p class="section-label">Today's plan</p>
+        <div class="agenda-preview" id="agenda-summary">Open Planner to draft your schedule.</div>
+        <p class="section-label">Missions (progress 0–100%)</p>
+        <ul class="mission-list" id="mission-list">
+          <li class="empty">Loading missions…</li>
+        </ul>
+      </section>
+
+      <!-- Card C: Business operations -->
+      <section class="card" aria-labelledby="card-c-title">
+        <div class="row-head" style="margin-bottom:8px;">
+          <div class="card-title-with-icon">
+            <span class="card-head-icon icon-cta" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
+            <h2 id="card-c-title">Business operations</h2>
+          </div>
+          <button type="button" class="btn-expand-card" data-expand-card title="Expand card" aria-label="Expand card"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+        </div>
+        <div id="inventory-critical-alert" class="critical-banner" role="alert">
+          <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+          <div style="flex:1;">
+            <strong>Critical stock</strong>
+            <p id="inventory-critical-text" style="margin:4px 0 8px;font-size:11px;color:#fca5a5;">—</p>
+            <button type="button" class="btn btn-solid" id="btn-mock-po" style="font-size:11px;padding:6px 12px;">
+              <i class="fa-solid fa-file-invoice" style="margin-right:6px;"></i>Generate purchase order
+            </button>
+          </div>
+        </div>
+        <div class="ops-btns">
+          <button type="button" class="big-btn primary" id="btn-quick-sell"><i class="fa-solid fa-cash-register" style="margin-right:8px;"></i>Quick sell (POS)</button>
+          <button type="button" class="big-btn secondary" id="btn-restock"><i class="fa-solid fa-boxes-stacked" style="margin-right:8px;"></i>Restock</button>
+        </div>
+        <p class="sub" style="font-size:11px;margin:4px 0 0;">Sales trend</p>
+        <div class="chart-wrap">
+          <canvas id="salesTrendChart" aria-label="Sales trend chart"></canvas>
+        </div>
+        <div class="kpi">
+          <div class="val" id="kpi-profit">—</div>
+          <div class="cap" id="kpi-profit-cap">Snapshot total / bills revenue</div>
+        </div>
+      </section>
+
+      <!-- Card D: Habit tracker -->
+      <section class="card" aria-labelledby="card-d-title">
+        <div class="row-head" style="margin-bottom:8px;">
+          <div class="card-title-with-icon">
+            <span class="card-head-icon" aria-hidden="true"><i class="fa-solid fa-heart-pulse"></i></span>
+            <h2 id="card-d-title">Habit tracker</h2>
+          </div>
+          <button type="button" class="btn-expand-card" data-expand-card title="Expand card" aria-label="Expand card"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+        </div>
+        <div class="habits" id="habits-root">
+          <p class="empty">Loading habits…</p>
+        </div>
+      </section>
+
+      <section class="card vault-card" aria-labelledby="vault-title">
+        <div class="row-head">
+          <div class="card-title-with-icon">
+            <span class="card-head-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+            <h2 id="vault-title">Document vault</h2>
+          </div>
+          <button type="button" class="btn-expand-card" data-expand-card title="Expand" aria-label="Expand"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+        </div>
+        <p class="sub" style="font-size:11px;margin:-6px 0 10px;">Secure uploads (PDF / images). View opens in a new tab (JWT fetch).</p>
+        <div class="vault-toolbar">
+          <input type="file" id="vault-file-input" accept=".pdf,image/*" style="max-width:220px;font-size:12px;"/>
+          <button type="button" class="btn btn-solid" id="vault-upload-btn" style="font-size:12px;">Upload</button>
+          <button type="button" class="btn btn-ghost" id="vault-refresh-btn" style="font-size:12px;">Refresh</button>
+        </div>
+        <div class="vault-list" id="vault-list"><p class="empty">Sign in to load documents.</p></div>
+      </section>
+    </div>
+
+    <section class="thought-section research-hub-section" aria-labelledby="research-hub-title">
+      <div class="head">
+        <h2 id="research-hub-title"><i class="fa-solid fa-flask" style="margin-right:10px;color:var(--neon-cyan);"></i>Research hub &amp; knowledge vault</h2>
+        <button type="button" class="btn-icon-label" id="btn-new-research" style="margin-left:auto;">
+          <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> New research
+        </button>
+      </div>
+      <p class="sub" style="font-size:11px;margin:0 0 12px;">Groq-powered reports · <strong>autonomous routing</strong>: company names resolve to NSE/BSE Yahoo tickers (fuzzy match + live quote via yfinance), <strong>Deep Financial Analysis</strong> (balance sheet, cash flow, technicals), or Energy / Real Estate when the topic is clearly infrastructure / land.</p>
+      <div class="research-tabs" role="tablist">
+        <button type="button" class="active" data-research-tab="new" role="tab" aria-selected="true">New</button>
+        <button type="button" data-research-tab="history" role="tab" aria-selected="false">History</button>
+      </div>
+      <div id="research-panel-new" class="research-panel active" role="tabpanel">
+        <div class="field">
+          <label for="research-topic-inline">Topic</label>
+          <textarea id="research-topic-inline" class="research-topic-input" placeholder="e.g. Solar · Vodafone Idea · Mandakolathur land guideline value &amp; registration…" maxlength="5000"></textarea>
+        </div>
+        <p class="login-err" id="research-inline-err" role="alert" style="display:none;margin-top:8px;"></p>
+        <button type="button" class="btn btn-solid" id="research-run-inline" style="margin-top:10px;">
+          <i class="fa-solid fa-play" style="margin-right:8px;"></i>Run analysis
+        </button>
+        <div id="research-result-preview" style="margin-top:16px;display:none;">
+          <p class="section-label">Latest report</p>
+          <p class="sub" id="research-result-category" style="display:none;margin:4px 0 8px;font-size:11px;color:#0064d9;"></p>
+          <div class="vault-entry" style="max-height:280px;overflow-y:auto;">
+            <div class="va" id="research-result-body" style="max-height:none;"></div>
+          </div>
+        </div>
+      </div>
+      <div id="research-panel-history" class="research-panel" role="tabpanel">
+        <div id="research-history-list">
+          <p class="empty">Loading history…</p>
+        </div>
+      </div>
+    </section>
+    </div><!-- .wrap -->
+    </div><!-- .sap-main -->
+  </div><!-- .sap-app -->
+
+  <!-- Quick Sell modal (POS) -->
+  <div class="modal-backdrop" id="modal-sell" role="dialog" aria-modal="true" aria-labelledby="modal-sell-title">
+    <div class="modal modal-wide">
+      <h3 id="modal-sell-title">Point of sale</h3>
+      <p class="sub" style="margin:-8px 0 14px;">Line totals are estimates; execution uses <code>/inventory/retail-sell</code>.</p>
+      <div class="field">
+        <label for="sell-sku">SKU name</label>
+        <input type="text" id="sell-sku" autocomplete="off" placeholder="e.g. Soap 100g"/>
+      </div>
+      <div class="field">
+        <label for="sell-qty">Quantity</label>
+        <input type="number" id="sell-qty" min="1" step="1" value="1"/>
+      </div>
+      <div class="field">
+        <label for="sell-unit-price">Unit selling price (INR, excl. GST)</label>
+        <input type="number" id="sell-unit-price" min="0" step="0.01" placeholder="0.00"/>
+      </div>
+      <div class="field">
+        <label for="sell-unit-cost">Unit cost / COGS (INR) — optional, for margin</label>
+        <input type="number" id="sell-unit-cost" min="0" step="0.01" placeholder="0.00"/>
+      </div>
+      <div class="field">
+        <label for="sell-gst-rate">GST rate (%)</label>
+        <input type="number" id="sell-gst-rate" min="0" max="40" step="0.5" value="18"/>
+      </div>
+      <div class="field">
+        <label for="sell-loc">Location (optional)</label>
+        <input type="text" id="sell-loc" placeholder="Warehouse A"/>
+      </div>
+      <div class="field" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="sell-igst"/>
+        <label for="sell-igst" style="margin:0;">Interstate (IGST)</label>
+      </div>
+      <div class="pos-totals" id="sell-pos-totals" aria-live="polite">
+        Enter unit price and quantity to see <strong>tax</strong> and <strong>margin</strong>.
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="modal-sell">Cancel</button>
+        <button type="button" class="btn btn-solid" id="modal-sell-go">Complete sale</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily agenda (markdown) -->
+  <div class="modal-backdrop" id="modal-daily-agenda" role="dialog" aria-modal="true" aria-labelledby="modal-daily-agenda-title">
+    <div class="modal modal-xl">
+      <h3 id="modal-daily-agenda-title"><i class="fa-regular fa-calendar-days" style="margin-right:10px;color:var(--accent);"></i>Daily agenda</h3>
+      <p class="sub" style="margin:-8px 0 10px;">Markdown schedule, checklist sub-tasks, and optional reminder alerts · auto-saves.</p>
+      <div class="field">
+        <label for="planner-status">Status</label>
+        <select id="planner-status" style="width:100%;max-width:240px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(0,0,0,0.25);color:var(--text);font-family:inherit;">
+          <option value="draft">Draft</option>
+          <option value="active">Active</option>
+          <option value="done">Done</option>
+        </select>
+      </div>
+      <div class="field modal-scroll">
+        <label for="planner-md-editor">Plan (Markdown)</label>
+        <textarea id="planner-md-editor" placeholder="## Morning&#10;- 09:00 Stand-up&#10;- [ ] Sub-task in markdown&#10;&#10;## Afternoon&#10;- …" style="min-height:240px;font-family:ui-monospace,monospace;font-size:13px;line-height:1.45;"></textarea>
+      </div>
+      <div class="field planner-checklist-block modal-scroll">
+        <label>Checklist &amp; reminders</label>
+        <p class="sub-hint">Sub-tasks below sync to your workspace. Set a <strong>remind</strong> time for a browser notification (page should stay open; click Enable once per browser).</p>
+        <div class="planner-checklist-toolbar">
+          <button type="button" class="btn btn-ghost" id="planner-add-check-item" style="font-size:12px;">+ Add checklist item</button>
+          <button type="button" class="btn btn-solid" id="planner-enable-notify" style="font-size:12px;">Enable notifications</button>
+        </div>
+        <div id="planner-checklist-list" aria-label="Planner checklist"></div>
+      </div>
+      <div class="field planner-checklist-block">
+        <label>Version history</label>
+        <p class="sub-hint">Snapshots saved on each auto-save. Click a row to preview (read-only).</p>
+        <button type="button" class="btn btn-ghost" id="planner-load-history" style="font-size:12px;margin-bottom:8px;">Refresh history</button>
+        <div class="planner-history-panel" id="planner-history-panel"><p class="empty" style="margin:0;">Open history after loading the planner.</p></div>
+        <pre id="planner-history-preview" style="display:none;margin-top:8px;padding:10px;border-radius:8px;background:rgba(0,0,0,0.35);font-size:11px;white-space:pre-wrap;max-height:160px;overflow:auto;border:1px solid var(--border);"></pre>
+      </div>
+      <p class="planner-status" id="planner-save-state" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="modal-daily-agenda"><i class="fa-solid fa-xmark" style="margin-right:6px;"></i>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Research report (full view) -->
+  <div class="modal-backdrop" id="modal-research-detail" role="dialog" aria-modal="true" aria-labelledby="modal-research-detail-title">
+    <div class="modal modal-xl">
+      <h3 id="modal-research-detail-title">Research report</h3>
+      <p class="sub" id="modal-research-detail-meta" style="margin:-8px 0 10px;">—</p>
+      <div class="vault-entry modal-scroll" style="max-height:60vh;">
+        <pre id="research-detail-body" style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:12px;color:var(--text);font-family:ui-monospace,monospace;"></pre>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-solid" data-close="modal-research-detail">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Restock modal -->
+  <div class="modal-backdrop" id="modal-restock" role="dialog" aria-modal="true" aria-labelledby="modal-restock-title">
+    <div class="modal">
+      <h3 id="modal-restock-title">Restock</h3>
+      <p class="sub" style="margin:-8px 0 14px;">Runs inventory adjust via command: <code>restock qty sku</code></p>
+      <div class="field">
+        <label for="restock-sku">SKU name</label>
+        <input type="text" id="restock-sku" autocomplete="off" placeholder="e.g. Soap 100g"/>
+      </div>
+      <div class="field">
+        <label for="restock-qty">Quantity to add</label>
+        <input type="number" id="restock-qty" min="1" step="1" value="1"/>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="modal-restock">Cancel</button>
+        <button type="button" class="btn btn-solid" id="modal-restock-go">Restock</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <!-- Sign in (OAuth2 password: username = email) -->
+  <div class="modal-backdrop" id="modal-login" role="dialog" aria-modal="true" aria-labelledby="modal-login-title">
+    <div class="modal">
+      <h3 id="modal-login-title">Sign in</h3>
+      <p class="sub" style="margin:-8px 0 14px;">Use your account email and password.</p>
+      <p class="login-err" id="login-modal-err" role="alert"></p>
+      <form id="form-dashboard-login" autocomplete="on">
+        <div class="field">
+          <label for="login-email">Email or username</label>
+          <input type="text" id="login-email" name="username" autocomplete="username" value="admin_king" placeholder="admin_king or you@company.com"/>
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" name="password" autocomplete="current-password"/>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close="modal-login">Cancel</button>
+          <button type="submit" class="btn btn-solid" id="login-submit">Sign in</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var TOKEN_KEY = 'thiramai_jwt';
+      var REFRESH_KEY = 'thiramai_refresh_token';
+      var DEV_ORG_KEY = 'thiramai_dev_org_id';
+      var profile = {{ report.profile | tojson }};
+      var COMMAND_EXECUTE_URL = {{ command_execute_url | tojson }};
+      var SERVER_DASH_TOKEN = {{ dashboard_action_token_value | default('', true) | tojson }};
+      var THOUGHT_POLL_MS = 300000;
+      var COCKPIT_HEARTBEAT_MS = 45000;
+      var COCKPIT_HEARTBEAT_TIMEOUT_MS = 10000;
+      var COCKPIT_RECONNECT_BASE_MS = 2500;
+      var COCKPIT_RECONNECT_MAX_MS = 28000;
+      var COCKPIT_RESUME_MIN_HIDDEN_MS = 5000;
+      var COCKPIT_RESUME_THROTTLE_MS = 2500;
+      var _cockpitServerReachable = true;
+      var _offlineToastShownThisEpisode = false;
+      var _heartbeatInterval = null;
+      var _reconnectTimer = null;
+      var _reconnectAttempt = 0;
+      var _lastHiddenAt = 0;
+      var _cockpitResumeGate = 0;
+      var _wakeLockSentinel = null;
+      var TREND_KEY = 'thiramai_dash_sales_trend_v1';
+      var RESEARCH_CACHE_KEY = 'thiramai_research_vault_cache_v1';
+      var RESEARCH_CAT_LABELS = {
+        industrial_energy: 'Industrial / Energy',
+        financial_stocks: 'Financial / Stocks',
+        real_estate: 'Real Estate',
+        deep_financial: 'Deep Financial Analysis'
+      };
+      var salesChart = null;
+      var _towerCharts = { rev: null, exp: null, sol: null };
+      var _missionSaveTimers = {};
+      var BELL_NOTIFY_SS = 'thiramai_bell_notified_v1';
+      var _unauthorizedToastThisCycle = false;
+      var _plannerDebounce = null;
+      var _plannerLoadedForModal = false;
+      var _plannerChecklist = [];
+      var _plannerNotifyTimeouts = [];
+      var _plannerNotifyTick = null;
+      var PLANNER_NOTIFY_SS = 'thiramai_planner_notified_v1';
+
+      try {
+        var _lj = localStorage.getItem(TOKEN_KEY);
+        var _sj = sessionStorage.getItem(TOKEN_KEY);
+        if (_lj && !_sj) sessionStorage.setItem(TOKEN_KEY, _lj);
+      } catch (e) {}
+
+      /** Prefer localStorage so Authorization matches explicit Bearer contract. */
+      function getBearerToken() {
+        try {
+          var a = (localStorage.getItem(TOKEN_KEY) || '').trim();
+          if (a) return a;
+          return (sessionStorage.getItem(TOKEN_KEY) || '').trim();
+        } catch (e) { return ''; }
+      }
+      function getToken() {
+        return getBearerToken();
+      }
+      function setToken(t) {
+        try {
+          var v = (t || '').trim();
+          if (!v) return;
+          localStorage.setItem(TOKEN_KEY, v);
+          sessionStorage.setItem(TOKEN_KEY, v);
+        } catch (e) {}
+      }
+      function setRefreshToken(t) {
+        try {
+          var v = (t || '').trim();
+          if (!v) return;
+          localStorage.setItem(REFRESH_KEY, v);
+        } catch (e) {}
+      }
+      function clearAuth() {
+        try {
+          localStorage.removeItem(TOKEN_KEY);
+          sessionStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(REFRESH_KEY);
+          localStorage.removeItem(DEV_ORG_KEY);
+          sessionStorage.removeItem(DEV_ORG_KEY);
+        } catch (e) {}
+      }
+      function tryRefreshSession(done) {
+        try {
+          var r = (localStorage.getItem(REFRESH_KEY) || '').trim();
+          if (!r) {
+            if (done) done();
+            return;
+          }
+          fetch('/auth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ refresh_token: r }),
+            cache: 'no-store'
+          })
+            .then(function (res) { return res.json().then(function (j) { return { ok: res.ok, j: j }; }); })
+            .then(function (x) {
+              if (x.ok && x.j && x.j.access_token) {
+                setToken(x.j.access_token);
+                if (x.j.refresh_token) setRefreshToken(x.j.refresh_token);
+              }
+              if (done) done();
+            })
+            .catch(function () { if (done) done(); });
+        } catch (e) {
+          if (done) done();
+        }
+      }
+      function onUnauthorizedSession(showToast) {
+        clearAuth();
+        if (showToast && !_unauthorizedToastThisCycle) {
+          _unauthorizedToastThisCycle = true;
+          toast('Session expired — sign in again.', false);
+        }
+        updateAuthChrome();
+      }
+      function updateAuthChrome() {
+        var openBtn = document.getElementById('btn-open-login');
+        var signed = document.getElementById('auth-signed-bar');
+        var emailEl = document.getElementById('auth-email-label');
+        var tok = getBearerToken();
+        if (openBtn) openBtn.classList.toggle('hidden', !!tok);
+        if (signed) signed.classList.toggle('hidden', !tok);
+        var bw = document.getElementById('bell-wrap');
+        var jv = document.getElementById('btn-jarvis-ptt');
+        if (bw) bw.classList.toggle('hidden', !tok);
+        if (jv) jv.classList.toggle('hidden', !tok);
+        if (tok) loadBellReminders();
+        if (emailEl && !tok) {
+          emailEl.textContent = '';
+          emailEl.removeAttribute('title');
+        }
+        if (emailEl && tok) {
+          emailEl.textContent = '';
+          emailEl.removeAttribute('title');
+          function loadMeOnce(afterRefresh) {
+            var t = getBearerToken();
+            if (!t) return;
+            var auth = 'Bearer ' + t;
+            fetch('/auth/me', {
+              headers: { 'Accept': 'application/json', 'Authorization': auth },
+              cache: 'no-store'
+            })
+              .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+              .then(function (x) {
+                if (x.status === 401) {
+                  if (afterRefresh) {
+                    onUnauthorizedSession(false);
+                    return;
+                  }
+                  tryRefreshSession(function () {
+                    if (!getBearerToken()) {
+                      onUnauthorizedSession(false);
+                      return;
+                    }
+                    loadMeOnce(true);
+                  });
+                  return;
+                }
+                if (x.ok && x.j && x.j.email) {
+                  emailEl.textContent = x.j.email;
+                  emailEl.setAttribute('title', x.j.email);
+                } else {
+                  emailEl.textContent = 'Signed in';
+                }
+              })
+              .catch(function () {
+                if (emailEl && getBearerToken()) emailEl.textContent = 'Signed in';
+              });
+          }
+          loadMeOnce(false);
+        }
+      }
+      function getDevOrgId() {
+        try { return localStorage.getItem(DEV_ORG_KEY) || ''; } catch (e) { return ''; }
+      }
+      function apiHeaders(json) {
+        var h = { 'Accept': 'application/json' };
+        if (json) h['Content-Type'] = 'application/json';
+        var tok = getBearerToken();
+        if (tok) {
+          h['Authorization'] = 'Bearer ' + tok;
+        } else {
+          var devOrg = getDevOrgId();
+          if (devOrg) h['X-THIRAMAI-DEV-ORG-ID'] = devOrg;
+        }
+        try {
+          var dt = sessionStorage.getItem('thiramai_dash_token');
+          if (dt) h['X-THIRAMAI-Dashboard-Token'] = dt;
+          else if (typeof SERVER_DASH_TOKEN === 'string' && SERVER_DASH_TOKEN.length) {
+            h['X-THIRAMAI-Dashboard-Token'] = SERVER_DASH_TOKEN;
+          }
+        } catch (e) {}
+        return h;
+      }
+      function apiErrorMessage(j, fallback) {
+        var d = j && j.detail;
+        if (typeof d === 'string') return d;
+        if (Array.isArray(d)) {
+          return d.map(function (x) { return (x && x.msg) ? x.msg : String(x); }).join('; ') || fallback;
+        }
+        if (d && typeof d === 'object') return JSON.stringify(d);
+        return fallback || 'Request failed';
+      }
+      function toast(msg, ok) {
+        var el = document.getElementById('toast');
+        if (!el) return;
+        el.innerHTML = '';
+        el.textContent = msg;
+        el.className = 'toast show ' + (ok ? 'ok' : 'err');
+        clearTimeout(el._t);
+        el._t = setTimeout(function () { el.classList.remove('show'); }, 5000);
+      }
+      function dismissOfflineToast() {
+        _offlineToastShownThisEpisode = false;
+        var el = document.getElementById('toast');
+        if (!el) return;
+        el.classList.remove('show', 'offline');
+        el.innerHTML = '';
+        clearTimeout(el._t);
+      }
+      function showSystemOfflineToast(detail) {
+        var el = document.getElementById('toast');
+        if (!el) return;
+        var body =
+          detail && String(detail).trim()
+            ? String(detail).trim()
+            : 'The Executive Cockpit cannot reach the application server. Financial Tower and Mission Hub will resync automatically when the link is restored.';
+        el.className = 'toast show offline';
+        el.innerHTML =
+          '<p class="toast-offline-kicker">Executive cockpit</p>' +
+          '<strong class="toast-offline-title">System offline</strong>' +
+          '<p class="toast-offline-body">' + escapeHtml(body) + '</p>';
+        clearTimeout(el._t);
+        el._t = setTimeout(function () {
+          el.classList.remove('show');
+        }, 14000);
+      }
+      function cockpitPingServer() {
+        var ctrl = new AbortController();
+        var tid = setTimeout(function () {
+          try {
+            ctrl.abort();
+          } catch (e) {}
+        }, COCKPIT_HEARTBEAT_TIMEOUT_MS);
+        return fetch('/health/live', { method: 'GET', cache: 'no-store', signal: ctrl.signal })
+          .then(function (r) {
+            if (!r || !r.ok) return false;
+            return r.json().then(function () {
+              return true;
+            });
+          })
+          .catch(function () {
+            return false;
+          })
+          .finally(function () {
+            clearTimeout(tid);
+          });
+      }
+      function runConnectivityPing() {
+        cockpitPingServer().then(function (ok) {
+          if (ok) {
+            var wasOff = !_cockpitServerReachable;
+            _cockpitServerReachable = true;
+            _reconnectAttempt = 0;
+            if (_reconnectTimer) {
+              clearTimeout(_reconnectTimer);
+              _reconnectTimer = null;
+            }
+            if (wasOff) {
+              dismissOfflineToast();
+              toast('Connection restored — refreshing Financial Tower and Mission Hub.', true);
+              refreshDashboardData();
+            }
+            return;
+          }
+          _cockpitServerReachable = false;
+          if (!_offlineToastShownThisEpisode) {
+            _offlineToastShownThisEpisode = true;
+            showSystemOfflineToast('');
+          }
+          var delay = Math.min(
+            COCKPIT_RECONNECT_MAX_MS,
+            Math.round(COCKPIT_RECONNECT_BASE_MS * Math.pow(2, _reconnectAttempt))
+          );
+          _reconnectAttempt = Math.min(_reconnectAttempt + 1, 12);
+          if (_reconnectTimer) clearTimeout(_reconnectTimer);
+          _reconnectTimer = setTimeout(runConnectivityPing, delay);
+        });
+      }
+      function startCockpitHeartbeat() {
+        if (_heartbeatInterval) clearInterval(_heartbeatInterval);
+        _heartbeatInterval = setInterval(function () {
+          if (document.visibilityState !== 'visible') return;
+          if (!_cockpitServerReachable) return;
+          runConnectivityPing();
+        }, COCKPIT_HEARTBEAT_MS);
+      }
+      function cockpitOnResumeFromBackground() {
+        if (document.visibilityState !== 'visible') return;
+        var now = Date.now();
+        if (now - _cockpitResumeGate < COCKPIT_RESUME_THROTTLE_MS) return;
+        _cockpitResumeGate = now;
+        runConnectivityPing();
+        var hiddenFor = _lastHiddenAt ? now - _lastHiddenAt : 0;
+        if (hiddenFor >= COCKPIT_RESUME_MIN_HIDDEN_MS) refreshDashboardData();
+      }
+      function initWakeLockUi() {
+        var cb = document.getElementById('wake-lock-toggle');
+        var label = document.getElementById('wake-lock-label');
+        if (!cb || !label) return;
+        if (!('wakeLock' in navigator)) {
+          label.classList.add('hidden');
+          return;
+        }
+        cb.addEventListener('change', function () {
+          if (cb.checked) requestWakeLock();
+          else releaseWakeLock();
+        });
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState !== 'visible' || !cb.checked) return;
+          if (!_wakeLockSentinel) requestWakeLock();
+        });
+        window.addEventListener('beforeunload', function () {
+          releaseWakeLock();
+        });
+      }
+      function requestWakeLock() {
+        if (!('wakeLock' in navigator)) return;
+        navigator.wakeLock
+          .request('screen')
+          .then(function (sentinel) {
+            _wakeLockSentinel = sentinel;
+            var lbl = document.getElementById('wake-lock-label');
+            if (lbl) lbl.classList.add('is-active');
+            sentinel.addEventListener('release', function () {
+              var l = document.getElementById('wake-lock-label');
+              if (l) l.classList.remove('is-active');
+              _wakeLockSentinel = null;
+              var c = document.getElementById('wake-lock-toggle');
+              if (c && document.visibilityState === 'visible') c.checked = false;
+            });
+          })
+          .catch(function () {
+            var c = document.getElementById('wake-lock-toggle');
+            if (c) c.checked = false;
+            toast('Wake lock not granted (browser or policy).', false);
+          });
+      }
+      function releaseWakeLock() {
+        if (_wakeLockSentinel) {
+          try {
+            _wakeLockSentinel.release();
+          } catch (e) {}
+          _wakeLockSentinel = null;
+        }
+        var lbl = document.getElementById('wake-lock-label');
+        if (lbl) lbl.classList.remove('is-active');
+      }
+      function tickClock() {
+        var now = new Date();
+        var el = document.getElementById('clock-line');
+        if (el) {
+          el.textContent = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        var h = now.getHours();
+        var greet = document.getElementById('ai-greeting');
+        if (greet) {
+          var g = h < 12 ? 'Good morning.' : (h < 17 ? 'Good afternoon.' : 'Good evening.');
+          greet.textContent = g + ' Here is your snapshot.';
+        }
+      }
+      function escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+      function agendaSummaryText(planText, checklist) {
+        var bits = [];
+        var cl = Array.isArray(checklist) ? checklist : [];
+        if (cl.length) {
+          var done = cl.filter(function (x) { return x && x.done; }).length;
+          bits.push('Checklist ' + done + '/' + cl.length + ' done');
+        }
+        var t = String(planText || '').trim();
+        if (!t && !bits.length) return 'Open Planner to draft your schedule.';
+        if (!t) return bits.join(' · ');
+        var lines = t.split(/\r?\n/).filter(function (x) { return x.trim().length; });
+        var head = lines.slice(0, 5).join('\n');
+        if (lines.length > 5) head += '\n…';
+        if (bits.length) return bits.join(' · ') + '\n' + head;
+        return head;
+      }
+      function genPlannerId() {
+        try {
+          if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+        } catch (e) {}
+        return 'pl_' + Date.now() + '_' + Math.random().toString(16).slice(2, 10);
+      }
+      function plannerNotifiedKey(id, remindAt) {
+        return PLANNER_NOTIFY_SS + ':' + String(id || '') + ':' + String(remindAt || '');
+      }
+      function wasPlannerNotified(id, remindAt) {
+        try { return sessionStorage.getItem(plannerNotifiedKey(id, remindAt)) === '1'; } catch (e) { return false; }
+      }
+      function markPlannerNotified(id, remindAt) {
+        try { sessionStorage.setItem(plannerNotifiedKey(id, remindAt), '1'); } catch (e) {}
+      }
+      function clearPlannerNotifySchedulers() {
+        _plannerNotifyTimeouts.forEach(function (tid) { clearTimeout(tid); });
+        _plannerNotifyTimeouts = [];
+        if (_plannerNotifyTick) {
+          clearInterval(_plannerNotifyTick);
+          _plannerNotifyTick = null;
+        }
+      }
+      function schedulePlannerNotifications(checklist) {
+        clearPlannerNotifySchedulers();
+        var cl = Array.isArray(checklist) ? checklist : [];
+        if (!cl.length) return;
+        if (typeof Notification === 'undefined') return;
+        if (Notification.permission !== 'granted') return;
+
+        function fireDue() {
+          var now = Date.now();
+          cl.forEach(function (item) {
+            if (!item || item.done) return;
+            var ra = (item.remind_at || '').trim();
+            if (!ra) return;
+            var t = Date.parse(ra);
+            if (!isFinite(t)) return;
+            if (t <= now && t >= now - 120000) {
+              if (!wasPlannerNotified(item.id, ra)) {
+                markPlannerNotified(item.id, ra);
+                try {
+                  new Notification('Daily planner', { body: item.title, tag: String(item.id), requireInteraction: false });
+                } catch (e) {}
+              }
+            }
+          });
+        }
+
+        cl.forEach(function (item) {
+          if (!item || item.done) return;
+          var ra = (item.remind_at || '').trim();
+          if (!ra) return;
+          var t = Date.parse(ra);
+          if (!isFinite(t)) return;
+          var delay = t - Date.now();
+          if (delay <= 0) return;
+          if (delay > 2147483647) delay = 2147483647;
+          var tid = setTimeout(function () { fireDue(); }, delay);
+          _plannerNotifyTimeouts.push(tid);
+        });
+
+        _plannerNotifyTick = setInterval(fireDue, 45000);
+      }
+      function requestPlannerNotificationPermission() {
+        if (typeof Notification === 'undefined') {
+          toast('This browser does not support notifications.', false);
+          return;
+        }
+        Notification.requestPermission().then(function (p) {
+          if (p === 'granted') {
+            toast('Planner reminders enabled for scheduled times.', true);
+            schedulePlannerNotifications(_plannerChecklist);
+          } else {
+            toast('Notifications not granted.', false);
+          }
+        });
+      }
+      function collectPlannerChecklist() {
+        var root = document.getElementById('planner-checklist-list');
+        if (!root) return Array.isArray(_plannerChecklist) ? _plannerChecklist.slice() : [];
+        var rows = root.querySelectorAll('[data-planner-check-item]');
+        var out = [];
+        rows.forEach(function (row) {
+          var id = row.getAttribute('data-id') || genPlannerId();
+          var cb = row.querySelector('.planner-chk-done');
+          var tit = row.querySelector('.planner-chk-title');
+          var tm = row.querySelector('.planner-chk-time');
+          var title = tit ? tit.value.trim() : '';
+          if (!title) return;
+          out.push({
+            id: id,
+            done: !!(cb && cb.checked),
+            title: title,
+            remind_at: tm && tm.value ? tm.value : null
+          });
+        });
+        return out;
+      }
+      function renderPlannerChecklist(items) {
+        var root = document.getElementById('planner-checklist-list');
+        if (!root) return;
+        _plannerChecklist = Array.isArray(items) ? items.map(function (x) {
+          return {
+            id: String(x.id || genPlannerId()),
+            title: String(x.title || ''),
+            done: !!x.done,
+            remind_at: x.remind_at ? String(x.remind_at) : null
+          };
+        }) : [];
+        root.innerHTML = '';
+        _plannerChecklist.forEach(function (item) {
+          var row = document.createElement('div');
+          row.className = 'planner-chk-row';
+          row.setAttribute('data-planner-check-item', '1');
+          row.setAttribute('data-id', item.id);
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'planner-chk-done';
+          cb.checked = !!item.done;
+          cb.title = 'Done';
+          var tit = document.createElement('input');
+          tit.type = 'text';
+          tit.className = 'planner-chk-title';
+          tit.value = item.title;
+          tit.placeholder = 'Sub-task title';
+          var tw = document.createElement('div');
+          tw.className = 'planner-chk-time-wrap';
+          var tm = document.createElement('input');
+          tm.type = 'datetime-local';
+          tm.className = 'planner-chk-time';
+          if (item.remind_at) {
+            var s = String(item.remind_at);
+            if (s.length >= 16) tm.value = s.slice(0, 16);
+            else tm.value = s;
+          }
+          tw.appendChild(tm);
+          var rw = document.createElement('div');
+          rw.className = 'planner-chk-remove-wrap';
+          var rm = document.createElement('button');
+          rm.type = 'button';
+          rm.className = 'btn-mini btn btn-ghost';
+          rm.setAttribute('data-remove-chk', '1');
+          rm.textContent = 'Remove';
+          rw.appendChild(rm);
+          row.appendChild(cb);
+          row.appendChild(tit);
+          row.appendChild(tw);
+          row.appendChild(rw);
+          root.appendChild(row);
+        });
+        schedulePlannerNotifications(_plannerChecklist);
+      }
+      function loadExecutiveDailyPlanSummary() {
+        var el = document.getElementById('agenda-summary');
+        if (!getBearerToken()) {
+          if (el) el.textContent = 'Sign in to sync your daily agenda.';
+          return Promise.resolve();
+        }
+        return fetch('/executive/daily-plan', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+          .then(function (x) {
+            if (x.status === 401) {
+              onUnauthorizedSession(true);
+              return;
+            }
+            if (!x.ok || !x.j) {
+              if (el) el.textContent = x.j && x.j.detail ? String(x.j.detail) : 'Agenda unavailable.';
+              return;
+            }
+            var cl = Array.isArray(x.j.checklist) ? x.j.checklist : [];
+            _plannerChecklist = cl;
+            if (el) el.textContent = agendaSummaryText(x.j.plan_text, cl);
+            schedulePlannerNotifications(cl);
+          })
+          .catch(function () {
+            if (el) el.textContent = 'Could not load agenda.';
+          });
+      }
+      function openPlannerModal() {
+        if (!getBearerToken()) {
+          toast('Sign in to use the daily planner.', false);
+          return;
+        }
+        _plannerLoadedForModal = false;
+        var state = document.getElementById('planner-save-state');
+        if (state) { state.textContent = 'Loading…'; state.className = 'planner-status'; }
+        openModal('modal-daily-agenda');
+        fetch('/executive/daily-plan', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+          .then(function (x) {
+            var ta = document.getElementById('planner-md-editor');
+            var st = document.getElementById('planner-status');
+            if (x.status === 401) {
+              onUnauthorizedSession(true);
+              closeModal('modal-daily-agenda');
+              return;
+            }
+            if (!x.ok || !x.j) {
+              if (state) state.textContent = String((x.j && x.j.detail) || 'Could not load plan.');
+              return;
+            }
+            if (ta) ta.value = x.j.plan_text || '';
+            if (st) st.value = (x.j.status || 'draft').toLowerCase();
+            renderPlannerChecklist(Array.isArray(x.j.checklist) ? x.j.checklist : []);
+            loadPlannerSnapshotsPanel();
+            _plannerLoadedForModal = true;
+            if (state) state.textContent = 'Edits auto-save.';
+          })
+          .catch(function () {
+            if (state) state.textContent = 'Network error loading plan.';
+          });
+      }
+      function schedulePlannerSave() {
+        if (!_plannerLoadedForModal) return;
+        var state = document.getElementById('planner-save-state');
+        if (state) { state.textContent = 'Saving…'; state.className = 'planner-status saving'; }
+        clearTimeout(_plannerDebounce);
+        _plannerDebounce = setTimeout(function () {
+          var ta = document.getElementById('planner-md-editor');
+          var st = document.getElementById('planner-status');
+          var text = ta ? ta.value : '';
+          var status = st ? st.value : 'draft';
+          var checklist = collectPlannerChecklist();
+          _plannerChecklist = checklist;
+          fetch('/executive/daily-plan', {
+            method: 'PUT',
+            headers: apiHeaders(true),
+            body: JSON.stringify({ plan_text: text, status: status, checklist: checklist })
+          }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+            .then(function (x) {
+              if (x.status === 401) {
+                onUnauthorizedSession(true);
+                return;
+              }
+              if (!x.ok) {
+                if (state) { state.textContent = apiErrorMessage(x.j, 'Save failed'); state.className = 'planner-status'; }
+                return;
+              }
+              if (state) { state.textContent = 'Saved'; state.className = 'planner-status saved'; }
+              if (x.j && x.j.plan && Array.isArray(x.j.plan.checklist)) {
+                _plannerChecklist = x.j.plan.checklist;
+                schedulePlannerNotifications(_plannerChecklist);
+              }
+              loadExecutiveDailyPlanSummary();
+            })
+            .catch(function () {
+              if (state) { state.textContent = 'Network error'; state.className = 'planner-status'; }
+            });
+        }, 1200);
+      }
+      function readResearchCache() {
+        try {
+          var raw = localStorage.getItem(RESEARCH_CACHE_KEY);
+          if (!raw) return { items: [], updatedAt: 0 };
+          var o = JSON.parse(raw);
+          return { items: Array.isArray(o.items) ? o.items : [], updatedAt: o.updatedAt || 0 };
+        } catch (e) {
+          return { items: [], updatedAt: 0 };
+        }
+      }
+      function writeResearchCache(items) {
+        try {
+          localStorage.setItem(RESEARCH_CACHE_KEY, JSON.stringify({ items: items, updatedAt: Date.now() }));
+        } catch (e) {}
+      }
+      function renderResearchHistoryList(items) {
+        var root = document.getElementById('research-history-list');
+        if (!root) return;
+        if (!items || !items.length) {
+          root.innerHTML = '<p class="empty">No saved research yet. Run <strong>New research</strong>.</p>';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var e = items[i];
+          var id = e.id;
+          var topic = escapeHtml(e.topic || '');
+          var when = e.created_at ? new Date(e.created_at).toLocaleString() : '';
+          var ckey = e.business_category;
+          var clbl = ckey && RESEARCH_CAT_LABELS[ckey] ? RESEARCH_CAT_LABELS[ckey] : '';
+          html += '<div class="history-item" data-research-id="' + id + '" role="button" tabindex="0">';
+          html += '<h4>' + topic + '</h4>';
+          if (clbl) html += '<div class="research-cat-badge">' + escapeHtml(clbl) + '</div>';
+          html += '<div class="hm"><i class="fa-regular fa-clock" style="margin-right:6px;"></i>' + escapeHtml(when) + '</div></div>';
+        }
+        root.innerHTML = html;
+        root.querySelectorAll('.history-item').forEach(function (row) {
+          function openEntry() {
+            var id = row.getAttribute('data-research-id');
+            if (!id) return;
+            showResearchDetail(parseInt(id, 10));
+          }
+          row.addEventListener('click', openEntry);
+          row.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openEntry(); }
+          });
+        });
+      }
+      function showResearchDetail(entryId) {
+        var items = readResearchCache().items;
+        var found = null;
+        for (var i = 0; i < items.length; i++) {
+          if (Number(items[i].id) === Number(entryId)) { found = items[i]; break; }
+        }
+        function fill(entry) {
+          var title = document.getElementById('modal-research-detail-title');
+          var meta = document.getElementById('modal-research-detail-meta');
+          var body = document.getElementById('research-detail-body');
+          if (title) title.textContent = entry.topic || 'Research';
+          if (meta) {
+            var mt = entry.created_at ? new Date(entry.created_at).toLocaleString() : '';
+            var ml = entry.business_category && RESEARCH_CAT_LABELS[entry.business_category];
+            meta.textContent = ml ? (mt + ' · ' + ml) : mt;
+          }
+          if (body) body.textContent = entry.report_markdown || '';
+          openModal('modal-research-detail');
+        }
+        if (found) {
+          fill(found);
+          return;
+        }
+        if (!getBearerToken()) return;
+        fetch('/research/' + entryId, { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            if (!x.ok || !x.j || !x.j.entry) {
+              toast(apiErrorMessage(x.j, 'Could not load report'), false);
+              return;
+            }
+            fill(x.j.entry);
+          })
+          .catch(function () { toast('Network error', false); });
+      }
+      function loadResearchHistoryFromApi() {
+        var cached = readResearchCache();
+        renderResearchHistoryList(cached.items);
+        if (!getBearerToken()) {
+          return Promise.resolve();
+        }
+        return fetch('/research/history?limit=50', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+          .then(function (x) {
+            if (x.status === 401) {
+              onUnauthorizedSession(true);
+              return;
+            }
+            if (!x.ok || !x.j || !Array.isArray(x.j.items)) return;
+            writeResearchCache(x.j.items);
+            renderResearchHistoryList(x.j.items);
+          })
+          .catch(function () {});
+      }
+      function loadInventoryCritical() {
+        var banner = document.getElementById('inventory-critical-alert');
+        var txt = document.getElementById('inventory-critical-text');
+        if (!banner || !txt) return Promise.resolve();
+        if (!getBearerToken()) {
+          banner.classList.remove('show');
+          return Promise.resolve();
+        }
+        return fetch('/executive/inventory-critical?threshold=5', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+          .then(function (x) {
+            if (x.status === 401 || x.status === 403) {
+              banner.classList.remove('show');
+              return;
+            }
+            if (!x.ok || !x.j) {
+              banner.classList.remove('show');
+              return;
+            }
+            var n = Number(x.j.count || 0);
+            var items = x.j.items || [];
+            if (!n || !items.length) {
+              banner.classList.remove('show');
+              return;
+            }
+            var parts = items.slice(0, 6).map(function (it) {
+              return (it.sku_name || '?') + ' · qty ' + String(it.quantity != null ? it.quantity : '—');
+            });
+            txt.textContent = n + ' SKU(s) below threshold. ' + parts.join(' · ') + (items.length > 6 ? ' …' : '');
+            banner.classList.add('show');
+          })
+          .catch(function () { banner.classList.remove('show'); });
+      }
+      function countLowStockFromAlerts(block) {
+        if (!block || !block.items || !block.items.length) return 0;
+        var n = 0;
+        for (var i = 0; i < block.items.length; i++) {
+          if ((block.items[i].kind || '') === 'low_stock') n++;
+        }
+        return n;
+      }
+      function parseInr(s) {
+        if (s == null || s === '') return NaN;
+        if (typeof s === 'number') return s;
+        var t = String(s).replace(/,/g, '').replace(/^[₹\s]+/, '').trim();
+        var n = parseFloat(t);
+        return isFinite(n) ? n : NaN;
+      }
+      function formatInr(n) {
+        if (!isFinite(n)) return '—';
+        return '₹' + n.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+      }
+      function getTrendPoints() {
+        try { return JSON.parse(localStorage.getItem(TREND_KEY) || '[]'); } catch (e) { return []; }
+      }
+      function pushTrendPoint(v) {
+        if (!isFinite(v) || v < 0) return;
+        try {
+          var arr = JSON.parse(localStorage.getItem(TREND_KEY) || '[]');
+          var last = arr.length ? arr[arr.length - 1] : null;
+          if (last && Math.abs(last.v - v) < 0.01 && (Date.now() - last.ts) < 120000) return;
+          arr.push({ ts: Date.now(), v: v });
+          if (arr.length > 24) arr = arr.slice(-24);
+          localStorage.setItem(TREND_KEY, JSON.stringify(arr));
+        } catch (e) {}
+      }
+      function ensureSalesChart() {
+        if (typeof Chart === 'undefined') return;
+        if (salesChart) return;
+        var canvas = document.getElementById('salesTrendChart');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        salesChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: ['—'],
+            datasets: [{
+              label: 'Sales (₹)',
+              data: [0],
+              borderColor: '#0064d9',
+              backgroundColor: 'rgba(0, 100, 217, 0.08)',
+              fill: true,
+              tension: 0.42,
+              pointRadius: 0,
+              pointHoverRadius: 6,
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 1000, easing: 'easeOutQuart' },
+            plugins: {
+              legend: { labels: { color: '#6a6d70', font: { family: "'72', Arial, Helvetica, sans-serif", size: 11 } } }
+            },
+            scales: {
+              x: { ticks: { color: '#6a6d70', maxRotation: 45 }, grid: { color: 'rgba(0,0,0,0.06)' } },
+              y: { ticks: { color: '#6a6d70' }, grid: { color: 'rgba(0,0,0,0.06)' }, beginAtZero: true }
+            }
+          }
+        });
+      }
+      function updateSalesTrendChart(lifePayload, masterPayload, summaryPayload) {
+        ensureSalesChart();
+        if (!salesChart) return;
+        var pts = getTrendPoints();
+        var labels = [];
+        var data = [];
+        if (pts.length >= 2) {
+          for (var i = 0; i < pts.length; i++) {
+            labels.push(new Date(pts[i].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+            data.push(pts[i].v);
+          }
+        } else if (summaryPayload && summaryPayload.ok && summaryPayload.revenue_inr) {
+          var t = parseInr(summaryPayload.revenue_inr.today);
+          var w = parseInr(summaryPayload.revenue_inr.this_week);
+          var m = parseInr(summaryPayload.revenue_inr.this_month);
+          labels = ['Mo avg/day', 'Wk avg/day', 'Today'];
+          data = [m / 30, w / 7, t].map(function (x) { return isFinite(x) ? x : 0; });
+        } else if (masterPayload && masterPayload.revenue && masterPayload.revenue.total_revenue_inr != null) {
+          var tot = Number(masterPayload.revenue.total_revenue_inr);
+          if (isFinite(tot)) {
+            labels = ['Indexed revenue'];
+            data = [tot];
+          }
+        }
+        if (!labels.length) {
+          labels = ['—'];
+          data = [0];
+        }
+        salesChart.data.labels = labels;
+        salesChart.data.datasets[0].data = data;
+        salesChart.update();
+      }
+      function recalcPosTotals() {
+        var el = document.getElementById('sell-pos-totals');
+        if (!el) return;
+        var qty = parseFloat(document.getElementById('sell-qty').value);
+        var up = parseFloat(document.getElementById('sell-unit-price').value);
+        var cost = parseFloat(document.getElementById('sell-unit-cost').value);
+        var gstRate = parseFloat(document.getElementById('sell-gst-rate').value);
+        var igst = document.getElementById('sell-igst').checked;
+        if (!isFinite(qty) || qty <= 0) qty = 0;
+        if (!isFinite(up) || up < 0) up = NaN;
+        if (!isFinite(gstRate) || gstRate < 0) gstRate = 18;
+        if (!isFinite(cost)) cost = NaN;
+        if (!isFinite(up)) {
+          el.innerHTML = 'Enter <strong>unit selling price</strong> and <strong>quantity</strong> for tax and margin estimates.';
+          return;
+        }
+        var taxable = qty * up;
+        var gstAmt = taxable * (gstRate / 100);
+        var total = taxable + gstAmt;
+        var half = gstAmt / 2;
+        var taxLines = igst
+          ? '<strong>IGST (' + gstRate + '%):</strong> ' + formatInr(gstAmt)
+          : ('<strong>CGST:</strong> ' + formatInr(half) + ' · <strong>SGST:</strong> ' + formatInr(half));
+        var marginLine;
+        if (isFinite(cost)) {
+          var profit = qty * (up - cost);
+          var marginPct = total > 0 ? (100 * profit / total) : 0;
+          marginLine = '<strong>Est. profit (line):</strong> ' + formatInr(profit)
+            + ' · <strong>Margin</strong> (incl. GST): ' + marginPct.toFixed(1) + '%';
+        } else {
+          marginLine = '<strong>Margin:</strong> enter unit cost (COGS) to estimate profit.';
+        }
+        el.innerHTML =
+          '<strong>Taxable value:</strong> ' + formatInr(taxable) + '<br/>' +
+          taxLines + '<br/>' +
+          '<strong>Total (incl. tax):</strong> ' + formatInr(total) + '<br/>' +
+          marginLine;
+      }
+      function refreshBriefAndKpi(lifePayload, masterPayload, summaryPayload) {
+        var tasksEl = document.getElementById('brief-tasks');
+        var stockEl = document.getElementById('brief-stock');
+        var revEl = document.getElementById('brief-revenue');
+        var kpiEl = document.getElementById('kpi-profit');
+        var kpiCap = document.getElementById('kpi-profit-cap');
+        var kpiTowerRev = document.getElementById('kpi-tower-rev');
+        var kpiTowerRevDelta = document.getElementById('kpi-tower-rev-delta');
+        var kpiTowerMiss = document.getElementById('kpi-tower-missions');
+        var kpiTowerMissSub = document.getElementById('kpi-tower-missions-sub');
+        var kpiTowerStock = document.getElementById('kpi-tower-stock');
+        var kpiTowerStockSub = document.getElementById('kpi-tower-stock-sub');
+        var kpiTowerHealth = document.getElementById('kpi-tower-health');
+        var kpiTowerHealthSub = document.getElementById('kpi-tower-health-sub');
+        var pulse = document.getElementById('pulse-badge');
+        if (lifePayload && lifePayload.missions_open) {
+          var m = lifePayload.missions_open;
+          if (tasksEl) {
+            if (!m.length) tasksEl.textContent = 'No open missions.';
+            else {
+              var titles = m.slice(0, 3).map(function (x) { return x.title; }).join(' · ');
+              tasksEl.textContent = m.length + ' open — ' + titles + (m.length > 3 ? '…' : '');
+            }
+          }
+          if (kpiTowerMiss) kpiTowerMiss.textContent = String(m.length);
+          if (kpiTowerMissSub) kpiTowerMissSub.textContent = 'Open in Life OS';
+        } else if (tasksEl && !getToken()) tasksEl.textContent = 'Sign in to load Life OS.';
+        if (!lifePayload || !lifePayload.missions_open) {
+          if (kpiTowerMiss) kpiTowerMiss.textContent = getToken() ? '0' : '—';
+          if (kpiTowerMissSub) kpiTowerMissSub.textContent = 'Life OS';
+        }
+        if (stockEl) {
+          var ac = masterPayload && masterPayload.active_alerts;
+          var c = countLowStockFromAlerts(ac);
+          if (ac && ac.ok === false) stockEl.textContent = 'Alerts unavailable';
+          else if (c) stockEl.textContent = c + ' active low-stock notification(s)';
+          else stockEl.textContent = 'None flagged (notifications)';
+          if (kpiTowerStock) {
+            if (ac && ac.ok === false) kpiTowerStock.textContent = '—';
+            else kpiTowerStock.textContent = c ? String(c) : '0';
+          }
+          if (kpiTowerStockSub) {
+            kpiTowerStockSub.textContent = c ? 'Low-stock (active)' : 'None flagged';
+          }
+        }
+        if (pulse && kpiTowerHealth) {
+          var st = pulse.querySelector('span:not(.dot)');
+          kpiTowerHealth.textContent = st ? st.textContent.trim() : '—';
+        }
+        if (kpiTowerHealthSub && pulse) {
+          var bad = pulse.classList.contains('bad');
+          kpiTowerHealthSub.innerHTML = bad
+            ? '<span class="dot bad" aria-hidden="true" style="display:inline-block;width:8px;height:8px;vertical-align:middle;margin-right:6px;border-radius:50%;"></span><span>Review required</span>'
+            : '<span class="dot ok" aria-hidden="true" style="display:inline-block;width:8px;height:8px;vertical-align:middle;margin-right:6px;border-radius:50%;"></span><span>Operational</span>';
+        }
+        if (summaryPayload && summaryPayload.ok && summaryPayload.revenue_inr) {
+          var today = summaryPayload.revenue_inr.today || '—';
+          if (revEl) revEl.textContent = 'Today: ₹' + today + ' (bills)';
+          if (kpiEl) kpiEl.textContent = '₹' + today;
+          if (kpiCap) kpiCap.textContent = 'Profit today (revenue from bills)';
+          if (kpiTowerRev) kpiTowerRev.textContent = '₹' + today;
+          if (kpiTowerRevDelta) kpiTowerRevDelta.textContent = 'Bills (today) · profit line';
+        } else {
+          var revBlock = masterPayload && masterPayload.revenue;
+          var total = revBlock && revBlock.total_revenue_inr;
+          if (revEl) {
+            if (total != null) revEl.textContent = 'All-time (index): ₹' + String(total);
+            else revEl.textContent = '—';
+          }
+          if (kpiEl) {
+            if (total != null) kpiEl.textContent = '₹' + String(total);
+            else kpiEl.textContent = '—';
+          }
+          if (kpiCap) {
+            kpiCap.textContent = 'Revenue (control tower · all-time)';
+          }
+          if (kpiTowerRev) {
+            if (total != null) kpiTowerRev.textContent = '₹' + String(total);
+            else kpiTowerRev.textContent = '—';
+          }
+          if (kpiTowerRevDelta) kpiTowerRevDelta.textContent = 'Revenue (control tower · all-time)';
+        }
+        if (summaryPayload && summaryPayload.ok && summaryPayload.revenue_inr) {
+          var td = parseInr(summaryPayload.revenue_inr.today);
+          if (isFinite(td)) pushTrendPoint(td);
+        }
+        updateSalesTrendChart(lifePayload, masterPayload, summaryPayload);
+      }
+      function scheduleMissionProgressSave(missionId, title, pct) {
+        var id = parseInt(missionId, 10);
+        if (!isFinite(id) || !getBearerToken()) return;
+        clearTimeout(_missionSaveTimers[id]);
+        _missionSaveTimers[id] = setTimeout(function () {
+          fetch('/life/mission', {
+            method: 'POST',
+            headers: apiHeaders(true),
+            body: JSON.stringify({
+              mission_id: id,
+              title: title,
+              status: 'open',
+              progress_percent: pct
+            })
+          }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (x) {
+              if (!x.ok) toast(apiErrorMessage(x.j, 'Progress save failed'), false);
+            })
+            .catch(function () { toast('Network error', false); });
+        }, 700);
+      }
+      function destroyTowerCharts() {
+        ['rev', 'exp', 'sol'].forEach(function (k) {
+          if (_towerCharts[k]) {
+            try { _towerCharts[k].destroy(); } catch (e) {}
+            _towerCharts[k] = null;
+          }
+        });
+      }
+      function setTowerLoading(on) {
+        var t = document.getElementById('tower-panel');
+        if (t) t.classList.toggle('is-loading', !!on);
+      }
+      function setFetchBar(on) {
+        var b = document.getElementById('cockpit-fetch-bar');
+        if (b) b.classList.toggle('hidden', !on);
+      }
+      function loadFinancialTower() {
+        if (!getBearerToken() || typeof Chart === 'undefined') {
+          return Promise.resolve().then(function () { setTowerLoading(false); });
+        }
+        return fetch('/executive/financial-tower?days=14', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+          .then(function (x) {
+            if (!x.ok || !x.j || !x.j.ok) return;
+            var L = x.j.labels || [];
+            destroyTowerCharts();
+            var revLine = '#0064d9';
+            var revFill = 'rgba(0, 100, 217, 0.08)';
+            var orangeBar = '#e9730c';
+            var orangeBarHi = '#f59e4b';
+            var solarLine = '#107e3e';
+            var fontFam = "'72', Arial, Helvetica, sans-serif";
+            var tick = { color: '#6a6d70', font: { family: fontFam, size: 10 } };
+            var grid = { color: 'rgba(0,0,0,0.06)' };
+            var opts = {
+              responsive: true,
+              maintainAspectRatio: false,
+              animation: { duration: 1000, easing: 'easeOutQuart' },
+              interaction: { intersect: false, mode: 'index' },
+              plugins: { legend: { labels: { color: '#6a6d70', font: { family: fontFam, size: 11 } } } },
+              scales: {
+                x: { ticks: tick, grid: { color: grid.color } },
+                y: { ticks: tick, grid: { color: grid.color } }
+              }
+            };
+            var cr = document.getElementById('tower-revenue');
+            var ce = document.getElementById('tower-expenses');
+            var cs = document.getElementById('tower-solar');
+            if (cr) {
+              _towerCharts.rev = new Chart(cr, {
+                type: 'line',
+                data: {
+                  labels: L,
+                  datasets: [{
+                    label: 'Revenue ₹',
+                    data: x.j.revenue_inr || [],
+                    borderColor: revLine,
+                    backgroundColor: revFill,
+                    fill: true,
+                    tension: 0.42,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    borderWidth: 2
+                  }]
+                },
+                options: opts
+              });
+            }
+            if (ce) {
+              var expData = x.j.expenses_inr_est || [];
+              _towerCharts.exp = new Chart(ce, {
+                type: 'bar',
+                data: {
+                  labels: L,
+                  datasets: [{
+                    label: 'Opex est. ₹',
+                    data: expData,
+                    backgroundColor: expData.map(function (_, i) { return i % 2 ? orangeBar : orangeBarHi; }),
+                    borderRadius: 6,
+                    borderSkipped: false
+                  }]
+                },
+                options: opts
+              });
+            }
+            if (cs) {
+              _towerCharts.sol = new Chart(cs, {
+                type: 'line',
+                data: {
+                  labels: L,
+                  datasets: [{
+                    label: 'ROI index',
+                    data: x.j.solar_roi_projection || [],
+                    borderColor: solarLine,
+                    backgroundColor: 'rgba(16, 126, 62, 0.08)',
+                    tension: 0.38,
+                    fill: true,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    borderWidth: 2
+                  }]
+                },
+                options: opts
+              });
+            }
+          })
+          .catch(function () {})
+          .finally(function () { setTowerLoading(false); });
+      }
+      function loadVaultList() {
+        var root = document.getElementById('vault-list');
+        if (!root || !getBearerToken()) return Promise.resolve();
+        return fetch('/executive/vault/documents', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            if (!x.ok || !x.j || !x.j.items) {
+              root.innerHTML = '<p class="empty">Could not load vault.</p>';
+              return;
+            }
+            if (!x.j.items.length) {
+              root.innerHTML = '<p class="empty">No uploads yet.</p>';
+              return;
+            }
+            root.innerHTML = '';
+            x.j.items.forEach(function (it) {
+              var row = document.createElement('div');
+              row.className = 'vault-row';
+              row.innerHTML = '<span>' + escapeHtml(it.original_filename) + '</span><span><button type="button" class="btn btn-ghost btn-mini" data-vault-view="' + it.id + '">View</button></span>';
+              root.appendChild(row);
+            });
+          })
+          .catch(function () {
+            if (root) root.innerHTML = '<p class="empty">Vault network error.</p>';
+          });
+      }
+      function openVaultDocument(id) {
+        if (!getBearerToken()) return;
+        fetch('/executive/vault/documents/' + id + '/file', { headers: { 'Authorization': 'Bearer ' + getBearerToken(), 'Accept': '*/*' } })
+          .then(function (r) { if (!r.ok) throw new Error('bad'); return r.blob(); })
+          .then(function (b) {
+            var u = URL.createObjectURL(b);
+            window.open(u, '_blank', 'noopener');
+            setTimeout(function () { try { URL.revokeObjectURL(u); } catch (e) {} }, 60000);
+          })
+          .catch(function () { toast('Could not open file', false); });
+      }
+      function bellNotifiedKey(it) {
+        var id = String(it && it.id != null ? it.id : '');
+        var suffix = it && it.kind === 'price_move'
+          ? String(it.pct_change != null ? it.pct_change : '') + ':' + String(it.symbol || '')
+          : String(it && it.remind_at ? it.remind_at : '');
+        return BELL_NOTIFY_SS + ':' + id + ':' + suffix;
+      }
+      function loadBellReminders() {
+        if (!getBearerToken()) return Promise.resolve();
+        return fetch('/life/reminders/hub?limit=50', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            var panel = document.getElementById('bell-panel');
+            var badge = document.getElementById('bell-badge');
+            if (!x.ok || !x.j || !x.j.items) return;
+            var items = x.j.items;
+            var hot = items.filter(function (z) {
+              return z.kind === 'price_move' || z.overdue || (z.title && /lawyer|payment|due|court/i.test(z.title));
+            });
+            if (badge) {
+              var cnt = hot.length > 0 ? hot.length : items.length;
+              badge.textContent = String(Math.min(cnt, 99));
+              badge.classList.toggle('hidden', items.length === 0);
+            }
+            if (panel) {
+              if (!items.length) {
+                panel.innerHTML = '<p class="empty" style="margin:0;">No alerts in window.</p>';
+              } else {
+                panel.innerHTML = items.map(function (it) {
+                  var cl = it.kind === 'price_move' ? 'bell-item overdue' : (it.overdue ? 'bell-item overdue' : 'bell-item');
+                  var meta = it.kind === 'price_move'
+                    ? ('Live move vs research snapshot · ' + escapeHtml(String(it.pct_change != null ? it.pct_change : '') + '%'))
+                    : escapeHtml(it.remind_at || '');
+                  return '<div class="' + cl + '"><strong>' + escapeHtml(it.title || 'Reminder') + '</strong><div class="meta">' + meta + '</div></div>';
+                }).join('');
+              }
+            }
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              var now = Date.now();
+              items.forEach(function (it) {
+                if (it.kind === 'price_move') {
+                  try {
+                    var pk = bellNotifiedKey(it);
+                    if (sessionStorage.getItem(pk) === '1') return;
+                    sessionStorage.setItem(pk, '1');
+                    new Notification('Market alert', { body: it.title || 'Price move', tag: 'stock-' + String(it.symbol || '') });
+                  } catch (e) {}
+                  return;
+                }
+                var t = Date.parse(it.remind_at || '');
+                if (!isFinite(t)) return;
+                if (t < now - 60000 || t > now + 120000) return;
+                var key = bellNotifiedKey(it);
+                try {
+                  if (sessionStorage.getItem(key) === '1') return;
+                  sessionStorage.setItem(key, '1');
+                  new Notification('Executive OS', { body: it.title || 'Reminder', tag: 'bell-' + it.id });
+                } catch (e) {}
+              });
+            }
+          })
+          .catch(function () {});
+      }
+      function renderMissions(payload) {
+        var ul = document.getElementById('mission-list');
+        if (!ul) return;
+        if (!payload || !payload.missions_open) {
+          ul.innerHTML = '<li class="empty">Could not load missions.</li>';
+          return;
+        }
+        var list = payload.missions_open;
+        if (!list.length) {
+          ul.innerHTML = '<li class="empty">No active missions. Tap + to add one.</li>';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < list.length; i++) {
+          var m = list[i];
+          var rawPct = m.progress_percent;
+          var pct = rawPct != null ? Math.max(0, Math.min(100, parseInt(rawPct, 10) || 0)) : 0;
+          if (m.status === 'done') pct = 100;
+          var dl = m.deadline ? '<div class="meta">' + escapeHtml(String(m.deadline)) + '</div>' : '';
+          var titleEsc = escapeHtml(String(m.title || ''));
+          html += '<li class="mission-progress-row" data-mid="' + m.id + '"><div>' + titleEsc + '</div>' + dl;
+          html += '<div class="mission-progress-wrap"><div class="mission-progress-bar"><div class="mission-progress-fill" style="width:' + pct + '%;"></div></div>';
+          html += '<input type="range" min="0" max="100" value="' + pct + '" class="mission-pct-range" aria-label="Progress for mission"/></div></li>';
+        }
+        ul.innerHTML = html;
+      }
+      var habitSpecs = [
+        { label: 'Drink Water', match: function (t) { return /water|hydrat/i.test(t); } },
+        { label: 'Focus Work', match: function (t) { return /focus|deep work/i.test(t); } },
+        { label: 'Exercise', match: function (t) { return /exercise|workout|gym/i.test(t); } }
+      ];
+      function resolveHabit(spec, habits) {
+        for (var i = 0; i < habits.length; i++) {
+          var t = String(habits[i].title || '');
+          if (spec.match(t)) return habits[i];
+        }
+        var want = spec.label.toLowerCase();
+        for (var j = 0; j < habits.length; j++) {
+          if (String(habits[j].title || '').toLowerCase() === want) return habits[j];
+        }
+        return null;
+      }
+      function renderHabits(payload) {
+        var root = document.getElementById('habits-root');
+        if (!root) return;
+        if (!payload || !payload.habits) {
+          root.innerHTML = '<p class="empty">Sign in with a real user id to track habits.</p>';
+          return;
+        }
+        var habits = payload.habits;
+        var html = '';
+        for (var s = 0; s < habitSpecs.length; s++) {
+          var spec = habitSpecs[s];
+          var h = resolveHabit(spec, habits);
+          if (h) {
+            var checked = h.completed_today ? ' checked' : '';
+            var ro = h.completed_today ? ' disabled' : '';
+            html += '<div class="habit-row" data-habit-id="' + h.id + '">';
+            html += '<input type="checkbox" id="habit-' + h.id + '"' + checked + ro + ' aria-label="' + spec.label + '"/>';
+            html += '<label for="habit-' + h.id + '">' + spec.label + (h.completed_today ? ' (done today)' : '') + '</label></div>';
+          } else {
+            html += '<div class="habit-row missing"><span class="hint">No habit matching “' + spec.label + '” — create one in Life OS.</span></div>';
+          }
+        }
+        root.innerHTML = html;
+        root.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach(function (cb) {
+          cb.addEventListener('change', function () {
+            if (!cb.checked) {
+              cb.checked = false;
+              return;
+            }
+            var row = cb.closest('.habit-row');
+            var hid = row && row.getAttribute('data-habit-id');
+            if (!hid) return;
+            var id = parseInt(hid, 10);
+            if (!isFinite(id)) return;
+            fetch('/life/habit/check-in', {
+              method: 'POST',
+              headers: apiHeaders(true),
+              body: JSON.stringify({ habit_id: id, status: 'completed' })
+            }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+              .then(function (x) {
+                if (!x.ok) {
+                  cb.checked = false;
+                  toast(apiErrorMessage(x.j, 'Habit update failed'), false);
+                  return;
+                }
+                toast('Habit logged.', true);
+                return loadLifeDashboard();
+              })
+              .catch(function () {
+                cb.checked = false;
+                toast('Network error', false);
+              });
+          });
+        });
+      }
+      function loadLifeDashboard() {
+        if (!getBearerToken()) {
+          renderMissions(null);
+          renderHabits(null);
+          return Promise.resolve(null);
+        }
+        return fetch('/life/dashboard', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              if (r.status === 401) {
+                onUnauthorizedSession(true);
+                renderMissions(null);
+                renderHabits(null);
+                return null;
+              }
+              if (!r.ok) {
+                renderMissions(null);
+                renderHabits(null);
+                return null;
+              }
+              renderMissions(j);
+              renderHabits(j);
+              return j;
+            });
+          })
+          .catch(function () {
+            renderMissions(null);
+            renderHabits(null);
+            return null;
+          });
+      }
+      function loadMasterDashboard() {
+        if (!getBearerToken()) return Promise.resolve(null);
+        return fetch('/analytics/master-dashboard', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              if (r.status === 401) {
+                onUnauthorizedSession(true);
+                return null;
+              }
+              return r.ok ? j : null;
+            });
+          })
+          .catch(function () { return null; });
+      }
+      function loadSummary() {
+        if (!getBearerToken()) return Promise.resolve(null);
+        return fetch('/dashboard/summary', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              if (r.status === 401) {
+                onUnauthorizedSession(true);
+                return null;
+              }
+              return r.ok ? j : null;
+            });
+          })
+          .catch(function () { return null; });
+      }
+      function refreshDashboardData() {
+        _unauthorizedToastThisCycle = false;
+        var tok = getBearerToken();
+        if (tok) {
+          setTowerLoading(true);
+          setFetchBar(true);
+        } else {
+          setTowerLoading(false);
+          setFetchBar(false);
+        }
+        var extra = tok
+          ? [loadExecutiveDailyPlanSummary(), loadInventoryCritical(), loadResearchHistoryFromApi()]
+          : [Promise.resolve(), Promise.resolve(), Promise.resolve()];
+        Promise.all([
+          loadLifeDashboard(),
+          loadMasterDashboard(),
+          loadSummary(),
+          extra[0],
+          extra[1],
+          extra[2],
+          tok ? loadFinancialTower() : Promise.resolve(),
+          tok ? loadVaultList() : Promise.resolve(),
+          tok ? loadBellReminders() : Promise.resolve()
+        ]).then(function (parts) {
+          refreshBriefAndKpi(parts[0], parts[1], parts[2]);
+        }).finally(function () {
+          setFetchBar(false);
+          if (!getBearerToken()) setTowerLoading(false);
+        });
+      }
+      function trigger_life_mission_add() {
+        if (!getToken()) {
+          toast('Sign in (Command Center) to add missions.', false);
+          return;
+        }
+        var title = window.prompt('New mission title');
+        if (!title || !String(title).trim()) return;
+        fetch('/life/mission', {
+          method: 'POST',
+          headers: apiHeaders(true),
+          body: JSON.stringify({ title: String(title).trim(), status: 'open' })
+        }).then(function (r) {
+          return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+        }).then(function (x) {
+          if (!x.ok) {
+            toast(apiErrorMessage(x.j, 'Mission failed'), false);
+            return;
+          }
+          toast('Mission saved.', true);
+          loadLifeDashboard().then(function () { refreshDashboardData(); });
+        }).catch(function () { toast('Network error', false); });
+      }
+      function openModal(id) {
+        var m = document.getElementById(id);
+        if (m) m.classList.add('open');
+      }
+      function closeModal(id) {
+        var m = document.getElementById(id);
+        if (m) m.classList.remove('open');
+      }
+      document.querySelectorAll('[data-close]').forEach(function (btn) {
+        btn.addEventListener('click', function () { closeModal(btn.getAttribute('data-close')); });
+      });
+      document.getElementById('btn-open-login').addEventListener('click', function () {
+        var err = document.getElementById('login-modal-err');
+        if (err) { err.classList.remove('show'); err.textContent = ''; }
+        openModal('modal-login');
+        setTimeout(function () {
+          var em = document.getElementById('login-email');
+          if (em) em.focus();
+        }, 100);
+      });
+      document.getElementById('btn-sign-out').addEventListener('click', function () {
+        clearAuth();
+        window.location.reload();
+      });
+      document.getElementById('form-dashboard-login').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var errEl = document.getElementById('login-modal-err');
+        var u = (document.getElementById('login-email').value || '').trim();
+        var p = document.getElementById('login-password').value || '';
+        if (errEl) { errEl.classList.remove('show'); errEl.textContent = ''; }
+        if (!u || !p) {
+          if (errEl) {
+            errEl.textContent = 'Enter email and password.';
+            errEl.classList.add('show');
+          }
+          return;
+        }
+        var body = new URLSearchParams({ username: u, password: p });
+        fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+          body: body
+        }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            if (!x.ok || !x.j.access_token) {
+              if (errEl) {
+                errEl.textContent = apiErrorMessage(x.j, 'Sign-in failed');
+                errEl.classList.add('show');
+              }
+              return;
+            }
+            setToken(x.j.access_token);
+            if (x.j.refresh_token) setRefreshToken(x.j.refresh_token);
+            window.location.reload();
+          })
+          .catch(function () {
+            _cockpitServerReachable = false;
+            if (errEl) {
+              errEl.textContent =
+                'Unable to reach the server. Confirm the Executive Cockpit backend is running.';
+              errEl.classList.add('show');
+            }
+            if (!_offlineToastShownThisEpisode) {
+              _offlineToastShownThisEpisode = true;
+              showSystemOfflineToast('Sign-in service unreachable from this browser.');
+            }
+            runConnectivityPing();
+          });
+      });
+      document.getElementById('btn-mission-add').addEventListener('click', trigger_life_mission_add);
+      document.getElementById('btn-quick-sell').addEventListener('click', function () {
+        if (!getToken()) { toast('JWT required for retail sell.', false); return; }
+        recalcPosTotals();
+        openModal('modal-sell');
+      });
+      document.getElementById('btn-restock').addEventListener('click', function () {
+        openModal('modal-restock');
+      });
+      document.getElementById('btn-planner').addEventListener('click', function () {
+        openPlannerModal();
+      });
+      var plannerTa = document.getElementById('planner-md-editor');
+      var plannerSt = document.getElementById('planner-status');
+      if (plannerTa) plannerTa.addEventListener('input', schedulePlannerSave);
+      if (plannerSt) plannerSt.addEventListener('change', schedulePlannerSave);
+      var chkList = document.getElementById('planner-checklist-list');
+      if (chkList) {
+        chkList.addEventListener('change', function () { schedulePlannerSave(); });
+        chkList.addEventListener('input', function () { schedulePlannerSave(); });
+        chkList.addEventListener('click', function (e) {
+          var btn = e.target && e.target.closest && e.target.closest('[data-remove-chk]');
+          if (!btn) return;
+          e.preventDefault();
+          var row = btn.closest('[data-planner-check-item]');
+          var rid = row && row.getAttribute('data-id');
+          var cur = collectPlannerChecklist();
+          cur = cur.filter(function (x) { return String(x.id) !== String(rid); });
+          renderPlannerChecklist(cur);
+          schedulePlannerSave();
+        });
+      }
+      var btnAddChk = document.getElementById('planner-add-check-item');
+      if (btnAddChk) {
+        btnAddChk.addEventListener('click', function () {
+          if (!_plannerLoadedForModal) return;
+          var cur = collectPlannerChecklist();
+          cur.push({ id: genPlannerId(), title: 'New checklist item', done: false, remind_at: null });
+          renderPlannerChecklist(cur);
+          schedulePlannerSave();
+        });
+      }
+      var btnEnNotify = document.getElementById('planner-enable-notify');
+      if (btnEnNotify) btnEnNotify.addEventListener('click', requestPlannerNotificationPermission);
+      document.querySelectorAll('[data-research-tab]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var tab = btn.getAttribute('data-research-tab');
+          document.querySelectorAll('[data-research-tab]').forEach(function (b) {
+            var on = b.getAttribute('data-research-tab') === tab;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          document.getElementById('research-panel-new').classList.toggle('active', tab === 'new');
+          document.getElementById('research-panel-history').classList.toggle('active', tab === 'history');
+          if (tab === 'history') loadResearchHistoryFromApi();
+        });
+      });
+      document.getElementById('btn-new-research').addEventListener('click', function () {
+        document.querySelectorAll('[data-research-tab]').forEach(function (b) {
+          var on = b.getAttribute('data-research-tab') === 'new';
+          b.classList.toggle('active', on);
+          b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        document.getElementById('research-panel-new').classList.add('active');
+        document.getElementById('research-panel-history').classList.remove('active');
+        var ta = document.getElementById('research-topic-inline');
+        if (ta) setTimeout(function () { ta.focus(); }, 50);
+      });
+      document.getElementById('research-run-inline').addEventListener('click', function () {
+        var err = document.getElementById('research-inline-err');
+        var topic = (document.getElementById('research-topic-inline').value || '').trim();
+        if (err) { err.style.display = 'none'; err.textContent = ''; err.classList.remove('show'); }
+        if (!getBearerToken()) {
+          if (err) { err.textContent = 'Sign in to run research.'; err.style.display = 'block'; err.classList.add('show'); }
+          return;
+        }
+        if (topic.length < 3) {
+          if (err) { err.textContent = 'Enter a topic (at least 3 characters).'; err.style.display = 'block'; err.classList.add('show'); }
+          return;
+        }
+        var btn = document.getElementById('research-run-inline');
+        if (btn) { btn.disabled = true; }
+        fetch('/research', {
+          method: 'POST',
+          headers: apiHeaders(true),
+          body: JSON.stringify({ topic: topic })
+        }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
+          .then(function (x) {
+            if (btn) btn.disabled = false;
+            if (x.status === 401) {
+              onUnauthorizedSession(true);
+              return;
+            }
+            if (!x.ok || !x.j || !x.j.entry) {
+              if (err) {
+                err.textContent = apiErrorMessage(x.j, 'Research failed');
+                err.style.display = 'block';
+                err.classList.add('show');
+              }
+              return;
+            }
+            var ent = x.j.entry;
+            if (x.j.business_category && ent) ent.business_category = x.j.business_category;
+            var cache = readResearchCache().items.slice();
+            cache.unshift(ent);
+            if (cache.length > 50) cache.length = 50;
+            writeResearchCache(cache);
+            var prev = document.getElementById('research-result-preview');
+            var body = document.getElementById('research-result-body');
+            var catEl = document.getElementById('research-result-category');
+            if (prev) prev.style.display = 'block';
+            if (body) body.textContent = ent.report_markdown || '';
+            if (catEl) {
+              if (x.j.business_category_label) {
+                catEl.style.display = 'block';
+                catEl.textContent = 'Template used: ' + x.j.business_category_label;
+              } else {
+                catEl.style.display = 'none';
+              }
+            }
+            toast('Research saved to vault.', true);
+            loadResearchHistoryFromApi();
+          })
+          .catch(function () {
+            if (btn) btn.disabled = false;
+            if (err) {
+              err.textContent = 'Network error';
+              err.style.display = 'block';
+              err.classList.add('show');
+            }
+          });
+      });
+      document.querySelectorAll('[data-expand-card]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var card = btn.closest('.card');
+          if (card) card.classList.toggle('expanded-card');
+        });
+      });
+      document.getElementById('btn-mock-po').addEventListener('click', function () {
+        toast('Purchase order draft queued (mock).', true);
+      });
+      ['sell-qty', 'sell-unit-price', 'sell-unit-cost', 'sell-gst-rate'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', recalcPosTotals);
+      });
+      var sellIgst = document.getElementById('sell-igst');
+      if (sellIgst) sellIgst.addEventListener('change', recalcPosTotals);
+      document.getElementById('modal-sell-go').addEventListener('click', function () {
+        var sku = (document.getElementById('sell-sku').value || '').trim();
+        var qty = parseFloat(document.getElementById('sell-qty').value);
+        var loc = (document.getElementById('sell-loc').value || '').trim();
+        var igst = document.getElementById('sell-igst').checked;
+        if (!sku || !isFinite(qty) || qty <= 0) {
+          toast('Enter SKU and quantity.', false);
+          return;
+        }
+        fetch('/inventory/retail-sell', {
+          method: 'POST',
+          headers: apiHeaders(true),
+          body: JSON.stringify({ sku_name: sku, quantity: qty, location: loc, interstate_gst: igst })
+        }).then(function (r) {
+          return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; });
+        }).then(function (x) {
+          if (x.status === 202) {
+            toast('Pending approval: ' + (x.j.message || x.j.detail || 'check HITL'), false);
+            closeModal('modal-sell');
+            refreshDashboardData();
+            return;
+          }
+          if (!x.ok) {
+            toast(apiErrorMessage(x.j, 'Sell failed'), false);
+            return;
+          }
+          toast('Sale recorded.', true);
+          closeModal('modal-sell');
+          refreshDashboardData();
+        }).catch(function () { toast('Network error', false); });
+      });
+      document.getElementById('modal-restock-go').addEventListener('click', function () {
+        var sku = (document.getElementById('restock-sku').value || '').trim();
+        var qty = parseInt(document.getElementById('restock-qty').value, 10);
+        if (!sku || !isFinite(qty) || qty < 1) {
+          toast('Enter SKU and quantity.', false);
+          return;
+        }
+        var cmd = 'restock ' + qty + ' ' + sku;
+        var url = COMMAND_EXECUTE_URL || '/dashboard/command/execute';
+        fetch(url, {
+          method: 'POST',
+          headers: apiHeaders(true),
+          body: JSON.stringify({ command: cmd, profile: profile })
+        }).then(function (r) {
+          return r.text().then(function (text) {
+            var j = {};
+            try { j = text && text.trim() ? JSON.parse(text) : {}; } catch (e) {}
+            return { r: r, j: j };
+          });
+        }).then(function (x) {
+          if (x.r.status === 503) {
+            toast('Command console unavailable (e.g. Groq). Use restock phrase with AI or configure keys.', false);
+            return;
+          }
+          if (!x.r.ok || (x.j && x.j.ok === false)) {
+            toast(apiErrorMessage(x.j, x.r.statusText), false);
+            return;
+          }
+          toast('Restock command completed.', true);
+          closeModal('modal-restock');
+          refreshDashboardData();
+        }).catch(function () { toast('Network error', false); });
+      });
+      function validateStoredJwtThen(next) {
+        function checkAccess() {
+          var tok = getBearerToken();
+          if (!tok) {
+            next();
+            return;
+          }
+          fetch('/auth/me', {
+            headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + tok },
+            cache: 'no-store'
+          }).then(function (r) {
+            if (r.status === 401) {
+              tryRefreshSession(function () {
+                var t2 = getBearerToken();
+                if (!t2) {
+                  onUnauthorizedSession(true);
+                  next();
+                  return;
+                }
+                fetch('/auth/me', {
+                  headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + t2 },
+                  cache: 'no-store'
+                }).then(function (r2) {
+                  if (r2.status === 401) onUnauthorizedSession(true);
+                  next();
+                }).catch(function () { next(); });
+              });
+              return;
+            }
+            next();
+          }).catch(function () { next(); });
+        }
+        if (!getBearerToken()) {
+          tryRefreshSession(function () { checkAccess(); });
+          return;
+        }
+        checkAccess();
+      }
+
+      var _plannerSnapCache = {};
+      function loadPlannerSnapshotsPanel() {
+        var panel = document.getElementById('planner-history-panel');
+        var pre = document.getElementById('planner-history-preview');
+        if (pre) {
+          pre.style.display = 'none';
+          pre.textContent = '';
+        }
+        if (!panel || !getBearerToken()) return;
+        panel.innerHTML = '<p class="empty">Loading…</p>';
+        fetch('/executive/daily-plan/snapshots?limit=25', { headers: apiHeaders(false), cache: 'no-store' })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            _plannerSnapCache = {};
+            if (!x.ok || !x.j || !x.j.items || !x.j.items.length) {
+              panel.innerHTML = '<p class="empty">No snapshots yet — save the planner.</p>';
+              return;
+            }
+            var html = '';
+            x.j.items.forEach(function (s) {
+              _plannerSnapCache['k' + s.id] = {
+                plan: s.plan_text || '',
+                when: s.created_at || '',
+                checklist: s.checklist || []
+              };
+              html += '<div class="planner-history-item" data-snap-id="' + s.id + '"><strong>' + escapeHtml(s.for_date) + '</strong> · ' + escapeHtml(s.created_at || '') + '</div>';
+            });
+            panel.innerHTML = html;
+          })
+          .catch(function () {
+            panel.innerHTML = '<p class="empty">Load failed.</p>';
+          });
+      }
+
+      function runDashboardInit() {
+        initWakeLockUi();
+        var cfgDismiss = document.getElementById('config-alert-dismiss');
+        var cfgBar = document.getElementById('config-alert-bar');
+        if (cfgDismiss && cfgBar) {
+          cfgDismiss.addEventListener('click', function () {
+            cfgBar.classList.add('hidden');
+          });
+        }
+        ['btn-subheader-export', 'btn-subheader-filter', 'btn-subheader-new'].forEach(function (id) {
+          var b = document.getElementById(id);
+          if (b) b.addEventListener('click', function () { toast('Action available in a future release.', true); });
+        });
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'hidden') {
+            _lastHiddenAt = Date.now();
+            return;
+          }
+          cockpitOnResumeFromBackground();
+        });
+        window.addEventListener('pageshow', function (ev) {
+          if (ev.persisted) cockpitOnResumeFromBackground();
+        });
+        window.addEventListener('focus', function () {
+          cockpitOnResumeFromBackground();
+        });
+        document.body.addEventListener('input', function (e) {
+          var t = e.target;
+          if (!t || !t.classList || !t.classList.contains('mission-pct-range')) return;
+          var li = t.closest('.mission-progress-row');
+          if (!li) return;
+          var fill = li.querySelector('.mission-progress-fill');
+          if (fill) fill.style.width = t.value + '%';
+          var mid = li.getAttribute('data-mid');
+          var te = li.firstElementChild;
+          var title = te ? te.textContent || '' : '';
+          scheduleMissionProgressSave(mid, title, parseInt(t.value, 10) || 0);
+        });
+        var bellBtn = document.getElementById('btn-bell');
+        var bellPanel = document.getElementById('bell-panel');
+        if (bellBtn && bellPanel) {
+          bellBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            var open = !bellPanel.classList.contains('open');
+            bellPanel.classList.toggle('open', open);
+            bellBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+              Notification.requestPermission();
+            }
+            if (open) loadBellReminders();
+          });
+          document.addEventListener('click', function () {
+            bellPanel.classList.remove('open');
+            if (bellBtn) bellBtn.setAttribute('aria-expanded', 'false');
+          });
+        }
+        var ptt = document.getElementById('btn-jarvis-ptt');
+        if (ptt && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
+          var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          var recog = new SR();
+          recog.lang = 'en-IN';
+          recog.interimResults = false;
+          recog.maxAlternatives = 1;
+          recog.onresult = function (ev) {
+            var tx = (ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript) ? ev.results[0][0].transcript : '';
+            if (!tx || !getBearerToken()) return;
+            fetch('/executive/jarvis-voice', {
+              method: 'POST',
+              headers: apiHeaders(true),
+              body: JSON.stringify({ phrase: tx })
+            }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+              .then(function (x) {
+                if (!x.ok) {
+                  toast(apiErrorMessage(x.j, 'Voice command failed'), false);
+                  return;
+                }
+                toast(x.j.message || 'Voice command applied.', true);
+                refreshDashboardData();
+                loadExecutiveDailyPlanSummary();
+              })
+              .catch(function () { toast('Voice network error', false); });
+          };
+          recog.onerror = function () { ptt.classList.remove('recording'); };
+          recog.onend = function () { ptt.classList.remove('recording'); };
+          ptt.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            if (!getBearerToken()) {
+              toast('Sign in to use voice.', false);
+              return;
+            }
+            ptt.classList.add('recording');
+            try { recog.start(); } catch (err) {}
+          });
+          ptt.addEventListener('mouseup', function () {
+            try { recog.stop(); } catch (err) {}
+          });
+          ptt.addEventListener('mouseleave', function () {
+            try { recog.stop(); } catch (err) {}
+          });
+        } else if (ptt) {
+          ptt.addEventListener('click', function () {
+            toast('Speech recognition not supported in this browser.', false);
+          });
+        }
+        var vUp = document.getElementById('vault-upload-btn');
+        var vIn = document.getElementById('vault-file-input');
+        var vRf = document.getElementById('vault-refresh-btn');
+        var vList = document.getElementById('vault-list');
+        if (vUp && vIn) {
+          vUp.addEventListener('click', function () {
+            if (!getBearerToken()) return;
+            var f = vIn.files && vIn.files[0];
+            if (!f) {
+              toast('Choose a file first.', false);
+              return;
+            }
+            var fd = new FormData();
+            fd.append('file', f, f.name);
+            fetch('/executive/vault/upload', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + getBearerToken(), 'Accept': 'application/json' },
+              body: fd
+            }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+              .then(function (x) {
+                if (!x.ok) {
+                  toast(apiErrorMessage(x.j, 'Upload failed'), false);
+                  return;
+                }
+                toast('Uploaded to vault.', true);
+                vIn.value = '';
+                loadVaultList();
+              })
+              .catch(function () { toast('Upload error', false); });
+          });
+        }
+        if (vRf) vRf.addEventListener('click', function () { loadVaultList(); });
+        if (vList) {
+          vList.addEventListener('click', function (e) {
+            var b = e.target && e.target.closest && e.target.closest('[data-vault-view]');
+            if (!b) return;
+            var vid = b.getAttribute('data-vault-view');
+            if (vid) openVaultDocument(vid);
+          });
+        }
+        var php = document.getElementById('planner-history-panel');
+        if (php) {
+          php.addEventListener('click', function (e) {
+            var t = e.target && e.target.closest && e.target.closest('.planner-history-item');
+            if (!t) return;
+            var sid = t.getAttribute('data-snap-id');
+            var rec = _plannerSnapCache['k' + sid];
+            var pre = document.getElementById('planner-history-preview');
+            if (pre && rec) {
+              pre.style.display = 'block';
+              var cx = (rec.checklist && rec.checklist.length) ? '\n\nChecklist JSON: ' + JSON.stringify(rec.checklist).slice(0, 1200) : '';
+              pre.textContent = (rec.plan || '') + cx;
+            }
+          });
+        }
+        var plh = document.getElementById('planner-load-history');
+        if (plh) plh.addEventListener('click', function () { loadPlannerSnapshotsPanel(); });
+
+        validateStoredJwtThen(function () {
+          var c = readResearchCache();
+          renderResearchHistoryList(c.items);
+          updateAuthChrome();
+          tickClock();
+          setInterval(tickClock, 1000);
+          refreshDashboardData();
+          runConnectivityPing();
+          startCockpitHeartbeat();
+          setInterval(refreshDashboardData, THOUGHT_POLL_MS);
+          setInterval(function () {
+            if (getBearerToken()) loadBellReminders();
+          }, 60000);
+        });
+      }
+
+      runDashboardInit();
+    })();
+  </script>
+</body>
+</html>

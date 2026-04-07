@@ -1,0 +1,67 @@
+# Triggered by repository_dispatch types `kernel-patch-approved` or `thiramai_sandbox_approved`
+# (see services/ci_cd_trigger.py). Server: THIRAMAI_GITHUB_TOKEN + THIRAMAI_GITHUB_REPO=owner/repo
+#
+# Reuses the same SSH deploy secrets as deploy.yml when you want parity with staging.
+
+name: Kernel patch CD
+
+on:
+  repository_dispatch:
+    types: [kernel-patch-approved, thiramai_sandbox_approved]
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "Manual run note"
+        required: false
+        default: "manual"
+
+concurrency:
+  group: kernel-patch-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-from-kernel:
+    name: Deploy after sandbox approval
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Payload summary
+        env:
+          PAYLOAD: ${{ toJson(github.event.client_payload) }}
+        run: |
+          echo "$PAYLOAD" | head -c 4000
+          echo
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy over SSH (optional — same secrets as main deploy)
+        if: ${{ secrets.PRODUCTION_SSH_KEY != '' && secrets.PRODUCTION_HOST != '' }}
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          envs: DEPLOY_PATH
+          script_stop: true
+          script: |
+            set -euo pipefail
+            if [ -z "${DEPLOY_PATH}" ]; then
+              echo "Set PRODUCTION_DEPLOY_PATH secret for kernel CD"
+              exit 1
+            fi
+            cd "$DEPLOY_PATH"
+            git fetch origin main
+            git checkout main
+            git pull origin main
+            docker compose -f docker-compose.production.yml --env-file .env.production pull || true
+            docker compose -f docker-compose.production.yml --env-file .env.production build --pull
+            docker compose -f docker-compose.production.yml --env-file .env.production up -d --remove-orphans
+
+      - name: Skip deploy (secrets not configured)
+        if: ${{ secrets.PRODUCTION_SSH_KEY == '' || secrets.PRODUCTION_HOST == '' }}
+        run: |
+          echo "PRODUCTION_* SSH secrets not set — workflow recorded dispatch only."
+          echo "Apply patch from client_payload on the server manually or add secrets."
