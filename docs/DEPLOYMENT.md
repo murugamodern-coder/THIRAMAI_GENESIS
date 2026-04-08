@@ -4,6 +4,8 @@ This guide gets the FastAPI app and PostgreSQL off your laptop and onto a URL yo
 
 **Full-stack SaaS (domains, managed Postgres, Nginx/Vercel, WebSocket, schedulers):** see **`docs/PRODUCTION_SAAS_FULLSTACK.md`**.
 
+**Unattended VPS bootstrap (writes `.env.production`, Docker, migrations, `docker compose` up):** from repo root on the server run **`sudo bash scripts/provision_vps_auto.sh`**. See script header for `APP_DIR` / `PUBLIC_IP` overrides. Health check uses **`/health/ready`** (Swagger **`/docs`** is disabled when `ENV=production`).
+
 ## What you already have in the repo
 
 | Asset | Purpose |
