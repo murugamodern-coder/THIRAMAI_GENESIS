@@ -45,8 +45,8 @@ Production / CI: set **`ENV=production`** or **`THIRAMAI_DISABLE_CREATE_ALL=1`**
 
 Apply SQL in dependency order on **empty** Postgres (or migrate an existing DB). Typical order:
 
-1. `db/db_schema.sql`
-2. `db/auth_rbac.sql`
+1. `db/db_schema.sql` (organizations, inventory, jobs, etc. — **no** `users` FKs; Life OS / factory staff tables are **not** here)
+2. `db/auth_rbac.sql` (`users`, roles, permissions — requires `organizations`)
 3. `db/approvals_table.sql`
 4. `db/notifications_alerts.sql`
 5. `db/learning_logs.sql`

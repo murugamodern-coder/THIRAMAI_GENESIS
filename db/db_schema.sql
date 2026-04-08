@@ -183,89 +183,10 @@ CREATE TABLE background_jobs (
 CREATE INDEX idx_background_jobs_pending ON background_jobs (status, id) WHERE status = 'pending';
 CREATE INDEX idx_background_jobs_org_created ON background_jobs (organization_id, created_at DESC);
 
--- Life OS (see db/life_os.sql for IF NOT EXISTS migration on existing DBs)
-CREATE TABLE user_personal_crypto (
-    user_id            BIGINT PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
-    salt               BYTEA NOT NULL,
-    key_verifier_hash  TEXT NOT NULL,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE daily_planner (
-    id                 BIGSERIAL PRIMARY KEY,
-    user_id            BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    for_date           DATE NOT NULL,
-    blocks             JSONB NOT NULL DEFAULT '[]',
-    private_notes_cipher BYTEA,
-    ai_flow_hint       TEXT,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT uq_daily_planner_user_date UNIQUE (user_id, for_date)
-);
-
-CREATE INDEX idx_daily_planner_user ON daily_planner (user_id, for_date DESC);
-
-CREATE TABLE health_logs (
-    id                 BIGSERIAL PRIMARY KEY,
-    user_id            BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    logged_on          DATE NOT NULL,
-    sleep_hours        NUMERIC(4, 2),
-    water_glasses      INTEGER,
-    stress_1_10        INTEGER,
-    reflection_cipher  BYTEA,
-    reflection_encrypted BOOLEAN NOT NULL DEFAULT false,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT uq_health_logs_user_day UNIQUE (user_id, logged_on)
-);
-
-CREATE INDEX idx_health_logs_user ON health_logs (user_id, logged_on DESC);
-
-CREATE TABLE personal_reminders (
-    id                 BIGSERIAL PRIMARY KEY,
-    user_id            BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    remind_at          TIMESTAMPTZ NOT NULL,
-    title              TEXT NOT NULL DEFAULT '',
-    body_cipher        BYTEA,
-    body_encrypted     BOOLEAN NOT NULL DEFAULT false,
-    done_at            TIMESTAMPTZ,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_personal_reminders_user_due ON personal_reminders (user_id, remind_at);
-
-CREATE TABLE factory_billing_hold (
-    organization_id   BIGINT PRIMARY KEY REFERENCES organizations (id) ON DELETE CASCADE,
-    billing_paused    BOOLEAN NOT NULL DEFAULT false,
-    pause_reason      TEXT,
-    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE project_stages (
-    id                  BIGSERIAL PRIMARY KEY,
-    organization_id     BIGINT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-    project_name        TEXT NOT NULL,
-    current_stage       INTEGER NOT NULL,
-    status              TEXT NOT NULL DEFAULT 'active',
-    priority            INTEGER NOT NULL DEFAULT 0,
-    asset_id            BIGINT REFERENCES assets (id) ON DELETE SET NULL,
-    revival_cost_inr    NUMERIC(18, 2),
-    machine_failed      BOOLEAN NOT NULL DEFAULT false,
-    extra               JSONB NOT NULL DEFAULT '{}',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_project_stages_org ON project_stages (organization_id, current_stage);
-CREATE INDEX idx_project_stages_org_status ON project_stages (organization_id, status);
-
-CREATE TABLE project_staff_assignments (
-    id                  BIGSERIAL PRIMARY KEY,
-    project_stage_id    BIGINT NOT NULL REFERENCES project_stages (id) ON DELETE CASCADE,
-    user_id             BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    role_note           TEXT NOT NULL DEFAULT '',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT uq_project_staff_user UNIQUE (project_stage_id, user_id)
-);
-
-CREATE INDEX idx_project_staff_project ON project_staff_assignments (project_stage_id);
-CREATE INDEX idx_project_staff_user ON project_staff_assignments (user_id);
+-- Tables that reference `users` (Life OS crypto/planner/health/reminders; Factory OS staff assignments)
+-- MUST NOT appear in this file: `users` is created in db/auth_rbac.sql after this script.
+-- Applied later by Alembic baseline order in core/migration_sql.py:
+--   db/auth_rbac.sql  → users, roles, permissions
+--   …
+--   db/factory_os.sql → factory_billing_hold, project_stages, project_staff_assignments (IF NOT EXISTS)
+--   db/life_os.sql    → user_personal_crypto, daily_planner, health_logs, personal_reminders (IF NOT EXISTS)

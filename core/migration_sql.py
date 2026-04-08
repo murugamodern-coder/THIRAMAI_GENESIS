@@ -26,7 +26,9 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-# Order matches docs/DEPLOYMENT.md + dependency chain. Legacy db/schema.sql omitted (pre-V2.1 orgs).
+# Order: orgs/core tables first (db_schema.sql), then identity (auth_rbac → users), then dependents.
+# Life OS + project_staff_assignments were removed from db_schema.sql (they need users); see
+# db/factory_os.sql and db/life_os.sql later in this tuple. Legacy db/schema.sql omitted (pre-V2.1 orgs).
 SQL_BASELINE_FILES: tuple[str, ...] = (
     "db/db_schema.sql",
     "db/auth_rbac.sql",
