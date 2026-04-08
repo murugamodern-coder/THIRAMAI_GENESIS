@@ -6,6 +6,7 @@ Uses sqlparse for statement boundaries.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import sqlparse
@@ -13,6 +14,15 @@ from alembic import op
 import psycopg2.errors
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
+
+# Baseline identity: `users` (and roles) are defined here; must run after org/core DDL in db_schema.sql.
+_BASELINE_ORG_CORE = "db/db_schema.sql"
+_BASELINE_IDENTITY = "db/auth_rbac.sql"
+
+# FK target ``users`` (word boundary avoids matching ``user_session``-style names).
+_RE_REFERENCES_USERS = re.compile(r"REFERENCES\s+users\b", re.IGNORECASE)
+# ``migrate_roles_add_org_id.sql`` alters ``roles`` created in auth_rbac — must run after identity.
+_RE_ALTER_TABLE_ROLES = re.compile(r"ALTER\s+TABLE\s+roles\b", re.IGNORECASE)
 
 _DUPLICATE_DDL_TYPES: tuple[type, ...] = (
     psycopg2.errors.DuplicateObject,
@@ -47,6 +57,71 @@ SQL_BASELINE_FILES: tuple[str, ...] = (
     "db/life_os.sql",
     "db/migrate_roles_add_org_id.sql",
 )
+
+
+def _file_requires_post_identity(root: Path, rel: str) -> bool:
+    """True if DDL must run after ``auth_rbac.sql`` (users / roles from identity)."""
+    path = root / rel
+    if not path.is_file():
+        return False
+    raw = path.read_text(encoding="utf-8")
+    if _RE_REFERENCES_USERS.search(raw):
+        return True
+    if _RE_ALTER_TABLE_ROLES.search(raw):
+        return True
+    return False
+
+
+def normalize_baseline_sql_paths(paths: tuple[str, ...] | list[str]) -> list[str]:
+    """
+    Dedupe (first occurrence wins) and enforce **strict** baseline phases:
+
+    1. **CORE** — ``db/db_schema.sql`` (organizations + tables without ``users`` FK).
+    2. **PRE_IDENTITY** — other files that do not reference ``users`` and do not ``ALTER TABLE roles``.
+    3. **IDENTITY** — ``db/auth_rbac.sql`` (creates ``roles``, ``users``, …).
+    4. **POST_IDENTITY** — files that ``REFERENCES users`` or alter ``roles`` (Life OS, factory staff,
+       approvals, ``migrate_roles_add_org_id.sql``, …).
+
+    Relative order within PRE and POST matches the order of first appearance in ``paths``.
+    This prevents ``relation users does not exist`` even when ``SQL_BASELINE_FILES`` is shuffled.
+    """
+    seen: set[str] = set()
+    unique: list[str] = []
+    for p in paths:
+        if p not in seen:
+            unique.append(p)
+            seen.add(p)
+    root = project_root()
+    rest = [p for p in unique if p not in (_BASELINE_ORG_CORE, _BASELINE_IDENTITY)]
+    pre: list[str] = []
+    post: list[str] = []
+    for rel in rest:
+        if _file_requires_post_identity(root, rel):
+            post.append(rel)
+        else:
+            pre.append(rel)
+    out: list[str] = []
+    if _BASELINE_ORG_CORE in seen:
+        out.append(_BASELINE_ORG_CORE)
+    out.extend(pre)
+    if _BASELINE_IDENTITY in seen:
+        out.append(_BASELINE_IDENTITY)
+    out.extend(post)
+    return out
+
+
+def _users_table_exists(bind) -> bool:
+    row = bind.execute(
+        text(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = 'users')"
+        )
+    ).scalar()
+    return bool(row)
+
+
+def _statement_references_users(statement: str) -> bool:
+    return bool(_RE_REFERENCES_USERS.search(statement))
 
 
 def iter_statements(sql: str) -> list[str]:
@@ -90,28 +165,73 @@ def _is_baseline_duplicate_programming_error(exc: ProgrammingError) -> bool:
     return False
 
 
+def _execute_one_statement(
+    *,
+    bind,
+    statement: str,
+    sp_name: str,
+) -> None:
+    bind.execute(text(f"SAVEPOINT {sp_name}"))
+    try:
+        bind.execute(text(statement))
+    except ProgrammingError as exc:
+        bind.execute(text(f"ROLLBACK TO SAVEPOINT {sp_name}"))
+        if _is_baseline_duplicate_programming_error(exc):
+            return
+        raise
+    except Exception:
+        bind.execute(text(f"ROLLBACK TO SAVEPOINT {sp_name}"))
+        raise
+    bind.execute(text(f"RELEASE SAVEPOINT {sp_name}"))
+
+
+def _apply_statements_from_file(
+    *,
+    root: Path,
+    rel: str,
+    bind,
+    sp_counter: int,
+) -> int:
+    path = root / rel
+    if not path.is_file():
+        raise FileNotFoundError(f"Alembic baseline SQL missing: {path}")
+    raw = path.read_text(encoding="utf-8")
+    statements = iter_statements(raw)
+    without_users: list[str] = []
+    with_users: list[str] = []
+    for statement in statements:
+        if _statement_references_users(statement):
+            with_users.append(statement)
+        else:
+            without_users.append(statement)
+    for statement in without_users:
+        sp = f"th_baseline_{sp_counter}"
+        sp_counter += 1
+        _execute_one_statement(bind=bind, statement=statement, sp_name=sp)
+    for statement in with_users:
+        if not _users_table_exists(bind):
+            raise RuntimeError(
+                f"Baseline statement in {rel!r} references `users` but table is missing — "
+                f"ensure {_BASELINE_IDENTITY!r} ran earlier (check normalize_baseline_sql_paths)."
+            )
+        sp = f"th_baseline_{sp_counter}"
+        sp_counter += 1
+        _execute_one_statement(bind=bind, statement=statement, sp_name=sp)
+    return sp_counter
+
+
 def apply_sql_files(rel_paths: tuple[str, ...] | list[str]) -> None:
     """Apply DDL statements; skip duplicate-object errors (idempotent baseline)."""
     root = project_root()
     bind = op.get_bind()
+    paths = normalize_baseline_sql_paths(rel_paths)
+    if _BASELINE_IDENTITY in paths and _BASELINE_ORG_CORE not in paths:
+        raise RuntimeError(
+            f"Baseline requires {_BASELINE_ORG_CORE!r} (organizations, core tables) before "
+            f"{_BASELINE_IDENTITY!r} (users / RBAC)."
+        )
     sp_counter = 0
-    for rel in rel_paths:
-        path = root / rel
-        if not path.is_file():
-            raise FileNotFoundError(f"Alembic baseline SQL missing: {path}")
-        raw = path.read_text(encoding="utf-8")
-        for statement in iter_statements(raw):
-            sp = f"th_baseline_{sp_counter}"
-            sp_counter += 1
-            bind.execute(text(f"SAVEPOINT {sp}"))
-            try:
-                bind.execute(text(statement))
-            except ProgrammingError as exc:
-                bind.execute(text(f"ROLLBACK TO SAVEPOINT {sp}"))
-                if _is_baseline_duplicate_programming_error(exc):
-                    continue
-                raise
-            except Exception:
-                bind.execute(text(f"ROLLBACK TO SAVEPOINT {sp}"))
-                raise
-            bind.execute(text(f"RELEASE SAVEPOINT {sp}"))
+    for rel in paths:
+        sp_counter = _apply_statements_from_file(
+            root=root, rel=rel, bind=bind, sp_counter=sp_counter
+        )
