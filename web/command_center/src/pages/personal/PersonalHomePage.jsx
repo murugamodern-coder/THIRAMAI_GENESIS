@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchPendingDecisions, fetchPersonalMorningBrief } from "../../api/commandCenterApi.js";
 import { safeAsync } from "../../lib/safeAsync.js";
@@ -19,17 +19,23 @@ function formatDate(iso) {
 
 export default function PersonalHomePage() {
   const [vaultPass, setVaultPass] = useState("");
+  const vaultRef = useRef("");
   const [brief, setBrief] = useState(null);
   const [decisions, setDecisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    vaultRef.current = vaultPass;
+  }, [vaultPass]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const v = vaultRef.current?.trim() || undefined;
     try {
       const [b, d] = await Promise.all([
-        fetchPersonalMorningBrief(vaultPass || undefined),
+        fetchPersonalMorningBrief(v),
         fetchPendingDecisions(12).catch(() => ({ items: [] })),
       ]);
       setBrief(b);
@@ -39,7 +45,7 @@ export default function PersonalHomePage() {
     } finally {
       setLoading(false);
     }
-  }, [vaultPass]);
+  }, []);
 
   useEffect(() => {
     safeAsync(load, { toast: false })();
