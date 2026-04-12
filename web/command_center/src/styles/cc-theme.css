@@ -1019,6 +1019,24 @@ table.cc-table {
   flex-shrink: 0;
 }
 
+.personal-os-section-lead {
+  margin: 0 0 var(--cc-s2);
+  font-size: 14px;
+}
+
+.personal-os-finance-link {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cc-primary);
+  text-decoration: none;
+}
+
+.personal-os-finance-link:hover {
+  text-decoration: underline;
+}
+
 .personal-os-life-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
