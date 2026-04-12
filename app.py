@@ -132,6 +132,15 @@ if _proxy_hosts:
     )
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_trusted)
 
+# Optional Host header validation (Django-style ALLOWED_HOSTS). Set THIRAMAI_ALLOWED_HOSTS=comma,separated,hosts
+_allowed_hosts_raw = (os.getenv("THIRAMAI_ALLOWED_HOSTS") or "").strip()
+if _allowed_hosts_raw:
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+    _allowed_hosts_list = [h.strip() for h in _allowed_hosts_raw.split(",") if h.strip()]
+    if _allowed_hosts_list:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts_list)
+
 
 @app.on_event("startup")
 def _startup_thiramai() -> None:
@@ -226,7 +235,26 @@ app.mount(
 
 _command_center_static = ROOT / "static" / "command_center"
 _COMMAND_CENTER_INDEX = _command_center_static / "index.html"
+_CC_INDEX_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+}
 if _command_center_static.is_dir():
+    # Exact path wins over the mount below so browsers/proxies always refetch HTML
+    # (hashed ?v= on JS/CSS still allows long cache for bundles).
+    if _COMMAND_CENTER_INDEX.is_file():
+
+        @app.api_route(
+            "/static/command_center/index.html",
+            methods=["GET", "HEAD"],
+            include_in_schema=False,
+        )
+        def command_center_index_html() -> FileResponse:
+            return FileResponse(
+                str(_COMMAND_CENTER_INDEX),
+                media_type="text/html; charset=utf-8",
+                headers=_CC_INDEX_CACHE_HEADERS,
+            )
+
     app.mount(
         "/static/command_center",
         StaticFiles(directory=str(_command_center_static)),

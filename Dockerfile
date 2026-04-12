@@ -62,8 +62,17 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY . .
 
+# When SKIP_FRONTEND=1, the frontend stage only has an empty directory; copying it
+# would wipe committed assets under static/command_center/. Only overlay Vite
+# output when the real build ran.
 ARG SKIP_FRONTEND=0
-COPY --from=frontend /app/static/command_center ./static/command_center
+COPY --from=frontend /app/static/command_center /tmp/cc_frontend_build
+RUN if [ "$SKIP_FRONTEND" != "1" ]; then \
+      rm -rf ./static/command_center \
+      && mkdir -p ./static/command_center \
+      && cp -a /tmp/cc_frontend_build/. ./static/command_center/; \
+    fi \
+ && rm -rf /tmp/cc_frontend_build
 
 RUN useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /app /opt/venv
