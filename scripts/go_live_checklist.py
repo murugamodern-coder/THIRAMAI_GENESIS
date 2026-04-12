@@ -71,11 +71,14 @@ def _check_postgres_alembic() -> tuple[bool, str]:
             if len(versions) != 1:
                 return False, f"expected single Alembic head; got {sorted(versions)}"
             rev = next(iter(versions))
-            if rev != _ALEMBIC_HEAD:
-                return False, f"alembic version is {rev!r}; required {_ALEMBIC_HEAD!r}"
+            if rev != EXPECTED_ALEMBIC_REVISION:
+                return (
+                    False,
+                    f"alembic version is {rev!r}; required {EXPECTED_ALEMBIC_REVISION!r}",
+                )
     except Exception as exc:
         return False, f"database error: {type(exc).__name__}: {exc}"
-    return True, f"PostgreSQL OK; alembic_version = {_ALEMBIC_HEAD}"
+    return True, f"PostgreSQL OK; alembic_version = {EXPECTED_ALEMBIC_REVISION}"
 
 
 def _check_redis() -> tuple[bool, str]:

@@ -27,6 +27,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 load_dotenv(dotenv_path=ROOT / ".env", override=True)
+load_dotenv(dotenv_path=ROOT / ".env.production", override=False)
 
 from core.auth import hash_password
 from core.database import get_session_factory
