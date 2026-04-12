@@ -209,6 +209,27 @@ class User(Base):
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    personal_expenses: Mapped[list["PersonalExpense"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    personal_loans: Mapped[list["PersonalLoan"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    vital_records: Mapped[list["VitalRecord"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    medicine_trackers: Mapped[list["MedicineTracker"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    doctor_visits: Mapped[list["DoctorVisit"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    research_projects: Mapped[list["ResearchProject"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    personal_budgets: Mapped[list["PersonalBudget"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class RefreshToken(Base):
@@ -584,6 +605,7 @@ class PersonalMission(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    priority: Mapped[str] = mapped_column(String(8), nullable=False, default="P2")
     progress_percent: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
     source_ref: Mapped[Optional[str]] = mapped_column(String(256), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -1988,6 +2010,212 @@ class UsageLog(Base):
     )
 
     organization: Mapped["Organization"] = relationship(back_populates="usage_logs")
+
+
+class PersonalExpense(Base):
+    """User-scoped personal finance line (not tenant operational expense)."""
+
+    __tablename__ = "personal_expenses"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    subcategory: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    spent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    notes_cipher: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    notes_encrypted: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="personal_expenses")
+
+
+class PersonalLoan(Base):
+    """Personal liabilities: EMI, chit, jewel loan, etc."""
+
+    __tablename__ = "personal_loans"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    loan_kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    lender: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    principal_outstanding: Mapped[Optional[Decimal]] = mapped_column(Numeric(16, 2), nullable=True)
+    emi_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    next_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    interest_rate_apr: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 3), nullable=True)
+    is_closed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    notes_cipher: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    notes_encrypted: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="personal_loans")
+
+
+class VitalRecord(Base):
+    """Clinical-style vitals (weight, BP, glucose) — optional encrypted notes."""
+
+    __tablename__ = "vital_records"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    weight_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2), nullable=True)
+    bp_systolic: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bp_diastolic: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    blood_glucose_mg_dl: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
+    sleep_hours: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    stress_1_10: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
+    water_glasses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    notes_cipher: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    notes_encrypted: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="vital_records")
+
+
+class MedicineTracker(Base):
+    """Medicine / supplement schedule (JSON schedule; optional encrypted notes)."""
+
+    __tablename__ = "medicine_trackers"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    dosage_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    schedule_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    started_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    notes_cipher: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    notes_encrypted: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="medicine_trackers")
+
+
+class DoctorVisit(Base):
+    """Doctor visit log; diagnosis may be ciphertext."""
+
+    __tablename__ = "doctor_visits"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    visited_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    doctor_name: Mapped[str] = mapped_column(Text, nullable=False)
+    specialty: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    diagnosis_cipher: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    prescription_cipher: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    diagnosis_encrypted: Mapped[bool] = mapped_column(default=False, nullable=False)
+    follow_up_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="doctor_visits")
+
+
+class ResearchProject(Base):
+    """Personal research / DPR-style project (Phase 1 shell; AI in Phase 2)."""
+
+    __tablename__ = "research_projects"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    links_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="research_projects")
+
+
+class PersonalBudget(Base):
+    """Budget envelope per category for a date window."""
+
+    __tablename__ = "personal_budgets"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    period_start: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    subcategory: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    budget_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    overspend_alert_pct: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=15)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="personal_budgets")
 
 
 # Back-compat alias (deprecated)

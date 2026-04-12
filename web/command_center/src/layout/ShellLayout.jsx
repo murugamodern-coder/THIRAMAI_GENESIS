@@ -82,6 +82,9 @@ export default function ShellLayout() {
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/dashboard/production">
             Production
           </NavLink>
+          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/personal">
+            Personal
+          </NavLink>
         </nav>
         {orgs.length > 0 && (
           <label className="cc-muted" style={{ display: "flex", alignItems: "center", gap: 8 }}>

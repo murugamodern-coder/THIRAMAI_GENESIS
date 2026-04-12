@@ -65,6 +65,7 @@ class PersonalMissionUpsertBody(BaseModel):
     deadline: datetime | None = None
     status: str = Field("open", max_length=32)
     progress_percent: int | None = Field(None, ge=0, le=100)
+    priority: str | None = Field(None, max_length=8, description="P1, P2, or P3")
 
 
 @router.get("/dashboard", summary="Today's habits, health metrics, and open missions (syncs vault JSON → Postgres)")
@@ -140,6 +141,7 @@ async def life_mission_upsert(
         deadline=body.deadline,
         status=body.status,
         progress_percent=body.progress_percent,
+        priority=body.priority,
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)

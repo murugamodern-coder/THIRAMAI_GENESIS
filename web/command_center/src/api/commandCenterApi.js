@@ -122,3 +122,67 @@ export async function createMaintenanceLog(payload) {
   const { data } = await api.post("/production/maintenance", payload);
   return data;
 }
+
+/** Personal Command Center (`/personal/os/*`) — optional vault header for encrypted fields. */
+function _vaultHeaders(vaultPassphrase) {
+  const h = {};
+  if (vaultPassphrase && String(vaultPassphrase).trim()) {
+    h["X-Personal-Vault-Passphrase"] = String(vaultPassphrase).trim();
+  }
+  return h;
+}
+
+export async function fetchPersonalMorningBrief(vaultPassphrase) {
+  const { data } = await api.get("/personal/os/morning-brief", { headers: _vaultHeaders(vaultPassphrase) });
+  return data;
+}
+
+export async function fetchPersonalExpenses(limit = 100) {
+  const { data } = await api.get("/personal/os/expenses", { params: { limit } });
+  return data;
+}
+
+export async function createPersonalExpense(payload, vaultPassphrase) {
+  const { data } = await api.post("/personal/os/expenses", payload, { headers: _vaultHeaders(vaultPassphrase) });
+  return data;
+}
+
+export async function fetchPersonalLoans() {
+  const { data } = await api.get("/personal/os/loans");
+  return data;
+}
+
+export async function createPersonalLoan(payload, vaultPassphrase) {
+  const { data } = await api.post("/personal/os/loans", payload, { headers: _vaultHeaders(vaultPassphrase) });
+  return data;
+}
+
+export async function fetchPersonalVitals(limit = 60) {
+  const { data } = await api.get("/personal/os/vitals", { params: { limit } });
+  return data;
+}
+
+export async function createPersonalVital(payload, vaultPassphrase) {
+  const { data } = await api.post("/personal/os/vitals", payload, { headers: _vaultHeaders(vaultPassphrase) });
+  return data;
+}
+
+export async function fetchPersonalBudgets() {
+  const { data } = await api.get("/personal/os/budgets");
+  return data;
+}
+
+export async function createPersonalBudget(payload) {
+  const { data } = await api.post("/personal/os/budgets", payload);
+  return data;
+}
+
+export async function fetchPersonalMedicines() {
+  const { data } = await api.get("/personal/os/medicines");
+  return data;
+}
+
+export async function createPersonalMedicine(payload, vaultPassphrase) {
+  const { data } = await api.post("/personal/os/medicines", payload, { headers: _vaultHeaders(vaultPassphrase) });
+  return data;
+}

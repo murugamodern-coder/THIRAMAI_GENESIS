@@ -65,11 +65,13 @@ def attach_domain_routers(app: FastAPI) -> None:
     from api.routes.life_os import router as life_os_router
     from api.routes.executive_os import router_executive, router_research
     from api.routes.personal import router as personal_router
+    from api.routes.personal_command_center import router as personal_command_center_router
     from api.routes.ai_erp import router as ai_erp_router
     from api.routes.saas_admin import router as saas_admin_router
     from api.routes.autonomy import router as autonomy_router
 
     app.include_router(personal_router)
+    app.include_router(personal_command_center_router)
     app.include_router(ai_erp_router)
     app.include_router(router_executive)
     app.include_router(router_research)

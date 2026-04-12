@@ -81,6 +81,7 @@ def build_personal_today_sync(
                         "id": int(m.id),
                         "title": m.title,
                         "status": m.status,
+                        "priority": getattr(m, "priority", None) or "P2",
                         "deadline": m.deadline.isoformat() if m.deadline else None,
                     }
                 )

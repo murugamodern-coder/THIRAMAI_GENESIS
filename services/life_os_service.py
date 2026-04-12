@@ -663,6 +663,7 @@ def upsert_personal_mission(
     deadline: datetime | None = None,
     status: str = "open",
     progress_percent: int | None = None,
+    priority: str | None = None,
 ) -> tuple[bool, str, int | None, bool]:
     """
     Create or update a personal mission. When ``mission_id`` is set, updates that row if it belongs to the user.
@@ -679,6 +680,9 @@ def upsert_personal_mission(
     ttl = (title or "").strip()[:2000]
     if not ttl:
         return False, "title required", None, False
+    pr = (priority or "P2").strip().upper()[:8]
+    if pr not in ("P1", "P2", "P3"):
+        pr = "P2"
     mid_in = int(mission_id) if mission_id is not None and int(mission_id) > 0 else None
     with factory() as session:
         with session.begin():
@@ -695,6 +699,8 @@ def upsert_personal_mission(
                 if progress_percent is not None:
                     pp = max(0, min(100, int(progress_percent)))
                     row.progress_percent = pp
+                if priority is not None:
+                    row.priority = pr
                 return True, "ok", int(row.id), False
             row = PersonalMission(
                 user_id=uid,
@@ -702,6 +708,7 @@ def upsert_personal_mission(
                 description=(description or "").strip()[:8000] if description else None,
                 deadline=deadline,
                 status=st,
+                priority=pr,
                 progress_percent=max(0, min(100, int(progress_percent))) if progress_percent is not None else None,
             )
             session.add(row)
@@ -725,6 +732,7 @@ def create_personal_mission(
         description=description,
         deadline=deadline,
         status=status,
+        priority=None,
     )
     return ok, msg, mid
 
