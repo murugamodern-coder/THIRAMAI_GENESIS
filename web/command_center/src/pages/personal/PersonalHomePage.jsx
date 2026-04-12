@@ -288,11 +288,11 @@ export default function PersonalHomePage() {
 
       <div className="personal-os-quick-forms personal-os-touch">
         <form className="personal-os-card personal-os-quick-form" onSubmit={onSaveHabit}>
-          <h2 className="personal-os-card-title">Add Habit</h2>
+          <h3 className="personal-os-card-title">Add Habit</h3>
           <p className="personal-os-form-help">Creates the habit and marks it completed for today.</p>
           <label className="personal-os-label">
             Habit name
-            <input className="cc-input" value={habitName} onChange={(e) => setHabitName(e.target.value)} placeholder="e.g. Morning walk" />
+            <input className="cc-input" value={habitName} onChange={(e) => setHabitName(e.target.value)} placeholder="Habit name" />
           </label>
           <label className="personal-os-label">
             Frequency
@@ -310,12 +310,12 @@ export default function PersonalHomePage() {
             </select>
           </label>
           <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" disabled={habitBusy}>
-            {habitBusy ? "Saving…" : "Save habit"}
+            {habitBusy ? "Saving…" : "Save Habit"}
           </button>
         </form>
 
         <form className="personal-os-card personal-os-quick-form" onSubmit={onSaveHealth} id="health-log">
-          <h2 className="personal-os-card-title">Health log</h2>
+          <h3 className="personal-os-card-title">Health Log</h3>
           <p className="personal-os-form-help">Sleep, water, stress, weight, BP → POST /life/health.</p>
           <div className="personal-os-form-grid personal-os-form-grid--dense">
             <label className="personal-os-label">
@@ -351,7 +351,7 @@ export default function PersonalHomePage() {
             </label>
           </div>
           <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" disabled={healthBusy}>
-            {healthBusy ? "Saving…" : "Save health"}
+            {healthBusy ? "Saving…" : "Save Health"}
           </button>
         </form>
 
