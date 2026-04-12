@@ -514,6 +514,9 @@ class HealthLog(Base):
     sleep_hours: Mapped[Optional[Decimal]] = mapped_column(Numeric(4, 2), nullable=True)
     water_glasses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     stress_1_10: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    weight_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2), nullable=True)
+    bp_systolic: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bp_diastolic: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     reflection_cipher: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     reflection_encrypted: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -561,6 +564,7 @@ class Habit(Base):
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     goal_frequency: Mapped[str] = mapped_column(Text, nullable=False, default="daily")
+    category: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     streak_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

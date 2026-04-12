@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { fetchPendingDecisions, fetchPersonalMorningBrief } from "../../api/commandCenterApi.js";
+import {
+  fetchLifeDashboard,
+  fetchPendingDecisions,
+  fetchPersonalMorningBrief,
+  postLifeHabit,
+  postLifeHabitCheckIn,
+  postLifeHealth,
+  postLifeMission,
+} from "../../api/commandCenterApi.js";
 import { safeAsync } from "../../lib/safeAsync.js";
 
 function formatDate(iso) {
@@ -17,13 +25,41 @@ function formatDate(iso) {
   }
 }
 
+function deadlineFromDateInput(dateStr) {
+  if (!dateStr || !String(dateStr).trim()) return null;
+  const d = new Date(`${dateStr}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+const EMPTY_LIFE_DASH = { habits: [], habits_pending_today: 0, health_today: [], missions_open: [], legacy_health_log: null };
+
 export default function PersonalHomePage() {
   const [vaultPass, setVaultPass] = useState("");
   const vaultRef = useRef("");
   const [brief, setBrief] = useState(null);
+  const [dashboard, setDashboard] = useState(EMPTY_LIFE_DASH);
   const [decisions, setDecisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [formMsg, setFormMsg] = useState(null);
+
+  const [habitName, setHabitName] = useState("");
+  const [habitFreq, setHabitFreq] = useState("daily");
+  const [habitCat, setHabitCat] = useState("health");
+  const [habitBusy, setHabitBusy] = useState(false);
+
+  const [hSleep, setHSleep] = useState("");
+  const [hWater, setHWater] = useState("");
+  const [hStress, setHStress] = useState("5");
+  const [hWeight, setHWeight] = useState("");
+  const [hSys, setHSys] = useState("");
+  const [hDia, setHDia] = useState("");
+  const [healthBusy, setHealthBusy] = useState(false);
+
+  const [mTitle, setMTitle] = useState("");
+  const [mPri, setMPri] = useState("P2");
+  const [mDue, setMDue] = useState("");
+  const [missionBusy, setMissionBusy] = useState(false);
 
   useEffect(() => {
     vaultRef.current = vaultPass;
@@ -34,12 +70,14 @@ export default function PersonalHomePage() {
     setError(null);
     const v = vaultRef.current?.trim() || undefined;
     try {
-      const [b, d] = await Promise.all([
+      const [b, d, dash] = await Promise.all([
         fetchPersonalMorningBrief(v),
         fetchPendingDecisions(12).catch(() => ({ items: [] })),
+        fetchLifeDashboard().catch(() => ({ ...EMPTY_LIFE_DASH })),
       ]);
       setBrief(b);
       setDecisions(Array.isArray(d?.items) ? d.items : []);
+      setDashboard(dash && typeof dash === "object" ? dash : { ...EMPTY_LIFE_DASH });
     } catch (e) {
       setError(e?.response?.data?.detail || e?.message || "Could not load morning brief.");
     } finally {
@@ -50,6 +88,116 @@ export default function PersonalHomePage() {
   useEffect(() => {
     safeAsync(load, { toast: false })();
   }, [load]);
+
+  const habits = dashboard?.habits ?? [];
+  const missionsOpen = dashboard?.missions_open ?? [];
+  const legacy = dashboard?.legacy_health_log;
+  const metricsToday = dashboard?.health_today ?? [];
+  const hasHealthToday =
+    (legacy &&
+      (legacy.sleep_hours != null ||
+        legacy.water_glasses != null ||
+        legacy.stress_1_10 != null ||
+        legacy.weight_kg != null ||
+        legacy.bp_systolic != null)) ||
+    metricsToday.length > 0;
+
+  const onSaveHabit = async (e) => {
+    e.preventDefault();
+    setFormMsg(null);
+    const name = habitName.trim();
+    if (!name) {
+      setFormMsg("Enter a habit name.");
+      return;
+    }
+    setHabitBusy(true);
+    try {
+      const out = await postLifeHabit({
+        title: name,
+        goal_frequency: habitFreq,
+        category: habitCat || null,
+      });
+      const hid = out?.habit_id;
+      if (hid) {
+        await postLifeHabitCheckIn({ habit_id: hid, status: "completed" }).catch(() => null);
+      }
+      setHabitName("");
+      setFormMsg("Habit saved and marked done for today.");
+      await load();
+    } catch (err) {
+      setFormMsg(err?.response?.data?.detail || err?.message || "Could not save habit.");
+    } finally {
+      setHabitBusy(false);
+    }
+  };
+
+  const onSaveHealth = async (e) => {
+    e.preventDefault();
+    setFormMsg(null);
+    setHealthBusy(true);
+    const v = vaultRef.current?.trim() || undefined;
+    try {
+      const payload = {
+        sleep_hours: hSleep === "" ? null : Number(hSleep),
+        water_glasses: hWater === "" ? null : Number(hWater),
+        stress_1_10: hStress === "" ? null : Number(hStress),
+        weight_kg: hWeight === "" ? null : Number(hWeight),
+        bp_systolic: hSys === "" ? null : Number(hSys),
+        bp_diastolic: hDia === "" ? null : Number(hDia),
+      };
+      await postLifeHealth(payload, v);
+      setFormMsg("Today’s health log saved.");
+      setHSleep("");
+      setHWater("");
+      setHStress("5");
+      setHWeight("");
+      setHSys("");
+      setHDia("");
+      await load();
+    } catch (err) {
+      setFormMsg(err?.response?.data?.detail || err?.message || "Could not save health.");
+    } finally {
+      setHealthBusy(false);
+    }
+  };
+
+  const onSaveMission = async (e) => {
+    e.preventDefault();
+    setFormMsg(null);
+    const title = mTitle.trim();
+    if (!title) {
+      setFormMsg("Enter a task name.");
+      return;
+    }
+    setMissionBusy(true);
+    try {
+      await postLifeMission({
+        title,
+        priority: mPri,
+        deadline: deadlineFromDateInput(mDue),
+        status: "open",
+      });
+      setMTitle("");
+      setMDue("");
+      setFormMsg("Task saved.");
+      await load();
+    } catch (err) {
+      setFormMsg(err?.response?.data?.detail || err?.message || "Could not save task.");
+    } finally {
+      setMissionBusy(false);
+    }
+  };
+
+  const onHabitDone = async (habitId) => {
+    setFormMsg(null);
+    try {
+      await postLifeHabitCheckIn({ habit_id: habitId, status: "completed" });
+      setFormMsg("Habit checked in.");
+      await load();
+    } catch (err) {
+      setFormMsg(err?.response?.data?.detail || err?.message || "Check-in failed.");
+    }
+  };
 
   const weather = brief?.weather;
   const fin = brief?.financial_snapshot || {};
@@ -74,14 +222,163 @@ export default function PersonalHomePage() {
               autoComplete="off"
             />
           </label>
-          <button type="button" className="cc-btn cc-btn-primary" onClick={() => load()} disabled={loading}>
+          <button type="button" className="cc-btn cc-btn-primary personal-os-btn-touch" onClick={() => load()} disabled={loading}>
             Refresh
           </button>
         </div>
       </div>
 
       {error && <div className="personal-os-banner personal-os-banner--error">{String(error)}</div>}
+      {formMsg && <div className="personal-os-banner">{formMsg}</div>}
       {loading && !brief && <p className="cc-muted">Loading your brief…</p>}
+
+      <section className="personal-os-life-summary personal-os-touch" aria-label="Life OS snapshot">
+          <div className="personal-os-life-card">
+            <h3 className="personal-os-life-card-title">Habits</h3>
+            {habits.length === 0 ? (
+              <p className="personal-os-empty-cta">No habits yet → add your first habit below.</p>
+            ) : (
+              <>
+                <p className="personal-os-life-stat">
+                  <strong>{habits.length}</strong> active · <strong>{dashboard.habits_pending_today ?? 0}</strong> pending today
+                </p>
+                <ul className="personal-os-mini-list">
+                  {habits.slice(0, 6).map((h) => (
+                    <li key={h.id} className="personal-os-mini-row">
+                      <span>{h.title}</span>
+                      {!h.completed_today ? (
+                        <button type="button" className="cc-btn cc-btn-primary personal-os-btn-compact" onClick={() => onHabitDone(h.id)}>
+                          Done today
+                        </button>
+                      ) : (
+                        <span className="cc-muted">Done</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+          <div className="personal-os-life-card">
+            <h3 className="personal-os-life-card-title">Health</h3>
+            {!hasHealthToday ? (
+              <p className="personal-os-empty-cta">No health data yet → log today’s health below.</p>
+            ) : (
+              <p className="personal-os-life-stat">
+                {legacy?.sleep_hours != null && <>Sleep {legacy.sleep_hours}h · </>}
+                {legacy?.water_glasses != null && <>Water {legacy.water_glasses} · </>}
+                {legacy?.stress_1_10 != null && <>Stress {legacy.stress_1_10}/10</>}
+                {metricsToday.length > 0 && (
+                  <span className="cc-muted"> · {metricsToday.length} metric reading(s) today</span>
+                )}
+              </p>
+            )}
+          </div>
+          <div className="personal-os-life-card">
+            <h3 className="personal-os-life-card-title">Tasks</h3>
+            {missionsOpen.length === 0 ? (
+              <p className="personal-os-empty-cta">No tasks yet → add a task below.</p>
+            ) : (
+              <p className="personal-os-life-stat">
+                <strong>{missionsOpen.length}</strong> open (showing top {Math.min(8, missionsOpen.length)})
+              </p>
+            )}
+          </div>
+      </section>
+
+      <div className="personal-os-quick-forms personal-os-touch">
+          <form className="personal-os-card personal-os-quick-form" onSubmit={onSaveHabit}>
+            <h2 className="personal-os-card-title">New habit</h2>
+            <p className="personal-os-form-help">Creates the habit and marks it completed for today (two API steps).</p>
+            <label className="personal-os-label">
+              Habit name
+              <input className="cc-input" value={habitName} onChange={(e) => setHabitName(e.target.value)} placeholder="e.g. Morning walk" />
+            </label>
+            <label className="personal-os-label">
+              Frequency
+              <select className="cc-select" value={habitFreq} onChange={(e) => setHabitFreq(e.target.value)}>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </label>
+            <label className="personal-os-label">
+              Category
+              <select className="cc-select" value={habitCat} onChange={(e) => setHabitCat(e.target.value)}>
+                <option value="health">Health</option>
+                <option value="work">Work</option>
+                <option value="personal">Personal</option>
+              </select>
+            </label>
+            <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" disabled={habitBusy}>
+              {habitBusy ? "Saving…" : "Save habit"}
+            </button>
+          </form>
+
+          <form className="personal-os-card personal-os-quick-form" onSubmit={onSaveHealth} id="health-log">
+            <h2 className="personal-os-card-title">Today’s health log</h2>
+            <p className="personal-os-form-help">Saved to your daily Life OS row (POST /life/health).</p>
+            <div className="personal-os-form-grid personal-os-form-grid--dense">
+              <label className="personal-os-label">
+                Sleep hours
+                <input className="cc-input" type="number" step="0.25" min="0" max="24" value={hSleep} onChange={(e) => setHSleep(e.target.value)} />
+              </label>
+              <label className="personal-os-label">
+                Water (glasses)
+                <input className="cc-input" type="number" min="0" max="40" value={hWater} onChange={(e) => setHWater(e.target.value)} />
+              </label>
+              <label className="personal-os-label personal-os-label--full">
+                Stress 1–10: {hStress}
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={hStress}
+                  onChange={(e) => setHStress(e.target.value)}
+                  className="personal-os-range"
+                />
+              </label>
+              <label className="personal-os-label">
+                Weight kg (optional)
+                <input className="cc-input" type="number" step="0.1" min="0" value={hWeight} onChange={(e) => setHWeight(e.target.value)} />
+              </label>
+              <label className="personal-os-label">
+                BP systolic
+                <input className="cc-input" type="number" min="0" value={hSys} onChange={(e) => setHSys(e.target.value)} />
+              </label>
+              <label className="personal-os-label">
+                BP diastolic
+                <input className="cc-input" type="number" min="0" value={hDia} onChange={(e) => setHDia(e.target.value)} />
+              </label>
+            </div>
+            <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" disabled={healthBusy}>
+              {healthBusy ? "Saving…" : "Save health"}
+            </button>
+          </form>
+
+          <form className="personal-os-card personal-os-quick-form" onSubmit={onSaveMission}>
+            <h2 className="personal-os-card-title">New task</h2>
+            <p className="personal-os-form-help">Personal mission (POST /life/mission).</p>
+            <label className="personal-os-label">
+              Task name
+              <input className="cc-input" value={mTitle} onChange={(e) => setMTitle(e.target.value)} placeholder="What needs to ship?" />
+            </label>
+            <label className="personal-os-label">
+              Priority
+              <select className="cc-select" value={mPri} onChange={(e) => setMPri(e.target.value)}>
+                <option value="P1">P1 — Urgent</option>
+                <option value="P2">P2 — Normal</option>
+                <option value="P3">P3 — Later</option>
+              </select>
+            </label>
+            <label className="personal-os-label">
+              Due date
+              <input className="cc-input" type="date" value={mDue} onChange={(e) => setMDue(e.target.value)} />
+            </label>
+            <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" disabled={missionBusy}>
+              {missionBusy ? "Saving…" : "Save task"}
+            </button>
+          </form>
+      </div>
 
       {brief && (
         <div className="personal-os-grid">
@@ -91,9 +388,7 @@ export default function PersonalHomePage() {
               {weather?.temperature_c != null ? (
                 <div>
                   <span className="personal-os-stat-label">Weather</span>
-                  <span className="personal-os-stat-value">
-                    {Number(weather.temperature_c).toFixed(0)}°C
-                  </span>
+                  <span className="personal-os-stat-value">{Number(weather.temperature_c).toFixed(0)}°C</span>
                   <span className="cc-muted" style={{ display: "block", fontSize: 12 }}>
                     Code {weather.weather_code ?? "—"}
                   </span>
@@ -118,9 +413,7 @@ export default function PersonalHomePage() {
               </div>
               <div>
                 <span className="personal-os-stat-label">Health score</span>
-                <span className="personal-os-stat-value">
-                  {health.score != null ? `${health.score}/100` : "—"}
-                </span>
+                <span className="personal-os-stat-value">{health.score != null ? `${health.score}/100` : "—"}</span>
                 {health.hint && (
                   <span className="cc-muted" style={{ display: "block", fontSize: 12 }}>
                     {health.hint}
@@ -134,7 +427,9 @@ export default function PersonalHomePage() {
             <h2 className="personal-os-card-title">Top 3 priorities</h2>
             <p className="cc-muted personal-os-hint">From open personal missions (P1 first).</p>
             <ol className="personal-os-list">
-              {(brief.priorities || []).length === 0 && <li className="cc-muted">No open missions — add tasks in Life OS.</li>}
+              {(brief.priorities || []).length === 0 && (
+                <li className="personal-os-empty-cta">No tasks yet for the brief → add a task above.</li>
+              )}
               {(brief.priorities || []).map((p) => (
                 <li key={p.id}>
                   <span className={`personal-os-pill personal-os-pill--${(p.priority || "P2").toLowerCase()}`}>
@@ -155,7 +450,7 @@ export default function PersonalHomePage() {
             <h2 className="personal-os-card-title">Upcoming EMIs</h2>
             <ul className="personal-os-list personal-os-list--plain">
               {(fin.upcoming_emis || []).length === 0 && (
-                <li className="cc-muted">No loans with a next due date — add under Finance.</li>
+                <li className="personal-os-empty-cta">No loans on file → add one under Finance.</li>
               )}
               {(fin.upcoming_emis || []).map((e) => (
                 <li key={e.id}>

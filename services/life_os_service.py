@@ -358,6 +358,9 @@ def upsert_health_metrics(
     sleep_hours: Decimal | None = None,
     water_glasses: int | None = None,
     stress_1_10: int | None = None,
+    weight_kg: Decimal | None = None,
+    bp_systolic: int | None = None,
+    bp_diastolic: int | None = None,
     reflection_plain: str | None = None,
     fernet: Fernet | None = None,
 ) -> tuple[bool, str]:
@@ -385,6 +388,9 @@ def upsert_health_metrics(
                         sleep_hours=sleep_hours,
                         water_glasses=water_glasses,
                         stress_1_10=stress_1_10,
+                        weight_kg=weight_kg,
+                        bp_systolic=bp_systolic,
+                        bp_diastolic=bp_diastolic,
                         reflection_cipher=ref_cipher,
                         reflection_encrypted=ref_enc,
                     )
@@ -396,10 +402,56 @@ def upsert_health_metrics(
                     row.water_glasses = water_glasses
                 if stress_1_10 is not None:
                     row.stress_1_10 = stress_1_10
+                if weight_kg is not None:
+                    row.weight_kg = weight_kg
+                if bp_systolic is not None:
+                    row.bp_systolic = bp_systolic
+                if bp_diastolic is not None:
+                    row.bp_diastolic = bp_diastolic
                 if ref_cipher is not None:
                     row.reflection_cipher = ref_cipher
                     row.reflection_encrypted = ref_enc
     return True, "ok"
+
+
+def create_personal_habit(
+    *,
+    user_id: int,
+    title: str,
+    goal_frequency: str,
+    category: str | None = None,
+) -> tuple[bool, str, int | None]:
+    """Create an active habit row (distinct titles per user)."""
+    uid = int(user_id)
+    if uid <= 0:
+        return False, "invalid user", None
+    t = (title or "").strip()
+    if not t:
+        return False, "title required", None
+    gf = (goal_frequency or "daily").strip().lower()[:32]
+    if gf not in ("daily", "weekly"):
+        gf = "daily"
+    cat = (category or "").strip()[:32] or None
+    factory = _factory()
+    if factory is None:
+        return False, "database not configured", None
+    with factory() as session:
+        with session.begin():
+            dup = session.execute(
+                select(Habit).where(Habit.user_id == uid, Habit.title == t, Habit.is_active.is_(True)).limit(1)
+            ).scalar_one_or_none()
+            if dup is not None:
+                return False, "a habit with this name already exists", None
+            row = Habit(
+                user_id=uid,
+                title=t[:2000],
+                goal_frequency=gf,
+                category=cat,
+                is_active=True,
+            )
+            session.add(row)
+            session.flush()
+            return True, "ok", int(row.id)
 
 
 def add_personal_reminder(
@@ -567,11 +619,13 @@ def sync_executive_vault_json_to_postgres(*, user_id: int) -> dict[str, int]:
                     select(Habit).where(Habit.user_id == uid, Habit.title == title).limit(1)
                 ).scalar_one_or_none()
                 if exists is None:
+                    cat = (item.get("category") or "").strip()[:32] or None
                     session.add(
                         Habit(
                             user_id=uid,
                             title=title[:2000],
                             goal_frequency=gf or "daily",
+                            category=cat,
                             is_active=True,
                         )
                     )
@@ -798,6 +852,7 @@ def build_life_dashboard_payload(*, user_id: int) -> dict[str, Any]:
                     "id": int(h.id),
                     "title": h.title,
                     "goal_frequency": h.goal_frequency,
+                    "category": getattr(h, "category", None),
                     "streak_count": int(h.streak_count),
                     "completed_today": done_today,
                 }
@@ -823,6 +878,9 @@ def build_life_dashboard_payload(*, user_id: int) -> dict[str, Any]:
                 "sleep_hours": float(hl.sleep_hours) if hl.sleep_hours is not None else None,
                 "water_glasses": hl.water_glasses,
                 "stress_1_10": hl.stress_1_10,
+                "weight_kg": float(hl.weight_kg) if getattr(hl, "weight_kg", None) is not None else None,
+                "bp_systolic": getattr(hl, "bp_systolic", None),
+                "bp_diastolic": getattr(hl, "bp_diastolic", None),
             }
 
         missions = session.execute(
@@ -837,6 +895,7 @@ def build_life_dashboard_payload(*, user_id: int) -> dict[str, Any]:
                 "title": m.title,
                 "deadline": m.deadline.isoformat() if m.deadline else None,
                 "status": m.status,
+                "priority": getattr(m, "priority", None) or "P2",
                 "progress_percent": int(m.progress_percent)
                 if getattr(m, "progress_percent", None) is not None
                 else None,

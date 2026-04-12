@@ -186,3 +186,29 @@ export async function createPersonalMedicine(payload, vaultPassphrase) {
   const { data } = await api.post("/personal/os/medicines", payload, { headers: _vaultHeaders(vaultPassphrase) });
   return data;
 }
+
+/** Life OS (`/life/*`) — vault header used for encrypted health reflection only. */
+export async function fetchLifeDashboard() {
+  const { data } = await api.get("/life/dashboard");
+  return data;
+}
+
+export async function postLifeHabit(payload) {
+  const { data } = await api.post("/life/habit", payload);
+  return data;
+}
+
+export async function postLifeHabitCheckIn(payload) {
+  const { data } = await api.post("/life/habit/check-in", payload);
+  return data;
+}
+
+export async function postLifeHealth(payload, vaultPassphrase) {
+  const { data } = await api.post("/life/health", payload, { headers: _vaultHeaders(vaultPassphrase) });
+  return data;
+}
+
+export async function postLifeMission(payload) {
+  const { data } = await api.post("/life/mission", payload);
+  return data;
+}

@@ -986,3 +986,139 @@ table.cc-table {
     flex-wrap: wrap;
   }
 }
+
+/* Personal OS — mobile-friendly touch targets */
+.personal-os-touch .cc-input,
+.personal-os-touch .cc-select,
+.personal-os-touch .cc-textarea {
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.personal-os-btn-touch {
+  min-height: 48px;
+  padding: 14px 18px;
+  font-size: 16px;
+}
+
+.personal-os-quick-form .personal-os-btn-touch {
+  width: 100%;
+}
+
+@media (min-width: 720px) {
+  .personal-os-quick-form .personal-os-btn-touch {
+    width: auto;
+    min-width: 220px;
+  }
+}
+
+.personal-os-btn-compact {
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.personal-os-life-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--cc-s2);
+  margin-bottom: var(--cc-s3);
+}
+
+.personal-os-life-card {
+  background: var(--cc-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-card);
+  padding: var(--cc-s2) var(--cc-s3);
+  box-shadow: var(--cc-shadow-sm);
+}
+
+.personal-os-life-card-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-muted);
+}
+
+.personal-os-life-stat {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.personal-os-empty-cta {
+  margin: 0;
+  color: var(--cc-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.personal-os-mini-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.personal-os-mini-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--cc-border);
+  font-size: 14px;
+}
+
+.personal-os-mini-row:last-child {
+  border-bottom: none;
+}
+
+.personal-os-quick-forms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--cc-s2);
+  margin-bottom: var(--cc-s3);
+}
+
+.personal-os-quick-form .personal-os-form-help {
+  margin: -4px 0 12px;
+  font-size: 12px;
+  color: var(--cc-muted);
+  line-height: 1.45;
+}
+
+.personal-os-range {
+  width: 100%;
+  height: 40px;
+  margin-top: 4px;
+}
+
+.personal-os-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.personal-os-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-control);
+  background: #fafafa;
+  font-size: 15px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.personal-os-chip input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--cc-primary);
+}

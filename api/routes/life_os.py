@@ -42,6 +42,9 @@ class HealthUpsertBody(BaseModel):
     sleep_hours: float | None = None
     water_glasses: int | None = None
     stress_1_10: int | None = Field(None, ge=1, le=10)
+    weight_kg: float | None = Field(None, ge=0, le=500)
+    bp_systolic: int | None = Field(None, ge=40, le=280)
+    bp_diastolic: int | None = Field(None, ge=30, le=200)
     reflection: str | None = Field(None, max_length=8000)
 
 
@@ -54,6 +57,12 @@ class ReminderCreateBody(BaseModel):
 class HabitCheckInBody(BaseModel):
     habit_id: int = Field(..., ge=1)
     status: str = Field("completed", max_length=32)
+
+
+class HabitCreateBody(BaseModel):
+    title: str = Field(..., min_length=1, max_length=2000)
+    goal_frequency: str = Field("daily", max_length=32)
+    category: str | None = Field(None, max_length=32)
 
 
 class PersonalMissionUpsertBody(BaseModel):
@@ -75,6 +84,33 @@ async def life_dashboard(
     if _user.id <= 0:
         raise HTTPException(status_code=400, detail="Life OS requires a real user id.")
     return life_os_service.build_life_dashboard_payload(user_id=_user.id)
+
+
+@router.post("/habit", summary="Create a personal habit")
+async def life_habit_create(
+    request: Request,
+    body: HabitCreateBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, object]:
+    if _user.id <= 0:
+        raise HTTPException(status_code=400, detail="Life OS requires a real user id.")
+    ok, msg, hid = life_os_service.create_personal_habit(
+        user_id=_user.id,
+        title=body.title,
+        goal_frequency=body.goal_frequency,
+        category=body.category,
+    )
+    if not ok or hid is None:
+        raise HTTPException(status_code=400, detail=msg)
+    audit_service.log_life_os_mutation(
+        correlation_id=_correlation_id(request),
+        action_name="habit_create",
+        user_id=_user.id,
+        organization_id=_user.organization_id,
+        resource_type="habit",
+        extra={"habit_id": hid, "title": body.title[:200]},
+    )
+    return {"status": "ok", "habit_id": hid}
 
 
 @router.post("/habit/check-in", summary="Log habit completion (or skip)")
@@ -216,12 +252,16 @@ async def life_health_upsert(
         if fernet is None:
             raise HTTPException(status_code=401, detail="invalid vault passphrase")
     sh = Decimal(str(body.sleep_hours)) if body.sleep_hours is not None else None
+    wk = Decimal(str(body.weight_kg)) if body.weight_kg is not None else None
     ok, msg = life_os_service.upsert_health_metrics(
         user_id=_user.id,
         logged_on=d,
         sleep_hours=sh,
         water_glasses=body.water_glasses,
         stress_1_10=body.stress_1_10,
+        weight_kg=wk,
+        bp_systolic=body.bp_systolic,
+        bp_diastolic=body.bp_diastolic,
         reflection_plain=body.reflection,
         fernet=fernet,
     )

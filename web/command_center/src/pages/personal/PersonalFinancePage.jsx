@@ -11,11 +11,11 @@ import {
 import { safeAsync } from "../../lib/safeAsync.js";
 
 const EXPENSE_CATEGORIES = [
-  { value: "loans", label: "Loans & EMI" },
-  { value: "vehicles", label: "Vehicles" },
-  { value: "digital_subscriptions", label: "Digital / subscriptions" },
+  { value: "loans", label: "Loans" },
+  { value: "vehicle", label: "Vehicle" },
+  { value: "digital_bills", label: "Digital bills" },
   { value: "personal", label: "Personal" },
-  { value: "staff", label: "Worker / staff" },
+  { value: "worker_payment", label: "Worker payment" },
   { value: "other", label: "Other" },
 ];
 
@@ -55,6 +55,7 @@ export default function PersonalFinancePage() {
   const [loanName, setLoanName] = useState("");
   const [loanKind, setLoanKind] = useState("emi");
   const [loanLender, setLoanLender] = useState("");
+  const [loanPrincipal, setLoanPrincipal] = useState("");
   const [loanEmi, setLoanEmi] = useState("");
   const [loanDue, setLoanDue] = useState("");
 
@@ -124,6 +125,7 @@ export default function PersonalFinancePage() {
           display_name: loanName.trim(),
           loan_kind: loanKind,
           lender: loanLender || null,
+          principal_outstanding: loanPrincipal ? Number(loanPrincipal) : null,
           emi_amount: loanEmi ? Number(loanEmi) : null,
           next_due_date: loanDue || null,
         },
@@ -131,6 +133,7 @@ export default function PersonalFinancePage() {
       );
       setLoanName("");
       setLoanLender("");
+      setLoanPrincipal("");
       setLoanEmi("");
       setLoanDue("");
       await load();
@@ -181,7 +184,7 @@ export default function PersonalFinancePage() {
   );
 
   return (
-    <div className="personal-os-page">
+    <div className="personal-os-page personal-os-touch">
       <header className="personal-os-section-head">
         <h1 className="personal-os-title">Financial command center</h1>
         <p className="personal-os-sub">Personal cash flow, loans, and budgets (encrypted notes when vault is set).</p>
@@ -227,7 +230,7 @@ export default function PersonalFinancePage() {
               <input className="cc-input" value={expTitle} onChange={(e) => setExpTitle(e.target.value)} placeholder="Short description" />
             </label>
           </div>
-          <button type="submit" className="cc-btn cc-btn-primary" style={{ marginTop: 12 }}>
+          <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" style={{ marginTop: 12 }}>
             Save expense
           </button>
         </form>
@@ -254,6 +257,10 @@ export default function PersonalFinancePage() {
               <input className="cc-input" value={loanLender} onChange={(e) => setLoanLender(e.target.value)} />
             </label>
             <label className="personal-os-label">
+              Total outstanding (principal)
+              <input className="cc-input" type="number" step="0.01" min="0" value={loanPrincipal} onChange={(e) => setLoanPrincipal(e.target.value)} placeholder="Optional" />
+            </label>
+            <label className="personal-os-label">
               EMI amount
               <input className="cc-input" type="number" step="0.01" min="0" value={loanEmi} onChange={(e) => setLoanEmi(e.target.value)} />
             </label>
@@ -262,7 +269,7 @@ export default function PersonalFinancePage() {
               <input className="cc-input" type="date" value={loanDue} onChange={(e) => setLoanDue(e.target.value)} />
             </label>
           </div>
-          <button type="submit" className="cc-btn cc-btn-primary" style={{ marginTop: 12 }}>
+          <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" style={{ marginTop: 12 }}>
             Save loan
           </button>
         </form>
@@ -293,7 +300,7 @@ export default function PersonalFinancePage() {
               <input className="cc-input" type="date" value={budEnd} onChange={(e) => setBudEnd(e.target.value)} required />
             </label>
           </div>
-          <button type="submit" className="cc-btn cc-btn-primary" style={{ marginTop: 12 }}>
+          <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" style={{ marginTop: 12 }}>
             Save budget
           </button>
         </form>
@@ -322,8 +329,8 @@ export default function PersonalFinancePage() {
             <tbody>
               {expenseRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="cc-muted">
-                    No expenses yet.
+                  <td colSpan={5} className="personal-os-empty-cta">
+                    No expenses yet → add one with the form above.
                   </td>
                 </tr>
               ) : (
@@ -338,12 +345,13 @@ export default function PersonalFinancePage() {
         <section className="personal-os-card">
           <h2 className="personal-os-card-title">Loans</h2>
           <ul className="personal-os-list personal-os-list--plain">
-            {loans.length === 0 && <li className="cc-muted">No loans.</li>}
+            {loans.length === 0 && <li className="personal-os-empty-cta">No loans yet → use the loan form above.</li>}
             {loans.map((r) => (
               <li key={r.id}>
                 <strong>{r.display_name}</strong> · {r.loan_kind}
                 <div className="cc-muted" style={{ fontSize: 12 }}>
-                  Next {r.next_due_date || "—"} · EMI {r.emi_amount ?? "—"} · {r.is_closed ? "closed" : "open"}
+                  Principal {r.principal_outstanding ?? "—"} · Next {r.next_due_date || "—"} · EMI {r.emi_amount ?? "—"} ·{" "}
+                  {r.is_closed ? "closed" : "open"}
                 </div>
               </li>
             ))}
