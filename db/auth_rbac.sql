@@ -33,8 +33,25 @@ CREATE TABLE IF NOT EXISTS users (
     CONSTRAINT uq_users_email UNIQUE (email)
 );
 
-CREATE INDEX IF NOT EXISTS ix_users_organization_id ON users (organization_id);
-CREATE INDEX IF NOT EXISTS ix_users_role_id ON users (role_id);
+-- Legacy single-tenant ``users`` had organization_id + role_id; modern schema moved those to
+-- ``user_organization_memberships``. If ``users`` already exists without those columns,
+-- ``CREATE TABLE IF NOT EXISTS`` is a no-op but plain CREATE INDEX would error (undefined column).
+DO $thiramai_ix_users_legacy$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'organization_id'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS ix_users_organization_id ON public.users (organization_id)';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'role_id'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS ix_users_role_id ON public.users (role_id)';
+  END IF;
+END
+$thiramai_ix_users_legacy$;
 
 -- Seed the four roles for the first organization only (app startup also seeds per org).
 INSERT INTO roles (org_id, name, level)
