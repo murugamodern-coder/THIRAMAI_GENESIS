@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { postChatQuery, fetchMyOrganizations } from "../../api/commandCenterApi.js";
 import { showToastDedup } from "../../lib/toastDedup.js";
@@ -8,6 +8,8 @@ import { AI_MOCK_INSIGHTS } from "../../lib/aiMockInsights.js";
 
 export default function AIAssistantPanel() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const jarvisBootstrapRef = useRef(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -24,6 +26,18 @@ export default function AIAssistantPanel() {
   const [chatMessages, setChatMessages] = useState([]);
   const [jarvisOrgId, setJarvisOrgId] = useState("");
   const [orgOptions, setOrgOptions] = useState([]);
+
+  useEffect(() => {
+    const st = location.state;
+    if (!st?.jarvisPrefill || jarvisBootstrapRef.current) return;
+    jarvisBootstrapRef.current = true;
+    setMessage(String(st.jarvisPrefill));
+    if (st.jarvisAgent) setAgentMode(true);
+    navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { replace: true, state: {} },
+    );
+  }, [location, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,24 +99,35 @@ export default function AIAssistantPanel() {
 
   const send = useCallback(
     async (opts = {}) => {
+      const partialConfirm =
+        pendingId && opts.confirmToolIndex != null && Number.isFinite(Number(opts.confirmToolIndex));
+      const partialReject =
+        pendingId && opts.rejectToolIndex != null && Number.isFinite(Number(opts.rejectToolIndex));
+      const isPartialPending = partialConfirm || partialReject;
       const m = (opts.textOverride ?? message).trim();
-      if (!m || loading) return;
-      const confirming = opts.confirmPending === true && pendingId;
+      if (!isPartialPending && (!m || loading)) return;
+      const confirming = opts.confirmPending === true && pendingId && !isPartialPending;
       const useAgentMode = opts.forceAgentMode != null ? !!opts.forceAgentMode : agentMode;
       setLoading(true);
       setError(null);
-      if (!confirming) {
+      if (!confirming && !isPartialPending) {
         setRaw("");
         setInsights([]);
         setProposals([]);
         setChatMessages((prev) => [...prev, { role: "user", text: m, ts: Date.now() }]);
       }
-      setAgentHint(confirming ? "Executing confirmed tools…" : useAgentMode ? "Jarvis is analyzing…" : "");
+      if (isPartialPending) {
+        setAgentHint(partialReject ? "Removing proposal…" : "Executing selected action…");
+      } else {
+        setAgentHint(confirming ? "Executing confirmed tools…" : useAgentMode ? "Jarvis is analyzing…" : "");
+      }
       try {
-        const data = await postChatQuery(m, {
-          agent_mode: !!(useAgentMode || confirming),
+        const data = await postChatQuery(isPartialPending ? "" : m, {
+          agent_mode: !!(useAgentMode || confirming || isPartialPending),
           agent_confirm: !!confirming,
-          agent_pending_id: confirming ? pendingId : null,
+          agent_pending_id: confirming || isPartialPending ? pendingId : null,
+          agent_confirm_tool_index: partialConfirm ? Number(opts.confirmToolIndex) : undefined,
+          agent_reject_tool_index: partialReject ? Number(opts.rejectToolIndex) : undefined,
           jarvis_context_org_id: jarvisOrgId || undefined,
         });
         if (data?.error && !data?.narrative) {
@@ -187,6 +212,22 @@ export default function AIAssistantPanel() {
       }
     },
     [loading, message, safeParseInsights, agentMode, pendingId, speakReplies, tamilVoice, jarvisOrgId],
+  );
+
+  const confirmProposalAt = useCallback(
+    (index) => {
+      if (loading || !pendingId) return;
+      send({ confirmToolIndex: index });
+    },
+    [loading, pendingId, send],
+  );
+
+  const rejectProposalAt = useCallback(
+    (index) => {
+      if (loading || !pendingId) return;
+      send({ rejectToolIndex: index });
+    },
+    [loading, pendingId, send],
   );
 
   const runQuick = useCallback(
@@ -483,13 +524,40 @@ export default function AIAssistantPanel() {
       {pendingId && proposals.length > 0 ? (
         <div className="cc-card" style={{ marginBottom: 12, background: "rgba(37, 99, 235, 0.06)" }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Proposed actions</div>
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {proposals.map((p, i) => (
-              <li key={i} style={{ marginBottom: 6 }}>
-                {p.summary || p.tool || "Action"}
-              </li>
+              <div
+                key={`${p.tool || "t"}_${p.index ?? i}`}
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #e5e7eb",
+                  background: "#fff",
+                  fontSize: 14,
+                }}
+              >
+                <div style={{ marginBottom: 10 }}>{p.summary || p.tool || "Action"}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="cc-btn cc-btn-primary"
+                    disabled={loading}
+                    onClick={() => confirmProposalAt(p.index ?? i)}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="cc-btn cc-btn-secondary"
+                    disabled={loading}
+                    onClick={() => rejectProposalAt(p.index ?? i)}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       ) : null}
       <div style={{ marginTop: 16, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>

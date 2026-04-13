@@ -519,6 +519,24 @@ def build_today_brief_sync(
         "low_stock": "#/dashboard/inventory",
         "health_stale": "#/personal/health",
     }
+    _jarvis_alert_actions: dict[str, dict[str, Any]] = {
+        "emi_due": {
+            "agent_mode": True,
+            "prefill": "Log my upcoming EMI payment using log_expense (INR, category EMI or Loan). Ask me for amount if missing.",
+        },
+        "low_stock": {
+            "agent_mode": True,
+            "prefill": "Help me restock a low-inventory SKU using add_stock. Use search_inventory or get_stock_status first if needed.",
+        },
+        "meeting_soon": {
+            "agent_mode": True,
+            "prefill": "I have a meeting soon — pull get_today_brief and suggest a 3-bullet prep checklist.",
+        },
+        "health_stale": {
+            "agent_mode": True,
+            "prefill": "Open set_health_log — I want to log today's health snapshot quickly.",
+        },
+    }
     proactive_alerts: list[dict[str, Any]] = []
     for a in alerts[:3]:
         code = str(a.get("code") or "notice")
@@ -527,6 +545,7 @@ def build_today_brief_sync(
                 **a,
                 "type": code,
                 "action_url": _alert_urls.get(code, "#/today"),
+                "jarvis_action": _jarvis_alert_actions.get(code),
             }
         )
 

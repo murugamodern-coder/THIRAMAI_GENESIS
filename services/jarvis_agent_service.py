@@ -1,9 +1,11 @@
 """
 Groq tool-calling agent for THIRAMAI actions (missions, expenses, meetings, brief, etc.).
 
-Two-step flow when tools are requested:
-1. ``needs_confirmation`` + ``agent_pending_id`` (user approves in UI).
-2. Same message + ``agent_confirm=True`` + ``agent_pending_id`` executes tools.
+Flow:
+- Queries are routed to a **tool subset** + fast/smart model (see ``jarvis_router``).
+- Multi-step **read-only** tool loop (``THIRAMAI_JARVIS_MAX_STEPS``) with proper tool messages for Groq.
+- Mutating tools: ``needs_confirmation`` + ``agent_pending_id``; batch confirm **or** per-card
+  ``agent_confirm_tool_index`` / ``agent_reject_tool_index``.
 """
 
 from __future__ import annotations
@@ -21,7 +23,14 @@ from groq import Groq
 from sqlalchemy import func, select
 from core.database import get_session_factory
 from core.db.models import Inventory, InventoryItem, PersonalLoan, PersonalMeeting, UserOrganizationMembership
-from core.jarvis_pending_redis import pending_pop, pending_set, undo_pop_stack, undo_store
+from core.jarvis_pending_redis import (
+    pending_delete,
+    pending_peek,
+    pending_pop,
+    pending_set,
+    undo_pop_stack,
+    undo_store,
+)
 from services import life_os_service
 from services import personal_command_center_service as pcc
 from services.analytics_service import compute_dashboard_summary_sync
@@ -31,7 +40,9 @@ from services.jarvis_extended_tools import (
     execute_jarvis_extended_tool,
     extended_tool_specs,
 )
-from services.jarvis_memory_service import fetch_memory_context_lines_sync
+from services.jarvis_memory_learn import learn_from_turn_sync
+from services.jarvis_memory_service import bump_memory_usage_sync, fetch_memory_entries_sync
+from services.jarvis_router import merge_route_tool_specs
 from services.inventory_phase2_service import list_low_stock_alerts_sync
 from services.jarvis_undo_service import meeting_undo_payload
 from services.personal_meetings_service import MEETING_TYPES, create_meeting, normalize_attendees
@@ -245,6 +256,34 @@ def _route_groq_model(message: str) -> str:
 
 def _model() -> str:
     return (os.getenv("GROQ_AGENT_MODEL") or os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile").strip()
+
+
+def execute_tool_safe(
+    *,
+    name: str,
+    args: dict[str, Any],
+    user: Any,
+    context_organization_id: int | None = None,
+) -> dict[str, Any]:
+    try:
+        return execute_tool(
+            name=name,
+            args=args,
+            user=user,
+            context_organization_id=context_organization_id,
+        )
+    except Exception as exc:
+        _log.exception("jarvis tool crashed: %s", name)
+        return {"ok": False, "message": f"Tool {name} failed: {exc}"}
+
+
+def _proposal_dict(index: int, name: str, args: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "index": index,
+        "tool": name,
+        "summary": _summarize_tool(name, args),
+        "arguments": args,
+    }
 
 
 def _summarize_tool(name: str, args: dict[str, Any]) -> str:
@@ -537,6 +576,43 @@ def undo_last_action(*, user: Any) -> dict[str, Any]:
     }
 
 
+def _normalize_tool_call(tc: Any) -> tuple[str, dict[str, Any]]:
+    if isinstance(tc, dict):
+        fn = tc.get("function") or {}
+        name = str(fn.get("name") or "")
+        arguments = fn.get("arguments") or "{}"
+    else:
+        fn = getattr(tc, "function", None)
+        name = str(getattr(fn, "name", None) or "") if fn is not None else ""
+        arguments = getattr(fn, "arguments", None) if fn is not None else "{}"
+    if isinstance(arguments, str):
+        try:
+            args_dict = json.loads(arguments)
+        except Exception:
+            args_dict = {}
+    else:
+        args_dict = arguments if isinstance(arguments, dict) else {}
+    return name, args_dict
+
+
+def _tool_call_id(tc: Any, fallback: str) -> str:
+    if isinstance(tc, dict):
+        tid = tc.get("id")
+        if tid:
+            return str(tid)
+    else:
+        tid = getattr(tc, "id", None)
+        if tid:
+            return str(tid)
+    return fallback
+
+
+def _ctx_exec_from_stored(ctx_stored: int | None, context_organization_id: int | None) -> int | None:
+    if ctx_stored is not None and int(ctx_stored) > 0:
+        return int(ctx_stored)
+    return context_organization_id
+
+
 def run_agent(
     *,
     message: str,
@@ -544,6 +620,8 @@ def run_agent(
     agent_confirm: bool,
     agent_pending_id: str | None,
     context_organization_id: int | None = None,
+    agent_confirm_tool_index: int | None = None,
+    agent_reject_tool_index: int | None = None,
 ) -> dict[str, Any]:
     key = (os.getenv("GROQ_API_KEY") or "").strip()
     if not key:
@@ -556,12 +634,103 @@ def run_agent(
         if ctx_err:
             return {"ok": False, "narrative": "", "error": ctx_err, "agent_mode": True}
 
+    # --- Partial reject: drop one proposed tool, keep pending batch ---
+    if agent_pending_id and agent_reject_tool_index is not None:
+        peeked = pending_peek(agent_pending_id, user_id=uid)
+        if not peeked:
+            return {"ok": False, "narrative": "", "error": "Pending action expired or invalid.", "agent_mode": True}
+        calls, ctx_stored = peeked
+        rj = int(agent_reject_tool_index)
+        if rj < 0 or rj >= len(calls):
+            return {"ok": False, "narrative": "", "error": "Invalid reject index.", "agent_mode": True}
+        new_calls = calls[:rj] + calls[rj + 1 :]
+        ctx_o = ctx_stored if ctx_stored and int(ctx_stored) > 0 else None
+        if new_calls:
+            pending_set(
+                agent_pending_id,
+                user_id=uid,
+                tool_calls=new_calls,
+                ttl_sec=_PENDING_TTL_SEC,
+                context_organization_id=ctx_o,
+            )
+        else:
+            pending_delete(agent_pending_id, user_id=uid)
+        proposals = [_proposal_dict(i, c["name"], c["arguments"]) for i, c in enumerate(new_calls)]
+        msg = f"Rejected proposal #{rj + 1}. {len(new_calls)} action(s) still pending."
+        return {
+            "ok": True,
+            "narrative": msg,
+            "response": msg,
+            "agent_mode": True,
+            "needs_confirmation": bool(new_calls),
+            "agent_pending_id": agent_pending_id if new_calls else None,
+            "proposals": proposals,
+            "action_intent": {"kind": "jarvis_partial_reject", "success": True},
+        }
+
+    # --- Partial accept: execute one tool, shrink pending ---
+    if agent_pending_id and agent_confirm_tool_index is not None:
+        peeked = pending_peek(agent_pending_id, user_id=uid)
+        if not peeked:
+            return {"ok": False, "narrative": "", "error": "Pending action expired or invalid.", "agent_mode": True}
+        calls, ctx_stored = peeked
+        ci = int(agent_confirm_tool_index)
+        if ci < 0 or ci >= len(calls):
+            return {"ok": False, "narrative": "", "error": "Invalid confirm index.", "agent_mode": True}
+        ctx_exec = _ctx_exec_from_stored(ctx_stored, context_organization_id)
+        one = calls[ci]
+        name = str(one.get("name") or "")
+        raw_args = one.get("arguments") or {}
+        if isinstance(raw_args, str):
+            try:
+                raw_args = json.loads(raw_args)
+            except Exception:
+                raw_args = {}
+        args_d = raw_args if isinstance(raw_args, dict) else {}
+        out = execute_tool_safe(name=name, args=args_d, user=user, context_organization_id=ctx_exec)
+        undo_ops: list[dict[str, Any]] = []
+        uop = out.pop("_undo", None) if isinstance(out, dict) else None
+        if isinstance(uop, dict):
+            undo_ops.append(uop)
+        if out.get("ok") and undo_ops:
+            undo_store(uid, undo_ops)
+        rest = calls[:ci] + calls[ci + 1 :]
+        ctx_o = ctx_stored if ctx_stored and int(ctx_stored) > 0 else None
+        if rest:
+            pending_set(
+                agent_pending_id,
+                user_id=uid,
+                tool_calls=rest,
+                ttl_sec=_PENDING_TTL_SEC,
+                context_organization_id=ctx_o,
+            )
+        else:
+            pending_delete(agent_pending_id, user_id=uid)
+        results = [{"tool": name, "result": out}]
+        proposals = [_proposal_dict(i, c["name"], c["arguments"]) for i, c in enumerate(rest)]
+        lines = [f"Executed {name}: {json.dumps(out, default=str)[:500]}"]
+        if rest:
+            lines.append(f"{len(rest)} action(s) still need confirmation.")
+        narrative = "\n".join(lines)
+        return {
+            "ok": bool(out.get("ok")),
+            "narrative": narrative,
+            "response": narrative,
+            "agent_mode": True,
+            "tool_results": results,
+            "needs_confirmation": bool(rest),
+            "agent_pending_id": agent_pending_id if rest else None,
+            "proposals": proposals,
+            "action_intent": {"kind": "jarvis_partial_confirm", "success": bool(out.get("ok"))},
+        }
+
+    # --- Confirm all pending (legacy) ---
     if agent_confirm and agent_pending_id:
         popped = pending_pop(agent_pending_id, user_id=uid)
         if not popped:
             return {"ok": False, "narrative": "", "error": "Pending action expired or invalid."}
         calls, ctx_stored = popped
-        ctx_exec = ctx_stored if ctx_stored and int(ctx_stored) > 0 else context_organization_id
+        ctx_exec = _ctx_exec_from_stored(ctx_stored, context_organization_id)
         results: list[dict[str, Any]] = []
         undo_ops: list[dict[str, Any]] = []
         for c in calls:
@@ -572,7 +741,7 @@ def run_agent(
                     raw_args = json.loads(raw_args)
                 except Exception:
                     raw_args = {}
-            out = execute_tool(
+            out = execute_tool_safe(
                 name=name,
                 args=raw_args if isinstance(raw_args, dict) else {},
                 user=user,
@@ -597,134 +766,180 @@ def run_agent(
             "action_intent": {"kind": "jarvis_agent", "success": ok_all},
         }
 
-    mem_lines = fetch_memory_context_lines_sync(user_id=uid, limit=8)
+    mem_entries = fetch_memory_entries_sync(user_id=uid, limit=8)
+    mem_lines = [e["line"] for e in mem_entries]
+    mem_keys_used = [e["key"] for e in mem_entries]
     mem_block = "\n".join(mem_lines) if mem_lines else "(none yet)"
     lang_note = "The user wrote in Tamil — reply in Tamil. " if _looks_tamil(message) else ""
+    routed_model, tools_subset, route_category = merge_route_tool_specs(message.strip(), TOOL_SPECS)
     system = (
         "You are Thiramai Jarvis, a business AI assistant for an Indian entrepreneur. "
         f"{lang_note}"
         "You understand Tamil and English; mirror the user's language. "
         "Use Indian Rupees (₹) and local business context (lakhs/crores when natural).\n"
         f"User memory hints:\n{mem_block}\n\n"
-        "Use tools when the user needs data or actions. "
-        "Read-only tools (briefs, stock status, P&L, research, market scan) execute immediately. "
-        "Mutating tools (tasks, expenses, invoices, stock changes, etc.) require UI confirmation — still call them. "
+        f"Routing: focus area = {route_category}. Only the supplied tools are available.\n"
+        "Read-only tools run immediately in the agent loop. "
+        "Mutating tools require UI confirmation — still call them when appropriate. "
         "For business_org_id / org_id use the active organization when not specified. "
         "Today UTC date: "
         f"{datetime.now(timezone.utc).date().isoformat()}."
     )
-    routed_model = _route_groq_model(message.strip())
     client = Groq(api_key=key)
-    try:
-        completion = client.chat.completions.create(
-            model=routed_model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": message.strip()[:8000]},
-            ],
-            tools=TOOL_SPECS,
-            tool_choice="auto",
-            temperature=0.3,
-            max_tokens=1024,
-        )
-    except Exception as e:
-        return {"ok": False, "narrative": "", "error": str(e) or "groq error"}
+    max_steps = max(1, min(int((os.getenv("THIRAMAI_JARVIS_MAX_STEPS") or "5").strip()), 12))
 
-    choice = completion.choices[0].message
-    dumped = choice.model_dump(mode="json") if hasattr(choice, "model_dump") else {}
-    tool_calls = dumped.get("tool_calls") or getattr(choice, "tool_calls", None) or []
-    if not tool_calls:
-        text = (getattr(choice, "content", None) or "").strip() or "Done."
-        return {
-            "ok": True,
-            "narrative": text,
-            "response": text,
-            "agent_mode": True,
-            "action_intent": {"kind": "jarvis_chat", "success": True},
-        }
-
-    serialized: list[dict[str, Any]] = []
-    for tc in tool_calls:
-        if isinstance(tc, dict):
-            fn = tc.get("function") or {}
-            name = fn.get("name") or ""
-            arguments = fn.get("arguments") or "{}"
-        else:
-            fn = getattr(tc, "function", None)
-            name = getattr(fn, "name", None) if fn is not None else ""
-            arguments = getattr(fn, "arguments", None) if fn is not None else "{}"
-        if isinstance(arguments, str):
-            try:
-                args_dict = json.loads(arguments)
-            except Exception:
-                args_dict = {}
-        else:
-            args_dict = arguments if isinstance(arguments, dict) else {}
-        serialized.append({"name": name, "arguments": args_dict})
-
-    auto_calls = [x for x in serialized if x["name"] in AUTO_EXECUTE_TOOL_NAMES]
-    mut_calls = [x for x in serialized if x["name"] not in AUTO_EXECUTE_TOOL_NAMES]
-
-    auto_results: list[dict[str, Any]] = []
-    for c in auto_calls:
-        out = execute_tool(
-            name=c["name"],
-            args=c["arguments"],
-            user=user,
-            context_organization_id=context_organization_id,
-        )
-        auto_results.append({"tool": c["name"], "result": out})
-
-    if not mut_calls:
-        tail = (getattr(choice, "content", None) or "").strip()
-        lines: list[str] = []
-        if auto_results:
-            lines.append("Tool results:")
-            for r in auto_results:
-                lines.append(f"- {r['tool']}: {json.dumps(r['result'], default=str)[:2000]}")
-        narrative = "\n".join(lines) if lines else (tail or "Done.")
-        if tail and lines:
-            narrative = narrative + "\n\n" + tail
-        return {
-            "ok": True,
-            "narrative": narrative,
-            "response": narrative,
-            "agent_mode": True,
-            "tool_results": auto_results,
-            "action_intent": {"kind": "jarvis_agent", "success": True},
-            "groq_model": routed_model,
-        }
-
-    proposals = [
-        {"tool": c["name"], "summary": _summarize_tool(c["name"], c["arguments"]), "arguments": c["arguments"]}
-        for c in mut_calls
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": message.strip()[:8000]},
     ]
-    pending_id = secrets.token_urlsafe(24)
-    pending_set(
-        pending_id,
-        user_id=uid,
-        tool_calls=mut_calls,
-        ttl_sec=_PENDING_TTL_SEC,
-        context_organization_id=context_organization_id,
-    )
+    all_auto_results: list[dict[str, Any]] = []
+    last_choice_content = ""
 
-    intro_parts: list[str] = []
-    if auto_results:
-        intro_parts.append("Fetched:")
-        for r in auto_results:
-            intro_parts.append(f"• {r['tool']}: {json.dumps(r['result'], default=str)[:320]}")
-    intro_parts.append("Confirm the following actions:")
-    intro_parts.extend(f"• {p['summary']}" for p in proposals)
-    intro = "\n".join(intro_parts)
+    for step in range(max_steps):
+        try:
+            completion = client.chat.completions.create(
+                model=routed_model,
+                messages=messages,
+                tools=tools_subset,
+                tool_choice="auto",
+                temperature=0.3,
+                max_tokens=1024,
+            )
+        except Exception as e:
+            _log.warning("jarvis groq step %s failed: %s", step, e)
+            return {"ok": False, "narrative": "", "error": str(e) or "groq error", "agent_mode": True}
+
+        choice = completion.choices[0].message
+        dumped = choice.model_dump(mode="json") if hasattr(choice, "model_dump") else {}
+        tool_calls = dumped.get("tool_calls") or getattr(choice, "tool_calls", None) or []
+        last_choice_content = (dumped.get("content") or getattr(choice, "content", None) or "").strip()
+
+        if not tool_calls:
+            bump_memory_usage_sync(user_id=uid, memory_keys=mem_keys_used)
+            learn_from_turn_sync(
+                user_id=uid,
+                user_message=message.strip(),
+                assistant_text=last_choice_content,
+                tool_results=all_auto_results,
+            )
+            return {
+                "ok": True,
+                "narrative": last_choice_content or "Done.",
+                "response": last_choice_content or "Done.",
+                "agent_mode": True,
+                "action_intent": {"kind": "jarvis_chat", "success": True},
+                "groq_model": routed_model,
+                "route_category": route_category,
+                "route_tool_count": len(tools_subset),
+            }
+
+        serialized_step: list[dict[str, Any]] = []
+        for i, tc in enumerate(tool_calls):
+            tid = _tool_call_id(tc, f"jarvis_{step}_{i}")
+            n, a = _normalize_tool_call(tc)
+            serialized_step.append({"id": tid, "name": n, "arguments": a})
+
+        auto_calls = [x for x in serialized_step if x["name"] in AUTO_EXECUTE_TOOL_NAMES]
+        mut_calls = [x for x in serialized_step if x["name"] not in AUTO_EXECUTE_TOOL_NAMES]
+
+        step_tool_results: list[dict[str, Any]] = []
+        for c in auto_calls:
+            out = execute_tool_safe(
+                name=c["name"],
+                args=c["arguments"],
+                user=user,
+                context_organization_id=context_organization_id,
+            )
+            rec = {"tool": c["name"], "result": out}
+            step_tool_results.append(rec)
+            all_auto_results.append(rec)
+
+        if mut_calls:
+            proposals = [_proposal_dict(i, c["name"], c["arguments"]) for i, c in enumerate(mut_calls)]
+            pending_id = secrets.token_urlsafe(24)
+            pending_mut = [{"name": c["name"], "arguments": c["arguments"]} for c in mut_calls]
+            pending_set(
+                pending_id,
+                user_id=uid,
+                tool_calls=pending_mut,
+                ttl_sec=_PENDING_TTL_SEC,
+                context_organization_id=context_organization_id,
+            )
+            intro_parts: list[str] = []
+            if step_tool_results:
+                intro_parts.append("Fetched:")
+                for r in step_tool_results:
+                    intro_parts.append(f"• {r['tool']}: {json.dumps(r['result'], default=str)[:320]}")
+            intro_parts.append("Confirm the following actions (each card can be accepted or rejected):")
+            intro_parts.extend(f"• {p['summary']}" for p in proposals)
+            intro = "\n".join(intro_parts)
+            bump_memory_usage_sync(user_id=uid, memory_keys=mem_keys_used)
+            learn_from_turn_sync(
+                user_id=uid,
+                user_message=message.strip(),
+                assistant_text=intro,
+                tool_results=all_auto_results,
+            )
+            return {
+                "ok": True,
+                "narrative": intro,
+                "response": intro,
+                "agent_mode": True,
+                "needs_confirmation": True,
+                "agent_pending_id": pending_id,
+                "proposals": proposals,
+                "tool_results": all_auto_results,
+                "action_intent": {"kind": "jarvis_pending", "success": True},
+                "groq_model": routed_model,
+                "route_category": route_category,
+                "route_tool_count": len(tools_subset),
+            }
+
+        assistant_tool_calls = [
+            {
+                "id": c["id"],
+                "type": "function",
+                "function": {
+                    "name": c["name"],
+                    "arguments": json.dumps(c["arguments"], ensure_ascii=False, default=str),
+                },
+            }
+            for c in serialized_step
+        ]
+        asst_content: str | None = last_choice_content or None
+        if asst_content == "":
+            asst_content = None
+        messages.append({"role": "assistant", "content": asst_content, "tool_calls": assistant_tool_calls})
+        for c, tr in zip(auto_calls, step_tool_results):
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": c["id"],
+                    "content": json.dumps(tr["result"], default=str),
+                }
+            )
+
+    bump_memory_usage_sync(user_id=uid, memory_keys=mem_keys_used)
+    learn_from_turn_sync(
+        user_id=uid,
+        user_message=message.strip(),
+        assistant_text=last_choice_content,
+        tool_results=all_auto_results,
+    )
+    tail = last_choice_content or "Reached max agent steps; see tool results."
+    lines = [tail, "", "Tool results:"]
+    for r in all_auto_results:
+        lines.append(f"- {r['tool']}: {json.dumps(r['result'], default=str)[:400]}")
+    narrative = "\n".join(lines)
     return {
         "ok": True,
-        "narrative": intro,
-        "response": intro,
+        "narrative": narrative,
+        "response": narrative,
         "agent_mode": True,
-        "needs_confirmation": True,
-        "agent_pending_id": pending_id,
-        "proposals": proposals,
-        "tool_results": auto_results,
-        "action_intent": {"kind": "jarvis_pending", "success": True},
+        "tool_results": all_auto_results,
+        "action_intent": {"kind": "jarvis_agent", "success": True},
         "groq_model": routed_model,
+        "route_category": route_category,
+        "route_tool_count": len(tools_subset),
+        "agent_loop_exhausted": True,
     }

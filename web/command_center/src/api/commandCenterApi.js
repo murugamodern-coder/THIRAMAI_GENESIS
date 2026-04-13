@@ -50,6 +50,12 @@ export async function postChatQuery(message, opts = {}) {
     agent_pending_id: opts.agent_pending_id ?? null,
     agent_undo: !!opts.agent_undo,
   };
+  if (opts.agent_confirm_tool_index != null && Number.isFinite(Number(opts.agent_confirm_tool_index))) {
+    body.agent_confirm_tool_index = Number(opts.agent_confirm_tool_index);
+  }
+  if (opts.agent_reject_tool_index != null && Number.isFinite(Number(opts.agent_reject_tool_index))) {
+    body.agent_reject_tool_index = Number(opts.agent_reject_tool_index);
+  }
   if (opts.jarvis_context_org_id != null && opts.jarvis_context_org_id !== "") {
     const n = Number(opts.jarvis_context_org_id);
     if (Number.isFinite(n) && n > 0) body.jarvis_context_org_id = n;

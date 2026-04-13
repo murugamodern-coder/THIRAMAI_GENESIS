@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { fetchPersonalTodayBrief } from "../api/commandCenterApi.js";
 import { requestNotificationPermission, useSmartNotifications } from "../hooks/useSmartNotifications.js";
@@ -51,6 +51,7 @@ function winStorageKey(isoDate) {
 }
 
 export default function TodayPage() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -427,11 +428,37 @@ export default function TodayPage() {
               {alerts.map((a, i) => (
                 <li key={`${a.code}-${i}`} className={`cc-today-alert cc-today-alert--${a.severity || "medium"}`}>
                   <span>{a.message}</span>
-                  {a.action_url ? (
-                    <Link className="cc-today-alert-link" to={routeFromActionUrl(a.action_url)}>
-                      Open
-                    </Link>
-                  ) : null}
+                  <span style={{ display: "inline-flex", gap: 10, flexWrap: "wrap" }}>
+                    {a.action_url ? (
+                      <Link className="cc-today-alert-link" to={routeFromActionUrl(a.action_url)}>
+                        Open
+                      </Link>
+                    ) : null}
+                    {a.jarvis_action?.prefill ? (
+                      <button
+                        type="button"
+                        className="cc-today-alert-link"
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          font: "inherit",
+                          textDecoration: "underline",
+                        }}
+                        onClick={() =>
+                          navigate("/dashboard", {
+                            state: {
+                              jarvisPrefill: String(a.jarvis_action.prefill),
+                              jarvisAgent: !!a.jarvis_action.agent_mode,
+                            },
+                          })
+                        }
+                      >
+                        Jarvis
+                      </button>
+                    ) : null}
+                  </span>
                 </li>
               ))}
             </ul>

@@ -51,10 +51,26 @@ class ChatQueryBody(BaseModel):
         ge=1,
         description="Optional org scope for Jarvis business tools (must be a membership of the user).",
     )
+    agent_confirm_tool_index: int | None = Field(
+        None,
+        ge=0,
+        description="Execute a single pending mutating tool by index (HITL per card).",
+    )
+    agent_reject_tool_index: int | None = Field(
+        None,
+        ge=0,
+        description="Remove a single pending mutating tool by index without executing it.",
+    )
 
     @model_validator(mode="after")
     def _message_required_unless_undo(self) -> ChatQueryBody:
         if self.agent_undo:
+            return self
+        if self.agent_pending_id and (
+            self.agent_confirm_tool_index is not None or self.agent_reject_tool_index is not None
+        ):
+            return self
+        if self.agent_confirm and self.agent_pending_id:
             return self
         if not (self.message or "").strip():
             raise ValueError("message is required unless agent_undo is true")
@@ -468,11 +484,13 @@ async def chat_query(
 
         payload = await asyncio.to_thread(
             lambda: jarvis.run_agent(
-                message=body.message.strip(),
+                message=(body.message or "").strip(),
                 user=_user,
                 agent_confirm=bool(body.agent_confirm),
                 agent_pending_id=body.agent_pending_id,
                 context_organization_id=body.jarvis_context_org_id,
+                agent_confirm_tool_index=body.agent_confirm_tool_index,
+                agent_reject_tool_index=body.agent_reject_tool_index,
             ),
         )
         return JSONResponse(content=payload)
