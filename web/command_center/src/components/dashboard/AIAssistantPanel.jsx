@@ -1,7 +1,7 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { postChatQuery } from "../../api/commandCenterApi.js";
+import { postChatQuery, fetchMyOrganizations } from "../../api/commandCenterApi.js";
 import { showToastDedup } from "../../lib/toastDedup.js";
 import { runAIAction, getActionConfirmation } from "../../lib/aiActionHandler.js";
 import { AI_MOCK_INSIGHTS } from "../../lib/aiMockInsights.js";
@@ -20,6 +20,23 @@ export default function AIAssistantPanel() {
   const [proposals, setProposals] = useState([]);
   const [speakReplies, setSpeakReplies] = useState(false);
   const [listening, setListening] = useState(false);
+  const [tamilVoice, setTamilVoice] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [jarvisOrgId, setJarvisOrgId] = useState("");
+  const [orgOptions, setOrgOptions] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMyOrganizations()
+      .then((data) => {
+        const rows = Array.isArray(data) ? data : data?.items || data?.organizations || [];
+        if (!cancelled) setOrgOptions(rows);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const priorityRank = useCallback((p) => {
     if (p === "high") return 0;
@@ -68,22 +85,25 @@ export default function AIAssistantPanel() {
 
   const send = useCallback(
     async (opts = {}) => {
-      const m = message.trim();
+      const m = (opts.textOverride ?? message).trim();
       if (!m || loading) return;
       const confirming = opts.confirmPending === true && pendingId;
+      const useAgentMode = opts.forceAgentMode != null ? !!opts.forceAgentMode : agentMode;
       setLoading(true);
       setError(null);
       if (!confirming) {
         setRaw("");
         setInsights([]);
         setProposals([]);
+        setChatMessages((prev) => [...prev, { role: "user", text: m, ts: Date.now() }]);
       }
-      setAgentHint(confirming ? "Running confirmed actions…" : agentMode ? "THIRAMAI is thinking…" : "");
+      setAgentHint(confirming ? "Executing confirmed tools…" : useAgentMode ? "Jarvis is analyzing…" : "");
       try {
         const data = await postChatQuery(m, {
-          agent_mode: !!(agentMode || confirming),
+          agent_mode: !!(useAgentMode || confirming),
           agent_confirm: !!confirming,
           agent_pending_id: confirming ? pendingId : null,
+          jarvis_context_org_id: jarvisOrgId || undefined,
         });
         if (data?.error && !data?.narrative) {
           setError(String(data.error));
@@ -92,11 +112,25 @@ export default function AIAssistantPanel() {
         }
         const txt = String(data?.narrative || data?.response || "").trim();
         setRaw(txt);
+        if (data?.groq_model) {
+          setAgentHint(`Used model: ${data.groq_model}`);
+        }
 
         if (data?.needs_confirmation && data?.agent_pending_id) {
           setPendingId(data.agent_pending_id);
           setProposals(Array.isArray(data.proposals) ? data.proposals : []);
-          setAgentHint("Confirm the actions below, then press Confirm.");
+          setAgentHint("Review proposals — Confirm or cancel.");
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              text: txt,
+              ts: Date.now(),
+              proposals: data.proposals,
+              toolResults: data.tool_results,
+              needsConfirmation: true,
+            },
+          ]);
           showToastDedup({ type: "info", message: "Review and confirm Jarvis actions" });
           return;
         }
@@ -105,14 +139,18 @@ export default function AIAssistantPanel() {
         setProposals([]);
 
         if (data?.agent_mode) {
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: txt, ts: Date.now(), toolResults: data.tool_results },
+          ]);
           showToastDedup({ type: "success", message: "Jarvis completed" });
           setInsights([]);
-          const line = String(data?.narrative || data?.response || "").trim();
+          const line = txt;
           if (speakReplies && line && typeof window !== "undefined" && window.speechSynthesis) {
             try {
               window.speechSynthesis.cancel();
               const u = new SpeechSynthesisUtterance(line.slice(0, 2000));
-              u.lang = "en-IN";
+              u.lang = tamilVoice ? "ta-IN" : "en-IN";
               window.speechSynthesis.speak(u);
             } catch {
               /* ignore */
@@ -148,7 +186,16 @@ export default function AIAssistantPanel() {
         setLoading(false);
       }
     },
-    [loading, message, safeParseInsights, agentMode, pendingId, speakReplies],
+    [loading, message, safeParseInsights, agentMode, pendingId, speakReplies, tamilVoice, jarvisOrgId],
+  );
+
+  const runQuick = useCallback(
+    (text, useAgent) => {
+      setAgentMode(!!useAgent);
+      setMessage(text);
+      send({ textOverride: text, forceAgentMode: useAgent });
+    },
+    [send],
   );
 
   const doUndo = useCallback(async () => {
@@ -183,7 +230,7 @@ export default function AIAssistantPanel() {
       return;
     }
     const rec = new SR();
-    rec.lang = "en-IN";
+    rec.lang = tamilVoice ? "ta-IN" : "en-IN";
     rec.continuous = false;
     rec.interimResults = false;
     setListening(true);
@@ -198,7 +245,7 @@ export default function AIAssistantPanel() {
     } catch {
       setListening(false);
     }
-  }, []);
+  }, [tamilVoice]);
 
   const onRunAction = useCallback(async (action, insightId) => {
       const key = `${insightId || "insight"}__${action?.type || "action"}__${JSON.stringify(action?.payload || {})}`;
@@ -318,10 +365,107 @@ export default function AIAssistantPanel() {
         />
         <span>Jarvis agent mode (tools + confirm)</span>
       </label>
+      <div style={{ marginBottom: 12 }}>
+        <span className="cc-muted" style={{ fontSize: 13, display: "block", marginBottom: 6 }}>
+          Business context (Jarvis tools)
+        </span>
+        <select
+          className="cc-textarea"
+          style={{ maxWidth: 360, padding: 8, minHeight: "unset" }}
+          value={jarvisOrgId}
+          onChange={(e) => setJarvisOrgId(e.target.value)}
+        >
+          <option value="">Active workspace (JWT)</option>
+          {orgOptions.map((row) => (
+            <option key={row.organization?.id ?? row.id} value={row.organization?.id ?? row.id}>
+              {row.organization?.name || `Organization ${row.organization?.id}`}
+            </option>
+          ))}
+        </select>
+      </div>
       <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "pointer" }}>
         <input type="checkbox" checked={speakReplies} onChange={(e) => setSpeakReplies(e.target.checked)} />
         <span>Speak Jarvis replies (text-to-speech)</span>
       </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "pointer" }}>
+        <input type="checkbox" checked={tamilVoice} onChange={(e) => setTamilVoice(e.target.checked)} />
+        <span>Tamil voice input / TTS (ta-IN)</span>
+      </label>
+      <div
+        style={{
+          maxHeight: 240,
+          overflowY: "auto",
+          marginBottom: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          padding: 8,
+          borderRadius: 10,
+          border: "1px solid var(--cc-border, #e5e7eb)",
+          background: "#fafafa",
+        }}
+      >
+        {chatMessages.length === 0 ? (
+          <div className="cc-muted" style={{ fontSize: 13 }}>
+            Chat appears here (WhatsApp-style). Enable Jarvis for tools and confirmations.
+          </div>
+        ) : null}
+        {chatMessages.map((cm, i) => (
+          <div
+            key={`${cm.ts}_${i}`}
+            style={{
+              alignSelf: cm.role === "user" ? "flex-end" : "flex-start",
+              maxWidth: "94%",
+            }}
+          >
+            <div className="cc-muted" style={{ fontSize: 11, marginBottom: 2 }}>
+              {cm.role === "user" ? "You" : "Jarvis"} · {new Date(cm.ts).toLocaleTimeString()}
+            </div>
+            <div
+              style={{
+                padding: "10px 14px",
+                borderRadius: 14,
+                background: cm.role === "user" ? "rgba(37, 99, 235, 0.14)" : "#fff",
+                border: cm.role === "user" ? "none" : "1px solid #e5e7eb",
+                whiteSpace: "pre-wrap",
+                fontSize: 14,
+              }}
+            >
+              {cm.text}
+            </div>
+            {Array.isArray(cm.toolResults) && cm.toolResults.length > 0 ? (
+              <div className="cc-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                Tools: {cm.toolResults.map((t) => t.tool).join(", ")}
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {loading ? (
+          <div className="cc-muted" style={{ fontSize: 13, fontStyle: "italic" }}>
+            Jarvis is working…
+          </div>
+        ) : null}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        {[
+          ["Today Brief", "Call get_today_brief and summarize my day in 5 bullets.", true],
+          ["Check Stock", "Call get_stock_status and list low-stock alerts.", true],
+          ["Add Sale", "I want to record a quick cash sale — ask me for amount and items.", true],
+          ["Find Scheme", "Call find_govt_schemes for food processing in Tamil Nadu.", true],
+          ["Stock Signal", "Call analyze_stock_opportunity for RELIANCE intraday.", true],
+          ["Add Meeting", "Schedule a meeting tomorrow 11am IST titled Vendor review.", true],
+        ].map(([label, q, am]) => (
+          <button
+            type="button"
+            key={label}
+            className="cc-btn cc-btn-secondary"
+            disabled={loading}
+            onClick={() => runQuick(q, am)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <textarea
         className="cc-textarea"
         placeholder='Try: "Review inventory risks and pending approvals. Return JSON insights."'

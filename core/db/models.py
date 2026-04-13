@@ -111,6 +111,12 @@ class Organization(Base):
     business_tasks: Mapped[list["BusinessTask"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
+    supplier_payments: Mapped[list["SupplierPayment"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
+    liquidity_row: Mapped[Optional["OrganizationLiquidity"]] = relationship(
+        back_populates="organization", uselist=False
+    )
 
 
 class Role(Base):
@@ -246,6 +252,15 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     push_subscriptions: Mapped[list["PushSubscription"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    jarvis_memory_rows: Mapped[list["JarvisMemory"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    jarvis_proactive_alert_rows: Mapped[list["JarvisProactiveAlert"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    stock_watchlist_rows: Mapped[list["StockWatchlistEntry"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -1273,10 +1288,15 @@ class AgroSubsidyCase(Base):
     farmer_name: Mapped[str] = mapped_column(Text, nullable=False)
     village: Mapped[str] = mapped_column(Text, nullable=False, default="")
     survey_number: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    farmer_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    land_acres: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 4), nullable=True)
     scheme_name: Mapped[str] = mapped_column(Text, nullable=False)
     application_status: Mapped[str] = mapped_column(String(64), nullable=False, default="draft")
+    subsidy_applied_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    subsidy_approved_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
     subsidy_pending_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
     subsidy_received_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    commission_earned_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
     follow_up_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -1368,6 +1388,10 @@ class Invoice(Base):
     # Phase 2 — structured billing lifecycle (defaults keep legacy rows valid)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="posted", server_default="posted")
     payment_status: Mapped[str] = mapped_column(String(32), nullable=False, default="unpaid", server_default="unpaid")
+    eway_bill_no: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    vehicle_no: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    transport_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    consignee_place: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     organization: Mapped["Organization"] = relationship(back_populates="invoices")
     line_items: Mapped[list["InvoiceItem"]] = relationship(
@@ -1784,6 +1808,7 @@ class InventoryItem(Base):
     sku_name: Mapped[str] = mapped_column(Text, nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
     location: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    unit: Mapped[str] = mapped_column(String(32), nullable=False, default="")
     unit_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     unit_cost_pre_tax: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     total_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
@@ -1825,6 +1850,8 @@ class StockMovement(Base):
     reference_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     reference_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lot_batch: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -1859,6 +1886,7 @@ class Supplier(Base):
 
     organization: Mapped["Organization"] = relationship(back_populates="suppliers")
     purchase_orders: Mapped[list["PurchaseOrder"]] = relationship(back_populates="supplier")
+    payments: Mapped[list["SupplierPayment"]] = relationship(back_populates="supplier")
 
 
 class PurchaseOrder(Base):
@@ -1881,6 +1909,8 @@ class PurchaseOrder(Base):
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
     expected_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    supplier_invoice_no: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    supplier_invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     total_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -1914,6 +1944,55 @@ class PurchaseOrderLine(Base):
     line_total_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
 
     purchase_order: Mapped["PurchaseOrder"] = relationship(back_populates="lines")
+
+
+class SupplierPayment(Base):
+    """Payment to supplier (against PO or ad-hoc)."""
+
+    __tablename__ = "supplier_payments"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    supplier_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    purchase_order_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("purchase_orders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    amount_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    method: Mapped[str] = mapped_column(String(32), nullable=False, default="bank")
+    reference: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship(back_populates="supplier_payments")
+    supplier: Mapped["Supplier"] = relationship(back_populates="payments")
+
+
+class OrganizationLiquidity(Base):
+    """Manual cash / bank position per tenant (shop counter + bank balance)."""
+
+    __tablename__ = "organization_liquidity"
+
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    cash_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    bank_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship(back_populates="liquidity_row")
 
 
 # --- Phase 2: structured billing (line items + payments + GST snapshots) ---
@@ -2424,6 +2503,90 @@ class PersonalMeeting(Base):
 
     user: Mapped["User"] = relationship(back_populates="personal_meetings")
     organization: Mapped["Organization"] = relationship(back_populates="personal_meetings")
+
+
+class JarvisMemory(Base):
+    """User-specific Jarvis preferences / learned facts (Phase 2 agent)."""
+
+    __tablename__ = "jarvis_memory"
+    __table_args__ = (UniqueConstraint("user_id", "memory_key", name="uq_jarvis_memory_user_key"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    memory_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    memory_value: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("0.5"))
+    usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_memory_rows")
+
+
+class JarvisProactiveAlert(Base):
+    """Morning intelligence and follow-ups surfaced in Today brief + Jarvis."""
+
+    __tablename__ = "jarvis_proactive_alerts"
+    __table_args__ = (UniqueConstraint("user_id", "dedupe_key", name="uq_jarvis_proactive_user_dedupe"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    alert_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    action_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_proactive_alert_rows")
+    organization: Mapped[Optional["Organization"]] = relationship()
+
+
+class StockWatchlistEntry(Base):
+    """User NSE/BSE watchlist symbols for Jarvis market tools."""
+
+    __tablename__ = "stock_watchlist_entries"
+    __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_stock_watchlist_user_symbol"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    exchange_suffix: Mapped[str] = mapped_column(String(8), nullable=False, default="NS")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="stock_watchlist_rows")
 
 
 # Back-compat alias (deprecated)

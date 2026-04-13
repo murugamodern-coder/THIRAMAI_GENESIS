@@ -43,13 +43,18 @@ export async function resolveDecision(decisionId, status) {
 }
 
 export async function postChatQuery(message, opts = {}) {
-  const { data } = await api.post("/chat/query", {
+  const body = {
     message: message ?? "",
     agent_mode: !!opts.agent_mode,
     agent_confirm: !!opts.agent_confirm,
     agent_pending_id: opts.agent_pending_id ?? null,
     agent_undo: !!opts.agent_undo,
-  });
+  };
+  if (opts.jarvis_context_org_id != null && opts.jarvis_context_org_id !== "") {
+    const n = Number(opts.jarvis_context_org_id);
+    if (Number.isFinite(n) && n > 0) body.jarvis_context_org_id = n;
+  }
+  const { data } = await api.post("/chat/query", body);
   return data;
 }
 

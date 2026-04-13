@@ -530,6 +530,27 @@ def build_today_brief_sync(
             }
         )
 
+    try:
+        from services.jarvis_proactive_service import list_recent_proactive_for_brief_sync
+
+        jx = list_recent_proactive_for_brief_sync(user_id=uid, limit=10)
+        for ex in jx:
+            proactive_alerts.append(
+                {
+                    "code": str(ex.get("type") or "jarvis"),
+                    "severity": ex.get("severity") or "medium",
+                    "message": str(ex.get("message") or ""),
+                    "type": ex.get("type"),
+                    "priority": ex.get("priority"),
+                    "action_url": "#/today",
+                    "jarvis_action": ex.get("action"),
+                }
+            )
+    except Exception:
+        pass
+
+    proactive_alerts = proactive_alerts[:12]
+
     nudges = agg.get("meeting_nudges") if isinstance(agg.get("meeting_nudges"), list) else []
 
     day_key = str(brief.get("date") or "")[:10]
@@ -606,7 +627,7 @@ def build_today_brief_sync(
 
     insight_line = str(brief.get("ai_insight") or "").strip()
 
-    return {
+    payload: dict[str, Any] = {
         "ok": True,
         "as_of_utc": brief.get("as_of_utc"),
         "date": brief.get("date"),
@@ -637,6 +658,13 @@ def build_today_brief_sync(
         "meetings_upcoming_7d_count": brief.get("meetings_upcoming_7d_count", 0),
         "financial_snapshot": fin,
     }
+    try:
+        from services.jarvis_proactive_service import attach_market_brief_to_payload
+
+        attach_market_brief_to_payload(payload, user_id=uid)
+    except Exception:
+        pass
+    return payload
 
 
 def build_weekly_review_sync(*, user_id: int, organization_id: int) -> dict[str, Any]:

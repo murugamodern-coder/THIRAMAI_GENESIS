@@ -187,6 +187,19 @@ def run_self_heal_job() -> None:
         log_event(rid, "sovereign.self_heal_tick", ok=False, error=str(exc))
 
 
+def run_jarvis_proactive_morning() -> None:
+    """7:00 Asia/Kolkata — subsidy / EMI / overdue / idle machine alerts into ``jarvis_proactive_alerts``."""
+    rid = new_request_id()
+    try:
+        from services.jarvis_proactive_service import run_morning_job_all_users_sync
+
+        out = run_morning_job_all_users_sync()
+        log_event(rid, "jarvis.proactive_morning", ok=True, extra=out)
+    except Exception as exc:
+        _log.exception("jarvis.proactive_morning_failed")
+        log_event(rid, "jarvis.proactive_morning", ok=False, error=str(exc))
+
+
 def start_sovereign_scheduler() -> BackgroundScheduler | None:
     global _scheduler
     if _scheduler is not None:
@@ -253,6 +266,14 @@ def start_sovereign_scheduler() -> BackgroundScheduler | None:
         run_self_heal_job,
         IntervalTrigger(minutes=5),
         id="thiramai_self_heal_tick",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    sched.add_job(
+        run_jarvis_proactive_morning,
+        CronTrigger(hour=7, minute=0, timezone="Asia/Kolkata"),
+        id="thiramai_jarvis_proactive_morning",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

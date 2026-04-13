@@ -28,6 +28,8 @@ numpy>=1.26.0
 # Research Hub: Indian equity fuzzy match + live quotes (optional Alpha Vantage via THIRAMAI_ALPHA_VANTAGE_API_KEY)
 rapidfuzz>=3.9.0
 yfinance>=0.2.40
+pandas>=2.0.0
+ta>=0.11.0
 
 # Auth / RBAC (JWT + bcrypt + OAuth2 form login)
 python-jose[cryptography]>=3.3.0

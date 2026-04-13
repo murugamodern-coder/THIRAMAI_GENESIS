@@ -20,11 +20,19 @@ from zoneinfo import ZoneInfo
 from groq import Groq
 from sqlalchemy import func, select
 from core.database import get_session_factory
-from core.db.models import Inventory, InventoryItem, PersonalLoan, PersonalMeeting
+from core.db.models import Inventory, InventoryItem, PersonalLoan, PersonalMeeting, UserOrganizationMembership
 from core.jarvis_pending_redis import pending_pop, pending_set, undo_pop_stack, undo_store
 from services import life_os_service
 from services import personal_command_center_service as pcc
-from services.analytics_service import compute_dashboard_summary_sync, list_low_stock_alerts_sync
+from services.analytics_service import compute_dashboard_summary_sync
+from services.jarvis_extended_tools import (
+    AUTO_EXECUTE_TOOL_NAMES,
+    EXTENDED_TOOL_NAMES,
+    execute_jarvis_extended_tool,
+    extended_tool_specs,
+)
+from services.jarvis_memory_service import fetch_memory_context_lines_sync
+from services.inventory_phase2_service import list_low_stock_alerts_sync
 from services.jarvis_undo_service import meeting_undo_payload
 from services.personal_meetings_service import MEETING_TYPES, create_meeting, normalize_attendees
 
@@ -33,7 +41,21 @@ _log = logging.getLogger("thiramai.jarvis_agent")
 _PENDING_TTL_SEC = 600
 _IST = ZoneInfo("Asia/Kolkata")
 
-TOOL_SPECS: list[dict[str, Any]] = [
+TAMIL_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "stock": ("stock", "சரக்கு", "பொருள்"),
+    "sale": ("sale", "விற்பனை"),
+    "expense": ("expense", "செலவு"),
+    "farmer": ("farmer", "விவசாயி"),
+    "meeting": ("meeting", "சந்திப்பு"),
+    "invoice": ("invoice", "bill", "பில்"),
+}
+
+
+def _looks_tamil(text: str) -> bool:
+    return any("\u0b80" <= c <= "\u0bff" for c in (text or ""))
+
+
+BASE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
@@ -153,6 +175,73 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
+TOOL_SPECS: list[dict[str, Any]] = BASE_TOOL_SPECS + extended_tool_specs()
+
+
+def resolve_jarvis_organization_id(user: Any, requested: int | None) -> tuple[int, str | None]:
+    """Active JWT org, or another org the user belongs to."""
+    jwt_org = int(user.organization_id)
+    if requested is None or int(requested) <= 0:
+        return jwt_org, None
+    rid = int(requested)
+    if rid == jwt_org:
+        return jwt_org, None
+    factory = get_session_factory()
+    if factory is None:
+        return jwt_org, "database unavailable"
+    with factory() as session:
+        m = session.execute(
+            select(UserOrganizationMembership.id).where(
+                UserOrganizationMembership.user_id == int(user.id),
+                UserOrganizationMembership.organization_id == rid,
+                UserOrganizationMembership.is_active.is_(True),
+            ).limit(1)
+        ).scalar_one_or_none()
+    if m is None:
+        return jwt_org, "Select an organization you belong to, or switch workspace first."
+    return rid, None
+
+
+def _route_groq_model(message: str) -> str:
+    q = (message or "").lower()
+    fast = (os.getenv("GROQ_FAST_MODEL") or "llama-3.1-8b-instant").strip()
+    smart = (
+        os.getenv("GROQ_SMART_MODEL") or os.getenv("GROQ_AGENT_MODEL") or os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile"
+    ).strip()
+    for _cat, words in TAMIL_KEYWORDS.items():
+        if any(w in (message or "") for w in words if len(w) > 1):
+            q = f"{q} business"
+            break
+    stock_mkt = any(
+        k in q for k in ("nse", "bse", "sensex", "nifty", "share price", "intraday", "macd", "rsi", "breakout")
+    )
+    biz = any(
+        k in q
+        for k in (
+            "invoice",
+            "inventory",
+            "stock level",
+            "profit",
+            "expense",
+            "farmer",
+            "subsidy",
+            "sale",
+            "purchase",
+            "payment",
+            "gst",
+        )
+    )
+    research = any(
+        k in q for k in ("scheme", "govt", "government", "research", "market size", "how to", "what is", "find ")
+    )
+    if stock_mkt and not biz:
+        return smart
+    if research:
+        return smart
+    if biz:
+        return fast
+    return fast
+
 
 def _model() -> str:
     return (os.getenv("GROQ_AGENT_MODEL") or os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile").strip()
@@ -167,6 +256,22 @@ def _summarize_tool(name: str, args: dict[str, Any]) -> str:
         return f"Schedule meeting “{args.get('title')}” ({args.get('meeting_type')}) at {args.get('datetime')}"
     if name == "create_habit":
         return f"Create habit “{args.get('title')}”"
+    if name == "create_invoice":
+        return f"Create invoice for {args.get('customer_name')} — items {len(args.get('items') or [])}"
+    if name == "add_stock":
+        return f"Add {args.get('quantity')} {args.get('unit') or ''} of {args.get('item_name')} @ ₹{args.get('cost_price')}"
+    if name == "record_sale":
+        return f"Record sale ₹{args.get('amount')} via {args.get('payment_mode')}"
+    if name == "add_business_expense":
+        return f"Record ₹{args.get('amount')} expense — {args.get('category')}"
+    if name == "add_farmer":
+        return f"Add farmer {args.get('name')} — {args.get('scheme_name')}"
+    if name == "update_subsidy_status":
+        return f"Update subsidy to {args.get('status')} for id/name {args.get('farmer_id') or args.get('farmer_name')}"
+    if name == "log_production":
+        return f"Log {args.get('quantity_produced')} {args.get('unit') or ''} from {args.get('machine_name')}"
+    if name == "mark_attendance":
+        return f"Mark {args.get('worker_name')} as {args.get('status')}"
     return f"Run {name}({json.dumps(args, ensure_ascii=False)[:120]})"
 
 
@@ -175,10 +280,17 @@ def execute_tool(
     name: str,
     args: dict[str, Any],
     user: Any,
+    context_organization_id: int | None = None,
 ) -> dict[str, Any]:
     uid = int(user.id)
-    oid = int(user.organization_id)
+    eff, err = resolve_jarvis_organization_id(user, context_organization_id)
+    if err:
+        return {"ok": False, "message": err}
+    oid = eff
     try:
+        if name in EXTENDED_TOOL_NAMES:
+            return execute_jarvis_extended_tool(name=name, args=args, user=user, effective_org_id=oid)
+
         if name == "create_task":
             pr = (args.get("priority") or "P2").upper()
             if pr not in ("P1", "P2", "P3"):
@@ -289,9 +401,10 @@ def execute_tool(
             if oid <= 0:
                 return {"ok": True, "snapshot": {"ok": False, "note": "no organization"}}
             snap = compute_dashboard_summary_sync(oid)
-            low = list_low_stock_alerts_sync(oid, threshold=5, limit=25)
+            low = list_low_stock_alerts_sync(organization_id=oid, threshold_override=5.0)
+            low_items = low.get("alerts") if isinstance(low, dict) else []
             if isinstance(snap, dict) and snap.get("ok"):
-                snap = {**snap, "low_stock_alerts": low}
+                snap = {**snap, "low_stock_alerts": low_items}
             return {"ok": True, "snapshot": snap}
 
         if name == "set_health_log":
@@ -430,6 +543,7 @@ def run_agent(
     user: Any,
     agent_confirm: bool,
     agent_pending_id: str | None,
+    context_organization_id: int | None = None,
 ) -> dict[str, Any]:
     key = (os.getenv("GROQ_API_KEY") or "").strip()
     if not key:
@@ -437,10 +551,17 @@ def run_agent(
 
     uid = int(user.id)
 
+    if not agent_confirm and context_organization_id is not None and int(context_organization_id) > 0:
+        _, ctx_err = resolve_jarvis_organization_id(user, context_organization_id)
+        if ctx_err:
+            return {"ok": False, "narrative": "", "error": ctx_err, "agent_mode": True}
+
     if agent_confirm and agent_pending_id:
-        calls = pending_pop(agent_pending_id, user_id=uid)
-        if not calls:
+        popped = pending_pop(agent_pending_id, user_id=uid)
+        if not popped:
             return {"ok": False, "narrative": "", "error": "Pending action expired or invalid."}
+        calls, ctx_stored = popped
+        ctx_exec = ctx_stored if ctx_stored and int(ctx_stored) > 0 else context_organization_id
         results: list[dict[str, Any]] = []
         undo_ops: list[dict[str, Any]] = []
         for c in calls:
@@ -451,7 +572,12 @@ def run_agent(
                     raw_args = json.loads(raw_args)
                 except Exception:
                     raw_args = {}
-            out = execute_tool(name=name, args=raw_args if isinstance(raw_args, dict) else {}, user=user)
+            out = execute_tool(
+                name=name,
+                args=raw_args if isinstance(raw_args, dict) else {},
+                user=user,
+                context_organization_id=ctx_exec,
+            )
             uop = out.pop("_undo", None) if isinstance(out, dict) else None
             if isinstance(uop, dict):
                 undo_ops.append(uop)
@@ -471,16 +597,27 @@ def run_agent(
             "action_intent": {"kind": "jarvis_agent", "success": ok_all},
         }
 
+    mem_lines = fetch_memory_context_lines_sync(user_id=uid, limit=8)
+    mem_block = "\n".join(mem_lines) if mem_lines else "(none yet)"
+    lang_note = "The user wrote in Tamil — reply in Tamil. " if _looks_tamil(message) else ""
     system = (
-        "You are THIRAMAI Jarvis, a concise assistant. Use tools when the user wants actions. "
-        "For destructive or financial actions, still call the tool — the system will ask the user to confirm first. "
-        "Prefer one tool call per user turn when possible. Today UTC date context: "
+        "You are Thiramai Jarvis, a business AI assistant for an Indian entrepreneur. "
+        f"{lang_note}"
+        "You understand Tamil and English; mirror the user's language. "
+        "Use Indian Rupees (₹) and local business context (lakhs/crores when natural).\n"
+        f"User memory hints:\n{mem_block}\n\n"
+        "Use tools when the user needs data or actions. "
+        "Read-only tools (briefs, stock status, P&L, research, market scan) execute immediately. "
+        "Mutating tools (tasks, expenses, invoices, stock changes, etc.) require UI confirmation — still call them. "
+        "For business_org_id / org_id use the active organization when not specified. "
+        "Today UTC date: "
         f"{datetime.now(timezone.utc).date().isoformat()}."
     )
+    routed_model = _route_groq_model(message.strip())
     client = Groq(api_key=key)
     try:
         completion = client.chat.completions.create(
-            model=_model(),
+            model=routed_model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": message.strip()[:8000]},
@@ -507,7 +644,6 @@ def run_agent(
         }
 
     serialized: list[dict[str, Any]] = []
-    proposals: list[dict[str, Any]] = []
     for tc in tool_calls:
         if isinstance(tc, dict):
             fn = tc.get("function") or {}
@@ -525,21 +661,61 @@ def run_agent(
         else:
             args_dict = arguments if isinstance(arguments, dict) else {}
         serialized.append({"name": name, "arguments": args_dict})
-        proposals.append(
-            {
-                "tool": name,
-                "summary": _summarize_tool(name, args_dict),
-                "arguments": args_dict,
-            }
+
+    auto_calls = [x for x in serialized if x["name"] in AUTO_EXECUTE_TOOL_NAMES]
+    mut_calls = [x for x in serialized if x["name"] not in AUTO_EXECUTE_TOOL_NAMES]
+
+    auto_results: list[dict[str, Any]] = []
+    for c in auto_calls:
+        out = execute_tool(
+            name=c["name"],
+            args=c["arguments"],
+            user=user,
+            context_organization_id=context_organization_id,
         )
+        auto_results.append({"tool": c["name"], "result": out})
 
+    if not mut_calls:
+        tail = (getattr(choice, "content", None) or "").strip()
+        lines: list[str] = []
+        if auto_results:
+            lines.append("Tool results:")
+            for r in auto_results:
+                lines.append(f"- {r['tool']}: {json.dumps(r['result'], default=str)[:2000]}")
+        narrative = "\n".join(lines) if lines else (tail or "Done.")
+        if tail and lines:
+            narrative = narrative + "\n\n" + tail
+        return {
+            "ok": True,
+            "narrative": narrative,
+            "response": narrative,
+            "agent_mode": True,
+            "tool_results": auto_results,
+            "action_intent": {"kind": "jarvis_agent", "success": True},
+            "groq_model": routed_model,
+        }
+
+    proposals = [
+        {"tool": c["name"], "summary": _summarize_tool(c["name"], c["arguments"]), "arguments": c["arguments"]}
+        for c in mut_calls
+    ]
     pending_id = secrets.token_urlsafe(24)
-    pending_set(pending_id, user_id=uid, tool_calls=serialized, ttl_sec=_PENDING_TTL_SEC)
-
-    intro = (
-        "I'll run the following — please confirm:\n"
-        + "\n".join(f"• {p['summary']}" for p in proposals)
+    pending_set(
+        pending_id,
+        user_id=uid,
+        tool_calls=mut_calls,
+        ttl_sec=_PENDING_TTL_SEC,
+        context_organization_id=context_organization_id,
     )
+
+    intro_parts: list[str] = []
+    if auto_results:
+        intro_parts.append("Fetched:")
+        for r in auto_results:
+            intro_parts.append(f"• {r['tool']}: {json.dumps(r['result'], default=str)[:320]}")
+    intro_parts.append("Confirm the following actions:")
+    intro_parts.extend(f"• {p['summary']}" for p in proposals)
+    intro = "\n".join(intro_parts)
     return {
         "ok": True,
         "narrative": intro,
@@ -548,5 +724,7 @@ def run_agent(
         "needs_confirmation": True,
         "agent_pending_id": pending_id,
         "proposals": proposals,
+        "tool_results": auto_results,
         "action_intent": {"kind": "jarvis_pending", "success": True},
+        "groq_model": routed_model,
     }

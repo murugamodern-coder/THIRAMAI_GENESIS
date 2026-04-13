@@ -16,7 +16,7 @@ _log = logging.getLogger("thiramai.jarvis_pending")
 _PREFIX = "thiramai:jarvis:pending:"
 _UNDO_PREFIX = "thiramai:jarvis:undo:"
 
-_memory_pending: dict[str, tuple[float, int, list[dict[str, Any]]]] = {}
+_memory_pending: dict[str, tuple[float, int, list[dict[str, Any]], int | None]] = {}
 _memory_undo: dict[int, tuple[float, list[dict[str, Any]]]] = {}
 
 
@@ -37,9 +37,17 @@ def _cleanup_memory_pending() -> None:
         _memory_pending.pop(k, None)
 
 
-def pending_set(pending_id: str, *, user_id: int, tool_calls: list[dict[str, Any]], ttl_sec: int) -> None:
+def pending_set(
+    pending_id: str,
+    *,
+    user_id: int,
+    tool_calls: list[dict[str, Any]],
+    ttl_sec: int,
+    context_organization_id: int | None = None,
+) -> None:
     uid = int(user_id)
-    payload = json.dumps({"u": uid, "c": tool_calls}, default=str)
+    oid = int(context_organization_id) if context_organization_id is not None and int(context_organization_id) > 0 else None
+    payload = json.dumps({"u": uid, "c": tool_calls, "o": oid}, default=str)
     r = _redis()
     if r:
         try:
@@ -48,10 +56,10 @@ def pending_set(pending_id: str, *, user_id: int, tool_calls: list[dict[str, Any
         except Exception as exc:
             _log.warning("jarvis pending redis set failed: %s", exc)
     _cleanup_memory_pending()
-    _memory_pending[pending_id] = (time.time() + float(ttl_sec), uid, tool_calls)
+    _memory_pending[pending_id] = (time.time() + float(ttl_sec), uid, tool_calls, oid)
 
 
-def pending_pop(pending_id: str, *, user_id: int) -> list[dict[str, Any]] | None:
+def pending_pop(pending_id: str, *, user_id: int) -> tuple[list[dict[str, Any]], int | None] | None:
     uid = int(user_id)
     r = _redis()
     if r:
@@ -64,17 +72,20 @@ def pending_pop(pending_id: str, *, user_id: int) -> list[dict[str, Any]] | None
             data = json.loads(raw)
             if int(data.get("u") or 0) != uid:
                 return None
-            return data.get("c") if isinstance(data.get("c"), list) else []
+            calls = data.get("c") if isinstance(data.get("c"), list) else []
+            ctx_raw = data.get("o")
+            ctx_oid = int(ctx_raw) if ctx_raw is not None and str(ctx_raw).strip().lstrip("-").isdigit() else None
+            return calls, ctx_oid
         except Exception as exc:
             _log.warning("jarvis pending redis pop failed: %s", exc)
     _cleanup_memory_pending()
     entry = _memory_pending.pop(pending_id, None)
     if not entry:
         return None
-    exp, stored_uid, calls = entry
+    exp, stored_uid, calls, ctx_oid = entry if len(entry) == 4 else (*entry[:3], None)
     if time.time() > exp or stored_uid != uid:
         return None
-    return calls
+    return calls, ctx_oid
 
 
 def undo_store(user_id: int, ops: list[dict[str, Any]], ttl_sec: int = 3600) -> None:

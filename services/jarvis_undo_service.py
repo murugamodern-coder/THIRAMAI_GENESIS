@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from core.database import get_session_factory
-from core.db.models import Habit, PersonalExpense, PersonalMission
+from core.db.models import Habit, PersonalExpense, PersonalMeeting, PersonalMission
 from services.google_calendar_integration_service import delete_calendar_event
 
 _log = logging.getLogger("thiramai.jarvis_undo")

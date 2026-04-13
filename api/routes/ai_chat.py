@@ -46,6 +46,11 @@ class ChatQueryBody(BaseModel):
     agent_confirm: bool = Field(False, description="Execute pending tools after user confirmation")
     agent_pending_id: str | None = Field(None, max_length=256, description="ID from prior agent_mode response")
     agent_undo: bool = Field(False, description="Undo last confirmed Jarvis tool batch (Redis-backed)")
+    jarvis_context_org_id: int | None = Field(
+        None,
+        ge=1,
+        description="Optional org scope for Jarvis business tools (must be a membership of the user).",
+    )
 
     @model_validator(mode="after")
     def _message_required_unless_undo(self) -> ChatQueryBody:
@@ -467,6 +472,7 @@ async def chat_query(
                 user=_user,
                 agent_confirm=bool(body.agent_confirm),
                 agent_pending_id=body.agent_pending_id,
+                context_organization_id=body.jarvis_context_org_id,
             ),
         )
         return JSONResponse(content=payload)
