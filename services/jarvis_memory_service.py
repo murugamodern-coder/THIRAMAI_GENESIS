@@ -14,7 +14,8 @@ from core.db.models import JarvisMemory
 _log = logging.getLogger("thiramai.jarvis_memory")
 
 
-def fetch_memory_context_lines_sync(*, user_id: int, limit: int = 8) -> list[str]:
+def fetch_memory_entries_sync(*, user_id: int, limit: int = 8) -> list[dict[str, str]]:
+    """Rows for prompt injection + usage bump (includes memory_key)."""
     uid = int(user_id)
     if uid <= 0:
         return []
@@ -31,13 +32,17 @@ def fetch_memory_context_lines_sync(*, user_id: int, limit: int = 8) -> list[str
                 .limit(lim)
             ).all()
         )
-    out: list[str] = []
+    out: list[dict[str, str]] = []
     for r in rows:
         k = (r.memory_key or "").strip()
         v = (r.memory_value or "").strip()
         if k and v:
-            out.append(f"- {k}: {v}")
+            out.append({"key": k, "line": f"- {k}: {v}"})
     return out
+
+
+def fetch_memory_context_lines_sync(*, user_id: int, limit: int = 8) -> list[str]:
+    return [e["line"] for e in fetch_memory_entries_sync(user_id=user_id, limit=limit)]
 
 
 def upsert_memory_sync(

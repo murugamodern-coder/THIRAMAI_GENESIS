@@ -59,6 +59,64 @@ def pending_set(
     _memory_pending[pending_id] = (time.time() + float(ttl_sec), uid, tool_calls, oid)
 
 
+def _parse_pending_payload(raw: str | bytes | None, *, uid: int) -> tuple[list[dict[str, Any]], int | None] | None:
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return None
+    if int(data.get("u") or 0) != uid:
+        return None
+    calls = data.get("c") if isinstance(data.get("c"), list) else []
+    ctx_raw = data.get("o")
+    ctx_oid = int(ctx_raw) if ctx_raw is not None and str(ctx_raw).strip().lstrip("-").isdigit() else None
+    return calls, ctx_oid
+
+
+def pending_peek(pending_id: str, *, user_id: int) -> tuple[list[dict[str, Any]], int | None] | None:
+    """Read pending batch without consuming (GET)."""
+    uid = int(user_id)
+    r = _redis()
+    if r:
+        try:
+            raw = r.get(_PREFIX + pending_id)
+            return _parse_pending_payload(raw, uid=uid)
+        except Exception as exc:
+            _log.warning("jarvis pending redis peek failed: %s", exc)
+    _cleanup_memory_pending()
+    entry = _memory_pending.get(pending_id)
+    if not entry:
+        return None
+    exp, stored_uid, calls, ctx_oid = entry if len(entry) == 4 else (*entry[:3], None)
+    if time.time() > exp or stored_uid != uid:
+        return None
+    return list(calls), ctx_oid
+
+
+def pending_delete(pending_id: str, *, user_id: int) -> bool:
+    uid = int(user_id)
+    r = _redis()
+    if r:
+        try:
+            raw = r.get(_PREFIX + pending_id)
+            parsed = _parse_pending_payload(raw, uid=uid)
+            if parsed is None:
+                return False
+            r.delete(_PREFIX + pending_id)
+            return True
+        except Exception as exc:
+            _log.warning("jarvis pending redis delete failed: %s", exc)
+    _cleanup_memory_pending()
+    entry = _memory_pending.pop(pending_id, None)
+    if not entry:
+        return False
+    exp, stored_uid, _, _ = entry if len(entry) == 4 else (*entry[:3], None)
+    if time.time() > exp or stored_uid != uid:
+        return False
+    return True
+
+
 def pending_pop(pending_id: str, *, user_id: int) -> tuple[list[dict[str, Any]], int | None] | None:
     uid = int(user_id)
     r = _redis()
