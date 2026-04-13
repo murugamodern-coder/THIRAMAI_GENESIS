@@ -17,6 +17,7 @@ import PersonalHealthPage from "./pages/personal/PersonalHealthPage.jsx";
 import PersonalProductivityPage from "./pages/personal/PersonalProductivityPage.jsx";
 import PersonalResearchPage from "./pages/personal/PersonalResearchPage.jsx";
 import PersonalIntegrationsPage from "./pages/personal/PersonalIntegrationsPage.jsx";
+import WeeklyReviewPage from "./pages/personal/WeeklyReviewPage.jsx";
 import TodayPage from "./pages/TodayPage.jsx";
 import CopilotPage from "./pages/CopilotPage.jsx";
 
@@ -87,6 +88,7 @@ export default function App() {
         <Route path="productivity" element={<PersonalProductivityPage />} />
         <Route path="research" element={<PersonalResearchPage />} />
         <Route path="integrations" element={<PersonalIntegrationsPage />} />
+        <Route path="weekly-review" element={<WeeklyReviewPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

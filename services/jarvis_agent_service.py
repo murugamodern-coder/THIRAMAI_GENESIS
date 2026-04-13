@@ -12,24 +12,26 @@ import json
 import logging
 import os
 import secrets
-import time
-from datetime import date, datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from groq import Groq
 from sqlalchemy import func, select
 from core.database import get_session_factory
-from core.db.models import Inventory, PersonalLoan
+from core.db.models import Inventory, InventoryItem, PersonalLoan, PersonalMeeting
+from core.jarvis_pending_redis import pending_pop, pending_set, undo_pop_stack, undo_store
 from services import life_os_service
 from services import personal_command_center_service as pcc
-from services.analytics_service import compute_dashboard_summary_sync
+from services.analytics_service import compute_dashboard_summary_sync, list_low_stock_alerts_sync
+from services.jarvis_undo_service import meeting_undo_payload
 from services.personal_meetings_service import MEETING_TYPES, create_meeting, normalize_attendees
 
 _log = logging.getLogger("thiramai.jarvis_agent")
 
 _PENDING_TTL_SEC = 600
-_pending: dict[str, tuple[float, int, list[dict[str, Any]]]] = {}
+_IST = ZoneInfo("Asia/Kolkata")
 
 TOOL_SPECS: list[dict[str, Any]] = [
     {
@@ -68,7 +70,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "schedule_meeting",
-            "description": "Schedule a meeting. datetime is ISO 8601 in UTC or with offset.",
+            "description": "Schedule a meeting. datetime is ISO 8601; if no timezone, it is interpreted as Asia/Kolkata (IST).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -152,13 +154,6 @@ TOOL_SPECS: list[dict[str, Any]] = [
 ]
 
 
-def _cleanup_pending() -> None:
-    now = time.time()
-    dead = [k for k, v in _pending.items() if v[0] < now]
-    for k in dead:
-        _pending.pop(k, None)
-
-
 def _model() -> str:
     return (os.getenv("GROQ_AGENT_MODEL") or os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile").strip()
 
@@ -203,7 +198,10 @@ def execute_tool(
                 status="open",
                 priority=pr,
             )
-            return {"ok": ok, "message": msg, "mission_id": mid}
+            out: dict[str, Any] = {"ok": ok, "message": msg, "mission_id": mid}
+            if ok and mid:
+                out["_undo"] = {"kind": "mission_cancel", "id": int(mid)}
+            return out
 
         if name == "log_expense":
             amt = Decimal(str(args.get("amount") or "0"))
@@ -218,13 +216,17 @@ def execute_tool(
                 notes_plain=str(args.get("note") or None),
                 fernet=None,
             )
-            return {"ok": ok, "message": msg, "expense_id": eid}
+            out_e: dict[str, Any] = {"ok": ok, "message": msg, "expense_id": eid}
+            if ok and eid:
+                out_e["_undo"] = {"kind": "expense_delete", "id": int(eid)}
+            return out_e
 
         if name == "schedule_meeting":
             raw_dt = str(args.get("datetime") or "").strip()
             st = datetime.fromisoformat(raw_dt.replace("Z", "+00:00"))
             if st.tzinfo is None:
-                st = st.replace(tzinfo=timezone.utc)
+                st = st.replace(tzinfo=_IST)
+            st = st.astimezone(timezone.utc)
             mt = str(args.get("meeting_type") or "other").strip().lower()[:32]
             if mt not in MEETING_TYPES:
                 mt = "other"
@@ -264,7 +266,20 @@ def execute_tool(
                 try_push_new_meeting(user_id=uid, organization_id=oid, meeting_id=mid)
             except Exception:
                 pass
-            return {"ok": True, "message": "meeting created", "meeting_id": mid}
+            gid: str | None = None
+            try:
+                with factory() as session:
+                    rm = session.get(PersonalMeeting, mid)
+                    if rm is not None and getattr(rm, "google_event_id", None):
+                        gid = str(rm.google_event_id).strip() or None
+            except Exception:
+                pass
+            return {
+                "ok": True,
+                "message": "meeting created",
+                "meeting_id": mid,
+                "_undo": meeting_undo_payload(mid, gid),
+            }
 
         if name == "get_today_brief":
             data = pcc.build_today_brief_sync(user_id=uid, organization_id=oid, fernet=None)
@@ -274,6 +289,9 @@ def execute_tool(
             if oid <= 0:
                 return {"ok": True, "snapshot": {"ok": False, "note": "no organization"}}
             snap = compute_dashboard_summary_sync(oid)
+            low = list_low_stock_alerts_sync(oid, threshold=5, limit=25)
+            if isinstance(snap, dict) and snap.get("ok"):
+                snap = {**snap, "low_stock_alerts": low}
             return {"ok": True, "snapshot": snap}
 
         if name == "set_health_log":
@@ -298,6 +316,9 @@ def execute_tool(
             factory = get_session_factory()
             if factory is None:
                 return {"ok": False, "items": []}
+            thr = Decimal("5")
+            items: list[dict[str, Any]] = []
+            seen: set[str] = set()
             with factory() as session:
                 rows = session.execute(
                     select(Inventory)
@@ -305,30 +326,67 @@ def execute_tool(
                     .where(func.lower(Inventory.sku_name).like(f"%{q}%"))
                     .limit(15)
                 ).scalars().all()
-                items = [
-                    {"sku_name": r.sku_name, "quantity": float(r.quantity or 0)} for r in rows
-                ]
-            return {"ok": True, "items": items}
+                for r in rows:
+                    key = (r.sku_name or "").lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    qty = float(r.quantity or 0)
+                    items.append(
+                        {
+                            "sku_name": r.sku_name,
+                            "quantity": qty,
+                            "location": (r.location or "").strip(),
+                            "low_stock_alert": qty < float(thr),
+                        }
+                    )
+                rows2 = session.execute(
+                    select(InventoryItem)
+                    .where(InventoryItem.organization_id == oid)
+                    .where(func.lower(InventoryItem.sku_name).like(f"%{q}%"))
+                    .limit(15)
+                ).scalars().all()
+                for r in rows2:
+                    key = (r.sku_name or "").lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    qty = float(r.quantity or 0)
+                    items.append(
+                        {
+                            "sku_name": r.sku_name,
+                            "quantity": qty,
+                            "location": (r.location or "").strip(),
+                            "low_stock_alert": qty < float(thr),
+                        }
+                    )
+            return {"ok": True, "items": items[:20]}
 
         if name == "get_upcoming_emis":
             factory = get_session_factory()
             if factory is None:
                 return {"ok": False, "emis": []}
+            today_d = datetime.now(timezone.utc).date()
+            horizon = today_d + timedelta(days=30)
             with factory() as session:
                 rows = session.execute(
                     select(PersonalLoan)
                     .where(PersonalLoan.user_id == uid, PersonalLoan.is_closed.is_(False))
                     .order_by(PersonalLoan.next_due_date.asc())
-                    .limit(8)
+                    .limit(24)
                 ).scalars().all()
-                emis = [
-                    {
-                        "name": r.display_name,
-                        "due": r.next_due_date.isoformat() if r.next_due_date else None,
-                        "emi": str(r.emi_amount) if r.emi_amount is not None else None,
-                    }
-                    for r in rows
-                ]
+                emis = []
+                for r in rows:
+                    nd = r.next_due_date
+                    if nd is None or nd < today_d or nd > horizon:
+                        continue
+                    emis.append(
+                        {
+                            "name": r.display_name,
+                            "due": nd.isoformat(),
+                            "emi": str(r.emi_amount) if r.emi_amount is not None else None,
+                        }
+                    )
             return {"ok": True, "emis": emis}
 
         if name == "create_habit":
@@ -338,12 +396,32 @@ def execute_tool(
                 goal_frequency=str(args.get("goal_frequency") or "daily").strip()[:128],
                 category=(str(args.get("category")).strip()[:32] if args.get("category") else None),
             )
-            return {"ok": ok, "message": msg, "habit_id": hid}
+            out_h: dict[str, Any] = {"ok": ok, "message": msg, "habit_id": hid}
+            if ok and hid:
+                out_h["_undo"] = {"kind": "habit_deactivate", "id": int(hid)}
+            return out_h
 
         return {"ok": False, "message": f"unknown tool {name}"}
     except Exception as e:
         _log.exception("tool %s failed", name)
         return {"ok": False, "message": str(e) or "tool error"}
+
+
+def undo_last_action(*, user: Any) -> dict[str, Any]:
+    from services.jarvis_undo_service import apply_undo_ops
+
+    uid = int(user.id)
+    ops = undo_pop_stack(uid)
+    if not ops:
+        return {"ok": False, "narrative": "", "error": "Nothing to undo yet.", "agent_mode": True}
+    ok, msg = apply_undo_ops(user_id=uid, ops=ops)
+    return {
+        "ok": ok,
+        "narrative": msg,
+        "response": msg,
+        "agent_mode": True,
+        "action_intent": {"kind": "jarvis_undo", "success": ok},
+    }
 
 
 def run_agent(
@@ -357,19 +435,14 @@ def run_agent(
     if not key:
         return {"ok": False, "narrative": "", "error": "GROQ_API_KEY not set"}
 
-    _cleanup_pending()
     uid = int(user.id)
 
     if agent_confirm and agent_pending_id:
-        entry = _pending.get(agent_pending_id)
-        if not entry:
+        calls = pending_pop(agent_pending_id, user_id=uid)
+        if not calls:
             return {"ok": False, "narrative": "", "error": "Pending action expired or invalid."}
-        exp, stored_uid, calls = entry
-        if time.time() > exp or stored_uid != uid:
-            _pending.pop(agent_pending_id, None)
-            return {"ok": False, "narrative": "", "error": "Pending action expired or not yours."}
-        _pending.pop(agent_pending_id, None)
         results: list[dict[str, Any]] = []
+        undo_ops: list[dict[str, Any]] = []
         for c in calls:
             name = c.get("name") or ""
             raw_args = c.get("arguments") or {}
@@ -379,8 +452,13 @@ def run_agent(
                 except Exception:
                     raw_args = {}
             out = execute_tool(name=name, args=raw_args if isinstance(raw_args, dict) else {}, user=user)
+            uop = out.pop("_undo", None) if isinstance(out, dict) else None
+            if isinstance(uop, dict):
+                undo_ops.append(uop)
             results.append({"tool": name, "result": out})
         ok_all = all(r["result"].get("ok") for r in results if isinstance(r.get("result"), dict))
+        if ok_all and undo_ops:
+            undo_store(uid, undo_ops)
         lines = [f"Executed {len(results)} action(s)."]
         for r in results:
             lines.append(f"- {r['tool']}: {json.dumps(r['result'], default=str)[:500]}")
@@ -456,7 +534,7 @@ def run_agent(
         )
 
     pending_id = secrets.token_urlsafe(24)
-    _pending[pending_id] = (time.time() + _PENDING_TTL_SEC, uid, serialized)
+    pending_set(pending_id, user_id=uid, tool_calls=serialized, ttl_sec=_PENDING_TTL_SEC)
 
     intro = (
         "I'll run the following — please confirm:\n"

@@ -7,6 +7,7 @@ import {
   switchOrganization,
 } from "../api/commandCenterApi.js";
 import MobileBottomNav from "../components/MobileBottomNav.jsx";
+import QuickActionsFAB from "../components/QuickActionsFAB.jsx";
 import { isOnboardingDone } from "../lib/onboarding.js";
 import { ROLES } from "../lib/rbac.js";
 import { useCommandStore } from "../store/useCommandStore.js";
@@ -143,6 +144,7 @@ export default function ShellLayout() {
         <Outlet />
       </main>
       <MobileBottomNav />
+      <QuickActionsFAB />
     </div>
   );
 }

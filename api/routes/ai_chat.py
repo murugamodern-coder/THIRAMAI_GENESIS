@@ -9,7 +9,7 @@ from typing import Literal
 import asset_portal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from api.dependencies import CurrentUser, get_current_user, require_permission
 from brain import MAX_USER_MESSAGE_CHARS, QueryLengthExceeded, run_brain, run_decision_engine
@@ -38,14 +38,22 @@ class ChatQueryBody(BaseModel):
     """JSON body for POST /chat/query (same behavior as GET /chat)."""
 
     message: str = Field(
-        ...,
-        min_length=1,
+        default="",
         max_length=MAX_USER_MESSAGE_CHARS,
-        description="Message to THIRAMAI (max 5000 characters)",
+        description="Message to THIRAMAI (max 5000 characters); optional when agent_undo is true",
     )
     agent_mode: bool = Field(False, description="Jarvis tool agent (Groq function calling + confirm flow)")
     agent_confirm: bool = Field(False, description="Execute pending tools after user confirmation")
     agent_pending_id: str | None = Field(None, max_length=256, description="ID from prior agent_mode response")
+    agent_undo: bool = Field(False, description="Undo last confirmed Jarvis tool batch (Redis-backed)")
+
+    @model_validator(mode="after")
+    def _message_required_unless_undo(self) -> ChatQueryBody:
+        if self.agent_undo:
+            return self
+        if not (self.message or "").strip():
+            raise ValueError("message is required unless agent_undo is true")
+        return self
 
 
 class ChatDecisionBody(BaseModel):
@@ -445,6 +453,11 @@ async def chat_query(
     ),
 ) -> JSONResponse:
     cid = getattr(request.state, "correlation_id", None)
+    if body.agent_undo:
+        from services import jarvis_agent_service as jarvis
+
+        payload = await asyncio.to_thread(lambda: jarvis.undo_last_action(user=_user))
+        return JSONResponse(content=payload)
     if body.agent_mode:
         from services import jarvis_agent_service as jarvis
 

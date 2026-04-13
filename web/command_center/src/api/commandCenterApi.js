@@ -17,10 +17,11 @@ export async function resolveDecision(decisionId, status) {
 
 export async function postChatQuery(message, opts = {}) {
   const { data } = await api.post("/chat/query", {
-    message,
+    message: message ?? "",
     agent_mode: !!opts.agent_mode,
     agent_confirm: !!opts.agent_confirm,
     agent_pending_id: opts.agent_pending_id ?? null,
+    agent_undo: !!opts.agent_undo,
   });
   return data;
 }
@@ -148,6 +149,11 @@ export async function fetchPersonalTodayBrief(vaultPassphrase) {
   return data;
 }
 
+export async function fetchPersonalWeeklyReview() {
+  const { data } = await api.get("/personal/os/weekly-review");
+  return data;
+}
+
 export async function fetchPersonalExpenses(limit = 100) {
   const { data } = await api.get("/personal/os/expenses", { params: { limit } });
   return data;
@@ -258,5 +264,10 @@ export async function fetchGoogleCalendarStatus() {
 
 export async function postGoogleCalendarSync() {
   const { data } = await api.post("/integrations/google/sync");
+  return data;
+}
+
+export async function postGoogleCalendarDisconnect() {
+  const { data } = await api.post("/integrations/google/disconnect");
   return data;
 }

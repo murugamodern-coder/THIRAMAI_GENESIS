@@ -80,6 +80,15 @@ async def today_brief(
     )
 
 
+@router.get("/weekly-review", summary="Last 7 days — tasks, spend, health, meetings, suggested priorities")
+async def weekly_review(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    return pcc.build_weekly_review_sync(user_id=int(user.id), organization_id=int(user.organization_id))
+
+
 class ExpenseCreateBody(BaseModel):
     amount: Decimal = Field(..., gt=0)
     currency: str = Field("INR", max_length=8)
@@ -704,6 +713,21 @@ async def meetings_update(
             )
             out = serialize_meeting(m)
     sug = suggest_duration_and_agenda(str(out.get("meeting_type") or "other"))
+    try:
+        from services.google_calendar_integration_service import push_meeting_event
+        from services.personal_meetings_service import ACTIVE_STATUSES
+
+        with factory() as session:
+            m2 = get_meeting_or_none(
+                session,
+                user_id=int(user.id),
+                organization_id=int(user.organization_id),
+                meeting_id=meeting_id,
+            )
+            if m2 is not None and m2.status in ACTIVE_STATUSES:
+                push_meeting_event(user_id=int(user.id), meeting=m2)
+    except Exception:
+        pass
     return {
         "status": "ok",
         "meeting": out,
@@ -727,9 +751,18 @@ async def meetings_delete(meeting_id: int, user: CurrentUser = Depends(get_curre
         )
         if m is None:
             raise HTTPException(status_code=404, detail="Meeting not found")
+        google_ev = getattr(m, "google_event_id", None)
+        google_ev_s = str(google_ev).strip() if google_ev else ""
         with session.begin():
             m.status = "cancelled"
             out = serialize_meeting(m)
+    if google_ev_s:
+        try:
+            from services.google_calendar_integration_service import delete_calendar_event
+
+            delete_calendar_event(user_id=int(user.id), event_id=google_ev_s)
+        except Exception:
+            pass
     return {"status": "ok", "meeting": out}
 
 

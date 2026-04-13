@@ -1373,15 +1373,24 @@ table.cc-table {
 .cc-mobile-nav__item {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   min-height: 48px;
-  font-size: 12px;
+  padding: 6px 4px;
+  font-size: 11px;
+  line-height: 1.2;
   font-weight: 600;
   color: var(--cc-muted);
   text-decoration: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+}
+
+.cc-mobile-nav__icon {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .cc-mobile-nav__item.is-active {
@@ -1406,5 +1415,200 @@ button {
   .cc-btn,
   button {
     min-height: auto;
+  }
+}
+
+/* Today page — loading, progress, alerts, win input */
+.cc-today-page--loading {
+  min-height: 40vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cc-today-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.cc-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--cc-border);
+  border-top-color: var(--cc-primary);
+  border-radius: 50%;
+  animation: cc-spin 0.75s linear infinite;
+}
+
+@keyframes cc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cc-today-hero-actions {
+  margin-top: 10px;
+}
+
+.cc-today-notif-btn {
+  font-size: 13px;
+  min-height: 40px;
+}
+
+.cc-today-progress {
+  margin-bottom: var(--cc-s2);
+}
+
+.cc-today-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.cc-today-streak {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cc-primary);
+}
+
+.cc-today-progress-bar-wrap {
+  height: 8px;
+  background: var(--cc-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.cc-today-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cc-primary), #22c55e);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.cc-today-next-up {
+  margin-bottom: var(--cc-s2);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), transparent);
+}
+
+.cc-today-next-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.cc-today-next-countdown {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--cc-primary);
+  margin: 0;
+}
+
+.cc-today-alert {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cc-today-alert-link {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cc-primary);
+  text-decoration: none;
+}
+
+.cc-today-alert-link:hover {
+  text-decoration: underline;
+}
+
+.cc-today-win-input {
+  font-size: 16px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .cc-input,
+  .cc-textarea,
+  .cc-today-win-input {
+    font-size: 16px;
+  }
+}
+
+/* Quick actions FAB (mobile) */
+.cc-fab-root {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .cc-fab-root {
+    display: block;
+    position: fixed;
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    z-index: 95;
+  }
+
+  .cc-fab-main {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: var(--cc-primary);
+    color: #fff;
+    font-size: 28px;
+    font-weight: 300;
+    line-height: 1;
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .cc-fab-main.is-open {
+    background: #334155;
+  }
+
+  .cc-fab-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 17, 23, 0.35);
+    z-index: 90;
+  }
+
+  .cc-fab-menu {
+    position: absolute;
+    right: 0;
+    bottom: 64px;
+    min-width: 200px;
+    background: var(--cc-surface);
+    border: 1px solid var(--cc-border);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    padding: 8px;
+    z-index: 96;
+  }
+
+  .cc-fab-menu__item {
+    display: block;
+    padding: 12px 14px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--cc-text);
+    text-decoration: none;
+    border-radius: 8px;
+    min-height: 48px;
+    box-sizing: border-box;
+  }
+
+  .cc-fab-menu__item:hover,
+  .cc-fab-menu__item:focus {
+    background: rgba(37, 99, 235, 0.08);
   }
 }

@@ -17,6 +17,9 @@ export default function AIAssistantPanel() {
   const [agentMode, setAgentMode] = useState(false);
   const [pendingId, setPendingId] = useState(null);
   const [agentHint, setAgentHint] = useState("");
+  const [proposals, setProposals] = useState([]);
+  const [speakReplies, setSpeakReplies] = useState(false);
+  const [listening, setListening] = useState(false);
 
   const priorityRank = useCallback((p) => {
     if (p === "high") return 0;
@@ -73,6 +76,7 @@ export default function AIAssistantPanel() {
       if (!confirming) {
         setRaw("");
         setInsights([]);
+        setProposals([]);
       }
       setAgentHint(confirming ? "Running confirmed actions…" : agentMode ? "THIRAMAI is thinking…" : "");
       try {
@@ -91,16 +95,29 @@ export default function AIAssistantPanel() {
 
         if (data?.needs_confirmation && data?.agent_pending_id) {
           setPendingId(data.agent_pending_id);
+          setProposals(Array.isArray(data.proposals) ? data.proposals : []);
           setAgentHint("Confirm the actions below, then press Confirm.");
           showToastDedup({ type: "info", message: "Review and confirm Jarvis actions" });
           return;
         }
         setPendingId(null);
         setAgentHint("");
+        setProposals([]);
 
         if (data?.agent_mode) {
           showToastDedup({ type: "success", message: "Jarvis completed" });
           setInsights([]);
+          const line = String(data?.narrative || data?.response || "").trim();
+          if (speakReplies && line && typeof window !== "undefined" && window.speechSynthesis) {
+            try {
+              window.speechSynthesis.cancel();
+              const u = new SpeechSynthesisUtterance(line.slice(0, 2000));
+              u.lang = "en-IN";
+              window.speechSynthesis.speak(u);
+            } catch {
+              /* ignore */
+            }
+          }
           return;
         }
 
@@ -131,8 +148,57 @@ export default function AIAssistantPanel() {
         setLoading(false);
       }
     },
-    [loading, message, safeParseInsights, agentMode, pendingId],
+    [loading, message, safeParseInsights, agentMode, pendingId, speakReplies],
   );
+
+  const doUndo = useCallback(async () => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await postChatQuery("", { agent_undo: true });
+      if (data?.error && !data?.narrative) {
+        setError(String(data.error));
+        showToastDedup({ type: "error", message: String(data.error) });
+        return;
+      }
+      const txt = String(data?.narrative || data?.response || "").trim();
+      setRaw(txt);
+      showToastDedup({ type: "success", message: "Undo processed" });
+    } catch (e) {
+      const d = e?.response?.data?.detail;
+      const msg = typeof d === "string" ? d : e?.message || "Undo failed";
+      setError(msg);
+      showToastDedup({ type: "error", message: msg });
+    } finally {
+      setLoading(false);
+    }
+  }, [loading]);
+
+  const startVoice = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      showToastDedup({ type: "warning", message: "Voice input not supported in this browser" });
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "en-IN";
+    rec.continuous = false;
+    rec.interimResults = false;
+    setListening(true);
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    rec.onresult = (ev) => {
+      const t = ev.results?.[0]?.[0]?.transcript;
+      if (t) setMessage((prev) => `${(prev || "").trim()} ${t}`.trim());
+    };
+    try {
+      rec.start();
+    } catch {
+      setListening(false);
+    }
+  }, []);
 
   const onRunAction = useCallback(async (action, insightId) => {
       const key = `${insightId || "insight"}__${action?.type || "action"}__${JSON.stringify(action?.payload || {})}`;
@@ -247,9 +313,14 @@ export default function AIAssistantPanel() {
           onChange={(e) => {
             setAgentMode(e.target.checked);
             setPendingId(null);
+            setProposals([]);
           }}
         />
         <span>Jarvis agent mode (tools + confirm)</span>
+      </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "pointer" }}>
+        <input type="checkbox" checked={speakReplies} onChange={(e) => setSpeakReplies(e.target.checked)} />
+        <span>Speak Jarvis replies (text-to-speech)</span>
       </label>
       <textarea
         className="cc-textarea"
@@ -262,12 +333,36 @@ export default function AIAssistantPanel() {
       />
       {agentHint ? (
         <p className="cc-muted" style={{ marginBottom: 8, fontSize: 13 }}>
-          {agentHint}
+          {loading && pendingId ? "Executing tools…" : agentHint}
         </p>
+      ) : null}
+      {pendingId && proposals.length > 0 ? (
+        <div className="cc-card" style={{ marginBottom: 12, background: "rgba(37, 99, 235, 0.06)" }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Proposed actions</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14 }}>
+            {proposals.map((p, i) => (
+              <li key={i} style={{ marginBottom: 6 }}>
+                {p.summary || p.tool || "Action"}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       <div style={{ marginTop: 16, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" className="cc-btn cc-btn-primary" disabled={loading} onClick={() => send({})}>
           {loading ? "Running…" : "Send"}
+        </button>
+        <button
+          type="button"
+          className="cc-btn cc-btn-secondary"
+          disabled={loading || listening}
+          onClick={startVoice}
+          title="Voice input (Web Speech API)"
+        >
+          {listening ? "Listening…" : "Voice"}
+        </button>
+        <button type="button" className="cc-btn cc-btn-secondary" disabled={loading} onClick={doUndo}>
+          Undo last action
         </button>
         {pendingId ? (
           <button

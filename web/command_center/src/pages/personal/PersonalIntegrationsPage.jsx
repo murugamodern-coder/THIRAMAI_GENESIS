@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   fetchGoogleCalendarStatus,
   postGoogleCalendarConnect,
+  postGoogleCalendarDisconnect,
   postGoogleCalendarSync,
 } from "../../api/commandCenterApi.js";
 import { showToastDedup } from "../../lib/toastDedup.js";
@@ -59,6 +60,18 @@ export default function PersonalIntegrationsPage() {
     }
   }
 
+  async function disconnectGoogle() {
+    if (!window.confirm("Disconnect Google Calendar on this account?")) return;
+    try {
+      await postGoogleCalendarDisconnect();
+      showToastDedup({ type: "success", message: "Google Calendar disconnected" });
+      await load();
+    } catch (e) {
+      const d = e?.response?.data?.detail;
+      showToastDedup({ type: "error", message: typeof d === "string" ? d : "Disconnect failed" });
+    }
+  }
+
   async function syncNow() {
     setSyncing(true);
     try {
@@ -84,7 +97,8 @@ export default function PersonalIntegrationsPage() {
       <section style={{ marginTop: 24 }}>
         <h2 style={{ fontSize: 16 }}>Google Calendar</h2>
         <p className="cc-muted" style={{ fontSize: 14 }}>
-          New meetings created in THIRAMAI can be pushed to your Google primary calendar when connected.
+          Meetings created or updated in THIRAMAI sync to your Google primary calendar when connected. Cancelling a
+          meeting removes the Google event when possible. If Google returns an error, try reconnecting.
         </p>
         {loading ? (
           <p className="cc-muted">Loading status…</p>
@@ -112,6 +126,14 @@ export default function PersonalIntegrationsPage() {
                 onClick={syncNow}
               >
                 {syncing ? "Syncing…" : "Sync meetings now"}
+              </button>
+              <button
+                type="button"
+                className="cc-btn cc-btn-secondary"
+                disabled={!status?.connected}
+                onClick={disconnectGoogle}
+              >
+                Disconnect
               </button>
             </div>
           </>

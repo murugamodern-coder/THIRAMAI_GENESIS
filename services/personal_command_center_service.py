@@ -18,11 +18,14 @@ from sqlalchemy.orm import Session
 from core.database import get_session_factory
 from core.db.models import (
     DoctorVisit,
+    Habit,
     HealthLog,
+    Invoice,
     MedicineTracker,
     PersonalBudget,
     PersonalExpense,
     PersonalLoan,
+    PersonalMeeting,
     PersonalMission,
     ResearchProject,
     User,
@@ -393,6 +396,29 @@ def build_today_brief_sync(
 
     business_snapshot: dict[str, Any] = {"ok": False}
     sales = agg.get("today_sales") if isinstance(agg.get("today_sales"), dict) else {}
+    pending_invoices_count = 0
+    pending_invoices_total_inr: str | None = None
+    if oid > 0 and factory is not None:
+        with factory() as session:
+            pending_invoices_count = int(
+                session.execute(
+                    select(func.count())
+                    .select_from(Invoice)
+                    .where(
+                        Invoice.organization_id == oid,
+                        Invoice.payment_status == "unpaid",
+                    )
+                ).scalar()
+                or 0
+            )
+            total_unpaid = session.execute(
+                select(func.coalesce(func.sum(Invoice.grand_total_inr), 0)).where(
+                    Invoice.organization_id == oid,
+                    Invoice.payment_status == "unpaid",
+                )
+            ).scalar()
+            if total_unpaid is not None:
+                pending_invoices_total_inr = str(Decimal(str(total_unpaid)).quantize(Decimal("0.01")))
     if oid > 0 and sales.get("ok"):
         rev = sales.get("revenue_inr") if isinstance(sales.get("revenue_inr"), dict) else {}
         business_snapshot = {
@@ -401,6 +427,19 @@ def build_today_brief_sync(
             "revenue_week_inr": rev.get("this_week"),
             "revenue_month_inr": rev.get("this_month"),
             "top_selling_products": sales.get("top_selling_products") or [],
+            "pending_invoices_count": pending_invoices_count,
+            "pending_invoices_total_inr": pending_invoices_total_inr,
+        }
+    elif oid > 0:
+        business_snapshot = {
+            "ok": True,
+            "note": "revenue_summary_unavailable",
+            "revenue_today_inr": None,
+            "revenue_week_inr": None,
+            "revenue_month_inr": None,
+            "top_selling_products": [],
+            "pending_invoices_count": pending_invoices_count,
+            "pending_invoices_total_inr": pending_invoices_total_inr,
         }
 
     alerts: list[dict[str, Any]] = []
@@ -441,6 +480,7 @@ def build_today_brief_sync(
 
     low = agg.get("low_stock") if isinstance(agg.get("low_stock"), dict) else {}
     items = low.get("items") if isinstance(low.get("items"), list) else []
+    low_stock_count = int(low.get("count") or 0) if isinstance(low.get("count"), int) else len(items)
     if oid > 0 and items:
         first = items[0] if isinstance(items[0], dict) else {}
         sku = str(first.get("sku_name") or first.get("name") or "Item").strip() or "Item"
@@ -473,29 +513,217 @@ def build_today_brief_sync(
 
     sev_rank = {"high": 0, "medium": 1, "low": 2}
     alerts.sort(key=lambda a: sev_rank.get(str(a.get("severity")), 9))
-    proactive_alerts = alerts[:3]
+    _alert_urls = {
+        "meeting_soon": "#/today",
+        "emi_due": "#/personal/finance",
+        "low_stock": "#/dashboard/inventory",
+        "health_stale": "#/personal/health",
+    }
+    proactive_alerts: list[dict[str, Any]] = []
+    for a in alerts[:3]:
+        code = str(a.get("code") or "notice")
+        proactive_alerts.append(
+            {
+                **a,
+                "type": code,
+                "action_url": _alert_urls.get(code, "#/today"),
+            }
+        )
 
     nudges = agg.get("meeting_nudges") if isinstance(agg.get("meeting_nudges"), list) else []
+
+    day_key = str(brief.get("date") or "")[:10]
+    try:
+        day_of_week = date.fromisoformat(day_key).strftime("%A") if day_key else ""
+    except Exception:
+        day_of_week = ""
+
+    focus_out = dict(focus_task) if focus_task else None
+    if focus_out:
+        focus_out["due_date"] = focus_out.get("deadline")
+
+    def _meeting_location_display(m: dict[str, Any]) -> str:
+        lt = str(m.get("location_type") or "")
+        name = (m.get("location_name") or "").strip()
+        addr = (m.get("location_address") or "").strip()
+        if lt == "online":
+            return "Online"
+        if name and addr:
+            return f"{name} · {addr[:120]}"
+        return name or addr or (lt.replace("_", " ").title() if lt else "—")
+
+    meetings_enriched: list[dict[str, Any]] = []
+    for m in meetings_today:
+        mt = str(m.get("meeting_type") or "other")
+        meetings_enriched.append({**m, "location": _meeting_location_display(m), "type": mt})
+    meetings_today = meetings_enriched
+
+    next_meeting: dict[str, Any] | None = None
+    nx = next((x for x in meetings_today if x.get("is_next")), None)
+    if nx and nx.get("scheduled_at"):
+        try:
+            raw_dt = str(nx["scheduled_at"]).replace("Z", "+00:00")
+            dt_nx = datetime.fromisoformat(raw_dt)
+            if dt_nx.tzinfo is None:
+                dt_nx = dt_nx.replace(tzinfo=timezone.utc)
+            delta_min = int((dt_nx - now).total_seconds() // 60)
+            if delta_min < 0:
+                countdown = "Started"
+            elif delta_min == 0:
+                countdown = "Starting now"
+            else:
+                countdown = f"in {delta_min} minutes"
+            next_meeting = {**nx, "countdown_text": countdown, "minutes_until": delta_min}
+        except Exception:
+            next_meeting = {**nx, "countdown_text": None, "minutes_until": None}
+
+    upcoming_emis_next: dict[str, Any] | None = None
+    horizon_end = today_d + timedelta(days=30)
+    for emi in fin.get("upcoming_emis") or []:
+        if not isinstance(emi, dict):
+            continue
+        due_s = emi.get("due")
+        if not due_s:
+            continue
+        try:
+            due_d = date.fromisoformat(str(due_s)[:10])
+            if today_d <= due_d <= horizon_end:
+                upcoming_emis_next = emi
+                break
+        except Exception:
+            continue
+
+    habit_streak_best = 0
+    tasks_completed_today = int(agg.get("tasks_completed_today") or 0)
+    open_missions_total = len(agg.get("tasks") or [])
+    if factory is not None and uid > 0:
+        with factory() as session:
+            habits = list(
+                session.execute(select(Habit).where(Habit.user_id == uid, Habit.is_active.is_(True))).scalars().all()
+            )
+            if habits:
+                habit_streak_best = max(int(h.streak_count or 0) for h in habits)
+
+    insight_line = str(brief.get("ai_insight") or "").strip()
 
     return {
         "ok": True,
         "as_of_utc": brief.get("as_of_utc"),
         "date": brief.get("date"),
+        "day_of_week": day_of_week,
         "greeting": {
             "display_name": greet,
             "server_time_utc": datetime.now(timezone.utc).isoformat(),
         },
         "weather": brief.get("weather"),
         "weather_configured": weather_configured,
-        "focus_task": focus_task,
+        "focus_task": focus_out,
         "meetings_today": meetings_today,
+        "next_meeting": next_meeting,
+        "health_score": brief.get("health_score"),
         "health_score_yesterday": brief.get("health_score"),
         "business_snapshot": business_snapshot,
         "proactive_alerts": proactive_alerts,
-        "motivational_insight": brief.get("ai_insight") or "",
+        "ai_insight": insight_line,
+        "motivational_insight": insight_line,
+        "upcoming_emis": upcoming_emis_next,
+        "low_stock_count": low_stock_count,
+        "habit_streak_days": habit_streak_best,
+        "tasks_progress": {
+            "completed_today": tasks_completed_today,
+            "open_total": open_missions_total,
+        },
         "meeting_nudges": nudges[:5],
         "meetings_upcoming_7d_count": brief.get("meetings_upcoming_7d_count", 0),
         "financial_snapshot": fin,
+    }
+
+
+def build_weekly_review_sync(*, user_id: int, organization_id: int) -> dict[str, Any]:
+    """Last 7 days snapshot for weekly review UI (tasks, health, spend, meetings)."""
+    uid = int(user_id)
+    oid = int(organization_id)
+    now = datetime.now(timezone.utc)
+    week_start = now - timedelta(days=7)
+    start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    out: dict[str, Any] = {
+        "ok": True,
+        "period_start_utc": start.isoformat(),
+        "period_end_utc": now.isoformat(),
+    }
+    factory = _factory()
+    if factory is None or uid <= 0:
+        return {**out, "note": "database_or_user_unavailable"}
+
+    with factory() as session:
+        missions_done = int(
+            session.execute(
+                select(func.count())
+                .select_from(PersonalMission)
+                .where(
+                    PersonalMission.user_id == uid,
+                    ~PersonalMission.status.in_(tuple(MISSION_OPEN_STATUSES)),
+                    PersonalMission.updated_at >= start,
+                )
+            ).scalar()
+            or 0
+        )
+        missions_open = int(
+            session.execute(
+                select(func.count())
+                .select_from(PersonalMission)
+                .where(
+                    PersonalMission.user_id == uid,
+                    PersonalMission.status.in_(tuple(MISSION_OPEN_STATUSES)),
+                )
+            ).scalar()
+            or 0
+        )
+        spent_week = session.execute(
+            select(func.coalesce(func.sum(PersonalExpense.amount), 0)).where(
+                PersonalExpense.user_id == uid,
+                PersonalExpense.spent_at >= start,
+            )
+        ).scalar()
+        health_logs = int(
+            session.execute(
+                select(func.count(func.distinct(HealthLog.logged_on)))
+                .where(HealthLog.user_id == uid, HealthLog.logged_on >= start.date())
+            ).scalar()
+            or 0
+        )
+        meetings_week = 0
+        if oid > 0:
+            meetings_week = int(
+                session.execute(
+                    select(func.count())
+                    .select_from(PersonalMeeting)
+                    .where(
+                        PersonalMeeting.user_id == uid,
+                        PersonalMeeting.organization_id == oid,
+                        PersonalMeeting.scheduled_at >= start,
+                    )
+                ).scalar()
+                or 0
+            )
+
+    priorities = []
+    if factory is not None:
+        brief = build_morning_brief_sync(user_id=uid, organization_id=oid, fernet=None)
+        for p in (brief.get("priorities") or [])[:5]:
+            if isinstance(p, dict) and p.get("title"):
+                priorities.append(
+                    {"title": p.get("title"), "priority": p.get("priority"), "deadline": p.get("deadline")}
+                )
+
+    return {
+        **out,
+        "tasks_completed_week": missions_done,
+        "tasks_open_now": missions_open,
+        "personal_spend_week_inr": str(Decimal(str(spent_week or 0)).quantize(Decimal("0.01"))),
+        "health_logs_logged_days_approx": health_logs,
+        "meetings_scheduled_week": meetings_week,
+        "next_week_priorities_suggested": priorities,
     }
 
 

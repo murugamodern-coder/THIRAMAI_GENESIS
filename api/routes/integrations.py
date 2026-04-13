@@ -65,3 +65,10 @@ async def google_status(user: CurrentUser = Depends(get_current_user)) -> dict[s
     if int(user.id) <= 0:
         raise HTTPException(status_code=400, detail="Real user id required")
     return gcal.integration_status(user_id=int(user.id))
+
+
+@router.post("/integrations/google/disconnect", summary="Disconnect Google Calendar (clear tokens)")
+async def google_disconnect(user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    return gcal.disconnect_user(user_id=int(user.id))

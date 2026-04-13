@@ -233,6 +233,35 @@ def _event_body(m: PersonalMeeting) -> dict[str, Any]:
     }
 
 
+def delete_calendar_event(*, user_id: int, event_id: str) -> bool:
+    """Remove an event from the user's primary calendar. Returns True if deleted or already gone."""
+    eid = (event_id or "").strip()
+    if not eid:
+        return True
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
+    except ImportError:
+        _log.warning("google-api-python-client not installed")
+        return False
+    creds = get_calendar_credentials(user_id=user_id)
+    if creds is None:
+        return False
+    try:
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        service.events().delete(calendarId="primary", eventId=eid).execute()
+        return True
+    except HttpError as e:
+        code = getattr(e, "status_code", None) or getattr(getattr(e, "resp", None), "status", None)
+        if code == 404:
+            return True
+        _log.warning("google calendar delete failed: %s", e)
+        return False
+    except Exception:
+        _log.exception("google calendar delete failed")
+        return False
+
+
 def push_meeting_event(*, user_id: int, meeting: PersonalMeeting) -> str | None:
     try:
         from googleapiclient.discovery import build
@@ -329,6 +358,30 @@ def sync_all_meetings_for_user(*, user_id: int) -> dict[str, Any]:
             if row is not None:
                 row.last_synced_at = datetime.now(timezone.utc)
     return {"ok": True, "pushed": pushed, "errors": errors, "total": len(rows)}
+
+
+def disconnect_user(*, user_id: int) -> dict[str, Any]:
+    """Clear stored tokens and mark integration inactive."""
+    uid = int(user_id)
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "no database"}
+    with factory() as session:
+        with session.begin():
+            row = session.execute(
+                select(UserIntegration).where(
+                    UserIntegration.user_id == uid,
+                    UserIntegration.integration_type == GCAL_TYPE,
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return {"ok": True, "disconnected": False}
+            row.access_token_enc = None
+            row.refresh_token_enc = None
+            row.expires_at = None
+            row.is_active = False
+            row.last_synced_at = None
+    return {"ok": True, "disconnected": True}
 
 
 def integration_status(*, user_id: int) -> dict[str, Any]:

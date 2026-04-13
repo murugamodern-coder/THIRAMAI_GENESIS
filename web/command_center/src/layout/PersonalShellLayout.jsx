@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 
 import MobileBottomNav from "../components/MobileBottomNav.jsx";
+import QuickActionsFAB from "../components/QuickActionsFAB.jsx";
 
 export default function PersonalShellLayout() {
   return (
@@ -34,6 +35,9 @@ export default function PersonalShellLayout() {
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/personal/integrations">
             Integrations
           </NavLink>
+          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/personal/weekly-review">
+            Weekly review
+          </NavLink>
         </nav>
         <Link to="/dashboard" className="cc-muted" style={{ marginLeft: "auto", fontSize: 13 }}>
           Business dashboard
@@ -43,6 +47,7 @@ export default function PersonalShellLayout() {
         <Outlet />
       </main>
       <MobileBottomNav />
+      <QuickActionsFAB />
     </div>
   );
 }
