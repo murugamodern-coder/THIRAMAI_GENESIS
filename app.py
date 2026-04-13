@@ -59,7 +59,7 @@ from core.background_agent import start_background_agent, stop_background_agent
 from workers.alert_system import shutdown_alert_scheduler, start_alert_scheduler
 from workers.sovereign_scheduler import shutdown_sovereign_scheduler, start_sovereign_scheduler
 
-# Canonical SPA: static/index.html (same as ``GET /``). Legacy root ``index.html`` is not served by default.
+# Legacy control-tower HTML (optional). Default ``GET /`` redirects to Command Center when built.
 SPA_INDEX_PATH = ROOT / "static" / "index.html"
 SCRIPT_PATH = ROOT / "script.js"
 
@@ -271,37 +271,85 @@ def command_center_spa_shortcut() -> RedirectResponse:
             status_code=404,
             detail="Command Center SPA not built. Run: cd web/command_center && npm run build",
         )
-    return RedirectResponse(url="/static/command_center/index.html", status_code=302)
+    return RedirectResponse(
+        url="/static/command_center/index.html#/personal",
+        status_code=302,
+        headers=_browser_root_redirect_headers(),
+    )
 
 
-@app.get("/", tags=["System"], summary="SPA or JSON liveness")
+def _browser_root_redirect_headers() -> dict[str, str]:
+    return {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+
+
+@app.api_route("/", methods=["GET", "HEAD"], tags=["System"], summary="Command Center redirect, legacy SPA, or JSON liveness")
 def home(request: Request) -> Response:
     """
-    Browsers receive ``static/index.html`` (SPA). Clients sending ``Accept: application/json``
-    receive the legacy JSON liveness payload (same shape as before).
+    - ``Accept: application/json`` → JSON liveness (unchanged for probes).
+    - Default browser request → **302** to React Command Center ``#/personal`` when built.
+    - ``THIRAMAI_LEGACY_ROOT_SPA=1`` → serve ``static/index.html`` again (rollback).
     """
     accept = request.headers.get("accept", "")
     if "application/json" in accept:
+        if request.method == "HEAD":
+            return Response(status_code=200, media_type="application/json")
         return JSONResponse(content={"status": "Thiramai Genesis is Active"})
+
+    if get_settings().legacy_root_spa_truthy():
+        if not SPA_INDEX_PATH.is_file():
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "SPA not found at static/index.html"},
+            )
+        return FileResponse(
+            SPA_INDEX_PATH,
+            media_type="text/html; charset=utf-8",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
+
+    if _COMMAND_CENTER_INDEX.is_file():
+        return RedirectResponse(
+            url="/static/command_center/index.html#/personal",
+            status_code=302,
+            headers=_browser_root_redirect_headers(),
+        )
+
     if not SPA_INDEX_PATH.is_file():
         return JSONResponse(
             status_code=503,
-            content={"detail": "SPA not found at static/index.html"},
+            content={"detail": "Command Center not built and static/index.html missing."},
         )
-    return FileResponse(SPA_INDEX_PATH, media_type="text/html; charset=utf-8")
+    return FileResponse(
+        SPA_INDEX_PATH,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
-@app.head("/dashboard", tags=["System"], include_in_schema=False)
-def dashboard_head() -> Response:
-    return Response(status_code=200)
-
-
-@app.get("/dashboard", tags=["System"], summary="React SPA (same as GET /)")
-def dashboard_page() -> FileResponse:
-    """Single-page app entry — **static/index.html** (unified with ``GET /``)."""
+@app.api_route("/dashboard", methods=["GET", "HEAD"], tags=["System"], summary="Command Center redirect (business shell)")
+def dashboard_page() -> Response:
+    """Browser entry for the org dashboard → React ``#/dashboard`` (same SPA as Command Center)."""
+    if get_settings().legacy_root_spa_truthy():
+        if not SPA_INDEX_PATH.is_file():
+            raise HTTPException(status_code=500, detail="SPA not found at static/index.html.")
+        return FileResponse(
+            SPA_INDEX_PATH,
+            media_type="text/html; charset=utf-8",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
+    if _COMMAND_CENTER_INDEX.is_file():
+        return RedirectResponse(
+            url="/static/command_center/index.html#/dashboard",
+            status_code=302,
+            headers=_browser_root_redirect_headers(),
+        )
     if not SPA_INDEX_PATH.is_file():
-        raise HTTPException(status_code=500, detail="SPA not found at static/index.html.")
-    return FileResponse(SPA_INDEX_PATH, media_type="text/html; charset=utf-8")
+        raise HTTPException(status_code=500, detail="Command Center not built and static/index.html missing.")
+    return FileResponse(
+        SPA_INDEX_PATH,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 @app.head("/script.js", tags=["System"], include_in_schema=False)

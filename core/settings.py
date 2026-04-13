@@ -57,6 +57,10 @@ class ThiramaiSettings(BaseSettings):
     THIRAMAI_DASHBOARD_LOW_STOCK_THRESHOLD: str = ""
     THIRAMAI_RL_TRUST_X_FORWARDED_FOR: str = ""
     THIRAMAI_STRICT_ORIGIN: str = ""
+    # Comma-separated Host header allow-list (like Django ALLOWED_HOSTS). Empty = disabled.
+    THIRAMAI_ALLOWED_HOSTS: str = ""
+    # Set to 1 to serve legacy ``static/index.html`` at ``GET /`` again (emergency rollback only).
+    THIRAMAI_LEGACY_ROOT_SPA: str = ""
 
     @field_validator(
         "THIRAMAI_CORS_ALLOW_ALL",
@@ -64,6 +68,7 @@ class ThiramaiSettings(BaseSettings):
         "THIRAMAI_ENABLE_ALERT_SCHEDULER",
         "THIRAMAI_SOVEREIGN_SCHEDULER",
         "THIRAMAI_BACKGROUND_AGENT",
+        "THIRAMAI_LEGACY_ROOT_SPA",
         mode="before",
     )
     @classmethod
@@ -89,6 +94,9 @@ class ThiramaiSettings(BaseSettings):
 
     def background_agent_truthy(self) -> bool:
         return _truthy(self.THIRAMAI_BACKGROUND_AGENT)
+
+    def legacy_root_spa_truthy(self) -> bool:
+        return _truthy(self.THIRAMAI_LEGACY_ROOT_SPA)
 
     def disable_openapi_uis(self) -> bool:
         """Hide Swagger UI and Redoc in production."""

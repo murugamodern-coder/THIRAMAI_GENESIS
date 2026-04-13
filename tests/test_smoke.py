@@ -19,8 +19,8 @@ def test_health_root() -> None:
 
 
 def test_root_spa_html_without_json_accept() -> None:
-    """Browser-style GET / should receive HTML when static/index.html exists."""
-    client = TestClient(app)
+    """Browser-style GET / should redirect to Command Center or return HTML fallback."""
+    client = TestClient(app, follow_redirects=True)
     r = client.get("/")
     assert r.status_code == 200
     ct = (r.headers.get("content-type") or "").lower()

@@ -2,6 +2,18 @@
 
 This guide puts **HTTPS** in front of the FastAPI stack (JARVIS / council `/chat`, billing, auth, `/docs`) when you run the API on **`127.0.0.1:8000`** via `docker-compose.production.yml`.
 
+### Site file name (`thiramai` vs `thiramai-api`)
+
+Use whatever filename you already symlink under `sites-enabled` (e.g. `/etc/nginx/sites-available/thiramai`). The important part is **`proxy_pass http://127.0.0.1:8000`** matching **`WEB_PORT`** in `.env.production` (default `8000`). If you use `WEB_PORT=18080`, use `proxy_pass http://127.0.0.1:18080;` instead.
+
+**Invalid backslashes:** Nginx directives must not contain Windows-style line continuations or stray `\` before `proxy_set_header`. Each directive is a single line ending with `;`, for example:
+
+```nginx
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+not `\proxy_set_header` or broken quoted strings.
+
 ## Prerequisites
 
 - Ubuntu 22.04 LTS (or similar) with Docker Compose already running the stack.
@@ -134,7 +146,34 @@ curl -fsS -H 'Accept: application/json' https://api.yourdomain.com/
 
 Expect JSON liveness. For authenticated routes, use `Authorization: Bearer <JWT>` as usual.
 
-## 8. Operational notes
+## 8. App hostname (`app.thiramai.co.in`) — root URL must hit the API
+
+The React **Command Center** is built to `static/command_center/` with `base: /static/command_center/`. **FastAPI** (this repo — not Django) should own **`GET /`**: it returns **302** to `/static/command_center/index.html#/personal` when the bundle exists, so `https://app.thiramai.co.in/` never serves legacy `static/index.html`.
+
+**If the browser still shows the old UI:**
+
+1. **Nginx must proxy `/` to the app**, not `alias` to a filesystem copy of `static/index.html`. Bad pattern:
+
+   ```nginx
+   # DO NOT serve an on-disk index for / — it bypasses the app and never updates with deploys.
+   # location = / { alias /var/www/thiramai/static/index.html; }
+   ```
+
+2. **Prefer one source of truth** — either the **app** redirect (default after the code change above) **or** an Nginx redirect, not both with different targets.
+
+   Optional Nginx-only redirect (only if you terminate HTML at Nginx and do not rely on FastAPI for `/`):
+
+   ```nginx
+   location = / {
+       return 302 /static/command_center/index.html#/personal;
+   }
+   ```
+
+   Then ensure **`/static/command_center/`** is still reachable (same `proxy_pass` upstream as other paths, unless you offload static files to Nginx with a **synced** tree from each deploy).
+
+3. **Cache busting:** Command Center `index.html` is served with **`Cache-Control: no-store`** from the app. CDN in front of `app.*` should **not** cache `index.html` aggressively; long cache is fine for `cc-app.js?v=…` query strings from the Vite build.
+
+## 9. Operational notes
 
 | Topic | Guidance |
 |--------|-----------|
