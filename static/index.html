@@ -358,18 +358,38 @@
       var modeSelectMobile = document.getElementById('mode-select-mobile');
       var currentMode = 'enterprise';
 
+      /** Personal OS UI lives in the React Command Center (HashRouter), not this legacy page. */
+      function goCommandCenter(hashTail) {
+        var h = hashTail && String(hashTail).charAt(0) === '#' ? hashTail : '#/personal';
+        var url = '/static/command_center/index.html' + h;
+        try {
+          location.replace(url);
+        } catch (e) {
+          location.href = url;
+        }
+      }
+
       function showLogin() {
         loginEl.classList.remove('hidden');
         dashEl.classList.add('hidden');
       }
       function showDash() {
+        if (getSavedMode() === 'personal') {
+          try {
+            localStorage.setItem(MODE_KEY, 'enterprise');
+          } catch (e) {}
+          goCommandCenter('#/personal');
+          return;
+        }
         loginEl.classList.add('hidden');
         dashEl.classList.remove('hidden');
         loadOrgSwitcher();
         setMode(getSavedMode(), true);
       }
 
-      if (getToken()) showDash();
+      if (/^#\/(personal|login|signup|onboarding|dashboard)/.test(location.hash || '')) {
+        goCommandCenter(location.hash);
+      } else if (getToken()) showDash();
       else showLogin();
 
       loginForm.addEventListener('submit', function (e) {
@@ -416,6 +436,13 @@
 
       function setMode(mode, skipSave) {
         if (mode !== 'enterprise' && mode !== 'research' && mode !== 'personal') mode = 'enterprise';
+        if (mode === 'personal') {
+          try {
+            localStorage.setItem(MODE_KEY, 'enterprise');
+          } catch (e) {}
+          goCommandCenter('#/personal');
+          return;
+        }
         currentMode = mode;
         if (!skipSave) saveMode(mode);
         updateNavActive(mode);
@@ -426,14 +453,10 @@
 
         var orgLabel = navOrgWrap ? navOrgWrap.querySelector('label') : null;
         if (orgLabel) {
-          if (mode === 'personal') orgLabel.classList.add('hidden');
-          else orgLabel.classList.remove('hidden');
+          orgLabel.classList.remove('hidden');
         }
 
-        if (mode === 'personal') {
-          chatHeading.textContent = 'Personal copilot';
-          chatSub.textContent = 'Same /chat/query — use for planning, habits, and reflection.';
-        } else if (mode === 'research') {
+        if (mode === 'research') {
           chatHeading.textContent = 'Research assistant';
           chatSub.textContent = 'Ask follow-ups on market intel · POST /chat/query';
         } else {
