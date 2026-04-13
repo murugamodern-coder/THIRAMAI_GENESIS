@@ -44,6 +44,8 @@ body {
   color: var(--cc-text);
   font-size: 14px;
   line-height: 1.45;
+  overflow-x: hidden;
+  touch-action: manipulation;
 }
 
 .cc-app {
@@ -1339,4 +1341,70 @@ table.cc-table {
 
 .cc-link-inline:hover {
   text-decoration: underline;
+}
+
+/* --- Mobile PWA bottom navigation --- */
+.cc-mobile-nav {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  min-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--cc-surface);
+  border-top: 1px solid var(--cc-border);
+  box-shadow: 0 -2px 10px rgba(17, 24, 39, 0.06);
+  justify-content: space-around;
+  align-items: stretch;
+}
+
+@media (max-width: 768px) {
+  .cc-mobile-nav {
+    display: flex;
+  }
+
+  .cc-main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 12px));
+  }
+}
+
+.cc-mobile-nav__item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cc-muted);
+  text-decoration: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cc-mobile-nav__item.is-active {
+  color: var(--cc-primary);
+  background: rgba(10, 110, 209, 0.06);
+}
+
+.cc-copilot-page {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.cc-btn,
+.cc-nav a,
+.cc-input,
+button {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+@media (min-width: 769px) {
+  .cc-btn,
+  button {
+    min-height: auto;
+  }
 }

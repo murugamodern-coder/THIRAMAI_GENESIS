@@ -43,6 +43,9 @@ class ChatQueryBody(BaseModel):
         max_length=MAX_USER_MESSAGE_CHARS,
         description="Message to THIRAMAI (max 5000 characters)",
     )
+    agent_mode: bool = Field(False, description="Jarvis tool agent (Groq function calling + confirm flow)")
+    agent_confirm: bool = Field(False, description="Execute pending tools after user confirmation")
+    agent_pending_id: str | None = Field(None, max_length=256, description="ID from prior agent_mode response")
 
 
 class ChatDecisionBody(BaseModel):
@@ -442,6 +445,18 @@ async def chat_query(
     ),
 ) -> JSONResponse:
     cid = getattr(request.state, "correlation_id", None)
+    if body.agent_mode:
+        from services import jarvis_agent_service as jarvis
+
+        payload = await asyncio.to_thread(
+            lambda: jarvis.run_agent(
+                message=body.message.strip(),
+                user=_user,
+                agent_confirm=bool(body.agent_confirm),
+                agent_pending_id=body.agent_pending_id,
+            ),
+        )
+        return JSONResponse(content=payload)
     return await _chat_response(
         body.message.strip(),
         _user,

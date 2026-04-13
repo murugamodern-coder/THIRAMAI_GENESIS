@@ -69,6 +69,7 @@ def attach_domain_routers(app: FastAPI) -> None:
     from api.routes.ai_erp import router as ai_erp_router
     from api.routes.saas_admin import router as saas_admin_router
     from api.routes.autonomy import router as autonomy_router
+    from api.routes.integrations import router as integrations_router
 
     app.include_router(personal_router)
     app.include_router(personal_command_center_router)
@@ -89,5 +90,6 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(autonomy_router)
     app.include_router(dashboard_router)
     app.include_router(dashboard_ws_router, prefix="/ws")
+    app.include_router(integrations_router)
     app.include_router(ai_chat_router)
     app.include_router(life_os_router)

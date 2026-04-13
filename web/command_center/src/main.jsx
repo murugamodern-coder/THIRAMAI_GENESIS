@@ -17,3 +17,12 @@ createRoot(document.getElementById("root")).render(
     </HashRouter>
   </StrictMode>,
 );
+
+/* PWA: register service worker in production (same origin /static/command_center/) */
+if (import.meta.env.PROD && typeof window !== "undefined" && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    const base = import.meta.env.BASE_URL || "/static/command_center/";
+    const swUrl = new URL("sw.js", `${window.location.origin}${base}`).href;
+    navigator.serviceWorker.register(swUrl, { scope: base }).catch(() => {});
+  });
+}

@@ -272,7 +272,7 @@ def command_center_spa_shortcut() -> RedirectResponse:
             detail="Command Center SPA not built. Run: cd web/command_center && npm run build",
         )
     return RedirectResponse(
-        url="/static/command_center/index.html#/personal",
+        url="/static/command_center/index.html#/today",
         status_code=302,
         headers=_browser_root_redirect_headers(),
     )
@@ -309,7 +309,7 @@ def home(request: Request) -> Response:
 
     if _COMMAND_CENTER_INDEX.is_file():
         return RedirectResponse(
-            url="/static/command_center/index.html#/personal",
+            url="/static/command_center/index.html#/today",
             status_code=302,
             headers=_browser_root_redirect_headers(),
         )

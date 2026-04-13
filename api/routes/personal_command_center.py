@@ -571,13 +571,24 @@ async def meetings_create(body: MeetingCreateBody, user: CurrentUser = Depends(g
                 exclude_meeting_id=int(row.id),
             )
             out = serialize_meeting(row)
-    return {
+    result = {
         "status": "ok",
         "meeting": out,
         "conflict": bool(cids),
         "conflicts_with": cids,
         "suggestions": suggestions,
     }
+    try:
+        from services.google_calendar_integration_service import try_push_new_meeting
+
+        try_push_new_meeting(
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            meeting_id=int(out["id"]),
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.get("/meetings/{meeting_id}/ics", summary="Download iCalendar (.ics) for one meeting")

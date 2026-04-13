@@ -236,6 +236,9 @@ class User(Base):
     personal_meetings: Mapped[list["PersonalMeeting"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    user_integrations_rows: Mapped[list["UserIntegration"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class RefreshToken(Base):
@@ -2228,6 +2231,42 @@ class PersonalBudget(Base):
     user: Mapped["User"] = relationship(back_populates="personal_budgets")
 
 
+class UserIntegration(Base):
+    """OAuth-connected third-party accounts (e.g. Google Calendar) per user."""
+
+    __tablename__ = "user_integrations"
+    __table_args__ = (UniqueConstraint("user_id", "integration_type", name="uq_user_integrations_user_type"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    integration_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    access_token_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    refresh_token_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    scope: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    meta_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="user_integrations_rows")
+
+
 class PersonalMeeting(Base):
     """Personal / business meetings and appointments (Personal Command Center)."""
 
@@ -2273,6 +2312,7 @@ class PersonalMeeting(Base):
     reminder_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     is_recurring: Mapped[bool] = mapped_column(default=False, nullable=False)
     recurrence_rule: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    google_event_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

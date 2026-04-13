@@ -6,6 +6,7 @@ import {
   fetchMyOrganizations,
   switchOrganization,
 } from "../api/commandCenterApi.js";
+import MobileBottomNav from "../components/MobileBottomNav.jsx";
 import { isOnboardingDone } from "../lib/onboarding.js";
 import { ROLES } from "../lib/rbac.js";
 import { useCommandStore } from "../store/useCommandStore.js";
@@ -88,6 +89,9 @@ export default function ShellLayout() {
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/personal">
             Personal
           </NavLink>
+          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} end to="/ai">
+            AI
+          </NavLink>
         </nav>
         {orgs.length > 0 && (
           <label className="cc-muted" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -138,6 +142,7 @@ export default function ShellLayout() {
       <main className="cc-main">
         <Outlet />
       </main>
+      <MobileBottomNav />
     </div>
   );
 }

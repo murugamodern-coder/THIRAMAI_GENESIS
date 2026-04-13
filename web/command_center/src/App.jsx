@@ -16,7 +16,9 @@ import PersonalFinancePage from "./pages/personal/PersonalFinancePage.jsx";
 import PersonalHealthPage from "./pages/personal/PersonalHealthPage.jsx";
 import PersonalProductivityPage from "./pages/personal/PersonalProductivityPage.jsx";
 import PersonalResearchPage from "./pages/personal/PersonalResearchPage.jsx";
+import PersonalIntegrationsPage from "./pages/personal/PersonalIntegrationsPage.jsx";
 import TodayPage from "./pages/TodayPage.jsx";
+import CopilotPage from "./pages/CopilotPage.jsx";
 
 function Protected({ children }) {
   const token = useCommandStore((s) => s.token);
@@ -62,6 +64,16 @@ export default function App() {
         <Route path="production" element={<ProductionPage />} />
       </Route>
       <Route
+        path="/ai"
+        element={
+          <Protected>
+            <ShellLayout />
+          </Protected>
+        }
+      >
+        <Route index element={<CopilotPage />} />
+      </Route>
+      <Route
         path="/personal"
         element={
           <Protected>
@@ -74,6 +86,7 @@ export default function App() {
         <Route path="health" element={<PersonalHealthPage />} />
         <Route path="productivity" element={<PersonalProductivityPage />} />
         <Route path="research" element={<PersonalResearchPage />} />
+        <Route path="integrations" element={<PersonalIntegrationsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

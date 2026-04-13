@@ -14,6 +14,9 @@ export default function AIAssistantPanel() {
   const [raw, setRaw] = useState("");
   const [insights, setInsights] = useState([]);
   const [busyKey, setBusyKey] = useState(null);
+  const [agentMode, setAgentMode] = useState(false);
+  const [pendingId, setPendingId] = useState(null);
+  const [agentHint, setAgentHint] = useState("");
 
   const priorityRank = useCallback((p) => {
     if (p === "high") return 0;
@@ -60,45 +63,76 @@ export default function AIAssistantPanel() {
     return "cc-pill cc-pill--neutral";
   }, []);
 
-  const send = useCallback(async () => {
-    const m = message.trim();
-    if (!m || loading) return;
-    setLoading(true);
-    setError(null);
-    setRaw("");
-    setInsights([]);
-    try {
-      const data = await postChatQuery(m);
-      const txt = String(data?.narrative || data?.response || "").trim();
-      setRaw(txt);
-
-      const parsed = safeParseInsights(data) || safeParseInsights(txt);
-      if (parsed && parsed.length > 0) {
-        setInsights(parsed);
-        showToastDedup({ type: "success", message: "Insights generated" });
-      } else {
+  const send = useCallback(
+    async (opts = {}) => {
+      const m = message.trim();
+      if (!m || loading) return;
+      const confirming = opts.confirmPending === true && pendingId;
+      setLoading(true);
+      setError(null);
+      if (!confirming) {
+        setRaw("");
         setInsights([]);
-        showToastDedup({
-          type: "warning",
-          message: "No structured insights returned",
-          actionLabel: "Load example",
-          onAction: () => setInsights(AI_MOCK_INSIGHTS),
-        });
       }
-    } catch (e) {
-      const d = e?.response?.data?.detail;
-      const msg = typeof d === "string" ? d : e?.message || "Request failed";
-      setError(msg);
-      showToastDedup({
-        type: "error",
-        message: "AI request failed",
-        actionLabel: "Retry",
-        onAction: () => send(),
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [loading, message, safeParseInsights]);
+      setAgentHint(confirming ? "Running confirmed actions…" : agentMode ? "THIRAMAI is thinking…" : "");
+      try {
+        const data = await postChatQuery(m, {
+          agent_mode: !!(agentMode || confirming),
+          agent_confirm: !!confirming,
+          agent_pending_id: confirming ? pendingId : null,
+        });
+        if (data?.error && !data?.narrative) {
+          setError(String(data.error));
+          showToastDedup({ type: "error", message: String(data.error) });
+          return;
+        }
+        const txt = String(data?.narrative || data?.response || "").trim();
+        setRaw(txt);
+
+        if (data?.needs_confirmation && data?.agent_pending_id) {
+          setPendingId(data.agent_pending_id);
+          setAgentHint("Confirm the actions below, then press Confirm.");
+          showToastDedup({ type: "info", message: "Review and confirm Jarvis actions" });
+          return;
+        }
+        setPendingId(null);
+        setAgentHint("");
+
+        if (data?.agent_mode) {
+          showToastDedup({ type: "success", message: "Jarvis completed" });
+          setInsights([]);
+          return;
+        }
+
+        const parsed = safeParseInsights(data) || safeParseInsights(txt);
+        if (parsed && parsed.length > 0) {
+          setInsights(parsed);
+          showToastDedup({ type: "success", message: "Insights generated" });
+        } else {
+          setInsights([]);
+          showToastDedup({
+            type: "warning",
+            message: "No structured insights returned",
+            actionLabel: "Load example",
+            onAction: () => setInsights(AI_MOCK_INSIGHTS),
+          });
+        }
+      } catch (e) {
+        const d = e?.response?.data?.detail;
+        const msg = typeof d === "string" ? d : e?.message || "Request failed";
+        setError(msg);
+        showToastDedup({
+          type: "error",
+          message: "AI request failed",
+          actionLabel: "Retry",
+          onAction: () => send(opts),
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loading, message, safeParseInsights, agentMode, pendingId],
+  );
 
   const onRunAction = useCallback(async (action, insightId) => {
       const key = `${insightId || "insight"}__${action?.type || "action"}__${JSON.stringify(action?.payload || {})}`;
@@ -203,8 +237,20 @@ export default function AIAssistantPanel() {
     <div className="cc-card" style={{ position: "sticky", top: 24 }}>
       <h2>Decision engine</h2>
       <p className="cc-muted" style={{ marginTop: -8, marginBottom: 16 }}>
-        Ask for insights. The AI should return structured JSON insights (priority, confidence, and actions).
+        Ask for insights, or enable <strong>Jarvis</strong> to create tasks, log expenses, schedule meetings, and more
+        (with a confirmation step).
       </p>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={agentMode}
+          onChange={(e) => {
+            setAgentMode(e.target.checked);
+            setPendingId(null);
+          }}
+        />
+        <span>Jarvis agent mode (tools + confirm)</span>
+      </label>
       <textarea
         className="cc-textarea"
         placeholder='Try: "Review inventory risks and pending approvals. Return JSON insights."'
@@ -214,10 +260,25 @@ export default function AIAssistantPanel() {
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
         }}
       />
-      <div style={{ marginTop: 16, display: "flex", gap: 16, alignItems: "center" }}>
-        <button type="button" className="cc-btn cc-btn-primary" disabled={loading} onClick={send}>
+      {agentHint ? (
+        <p className="cc-muted" style={{ marginBottom: 8, fontSize: 13 }}>
+          {agentHint}
+        </p>
+      ) : null}
+      <div style={{ marginTop: 16, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <button type="button" className="cc-btn cc-btn-primary" disabled={loading} onClick={() => send({})}>
           {loading ? "Running…" : "Send"}
         </button>
+        {pendingId ? (
+          <button
+            type="button"
+            className="cc-btn cc-btn-primary"
+            disabled={loading}
+            onClick={() => send({ confirmPending: true })}
+          >
+            {loading ? "Working…" : "Confirm actions"}
+          </button>
+        ) : null}
         <button
           type="button"
           className="cc-btn cc-btn-secondary"

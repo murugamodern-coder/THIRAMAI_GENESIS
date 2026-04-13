@@ -15,8 +15,13 @@ export async function resolveDecision(decisionId, status) {
   return data;
 }
 
-export async function postChatQuery(message) {
-  const { data } = await api.post("/chat/query", { message });
+export async function postChatQuery(message, opts = {}) {
+  const { data } = await api.post("/chat/query", {
+    message,
+    agent_mode: !!opts.agent_mode,
+    agent_confirm: !!opts.agent_confirm,
+    agent_pending_id: opts.agent_pending_id ?? null,
+  });
   return data;
 }
 
@@ -237,5 +242,21 @@ export async function createPersonalMeeting(payload) {
 
 export async function completePersonalMeeting(meetingId, payload) {
   const { data } = await api.post(`/personal/os/meetings/${meetingId}/complete`, payload ?? {});
+  return data;
+}
+
+/** Google Calendar integration */
+export async function postGoogleCalendarConnect() {
+  const { data } = await api.post("/integrations/google/connect");
+  return data;
+}
+
+export async function fetchGoogleCalendarStatus() {
+  const { data } = await api.get("/integrations/google/status");
+  return data;
+}
+
+export async function postGoogleCalendarSync() {
+  const { data } = await api.post("/integrations/google/sync");
   return data;
 }

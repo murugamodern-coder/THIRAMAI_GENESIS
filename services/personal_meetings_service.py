@@ -95,6 +95,7 @@ def serialize_meeting(m: PersonalMeeting) -> dict[str, Any]:
         "reminder_minutes": int(m.reminder_minutes or 30),
         "is_recurring": bool(m.is_recurring),
         "recurrence_rule": m.recurrence_rule,
+        "google_event_id": getattr(m, "google_event_id", None),
         "created_at": m.created_at.isoformat() if m.created_at else None,
         "updated_at": m.updated_at.isoformat() if m.updated_at else None,
     }
@@ -330,6 +331,7 @@ def update_meeting_fields(
     reminder_minutes: int | None = None,
     is_recurring: bool | None = None,
     recurrence_rule: str | None = None,
+    google_event_id: str | None = None,
 ) -> None:
     if title is not None:
         m.title = title.strip()[:4000]
@@ -375,3 +377,5 @@ def update_meeting_fields(
         m.is_recurring = bool(is_recurring)
     if recurrence_rule is not None:
         m.recurrence_rule = recurrence_rule
+    if google_event_id is not None:
+        m.google_event_id = (google_event_id or "")[:256] or None

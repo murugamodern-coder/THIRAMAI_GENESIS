@@ -42,6 +42,8 @@ export default defineConfig({
       "/life": backend,
       "/org": backend,
       "/analytics": backend,
+      "/integrations": backend,
+      "/auth/google": backend,
       "/ws": { target: backend, ws: true },
     },
   },

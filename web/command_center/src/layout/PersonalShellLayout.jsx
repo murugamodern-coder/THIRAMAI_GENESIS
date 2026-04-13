@@ -1,5 +1,7 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 
+import MobileBottomNav from "../components/MobileBottomNav.jsx";
+
 export default function PersonalShellLayout() {
   return (
     <div className="cc-app">
@@ -29,6 +31,9 @@ export default function PersonalShellLayout() {
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/personal/research">
             Research
           </NavLink>
+          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/personal/integrations">
+            Integrations
+          </NavLink>
         </nav>
         <Link to="/dashboard" className="cc-muted" style={{ marginLeft: "auto", fontSize: 13 }}>
           Business dashboard
@@ -37,6 +42,7 @@ export default function PersonalShellLayout() {
       <main className="cc-main personal-os-main">
         <Outlet />
       </main>
+      <MobileBottomNav />
     </div>
   );
 }
