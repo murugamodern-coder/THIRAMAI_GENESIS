@@ -7,8 +7,8 @@ import os
 from datetime import date, datetime
 
 import asset_portal
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from api.billing_policy import enforce_billing_tool_policy
@@ -20,8 +20,12 @@ from services import audit_log as system_audit
 from services import billing_guard
 from services import billing_service
 from services.billing_phase2_service import (
+    build_cash_bill_html_sync,
+    build_structured_invoice_html_sync,
+    create_simple_cash_bill_sync,
     create_structured_invoice_sync,
     gst_report_sync,
+    list_bills_sync,
     list_invoices_sync,
     record_payment_sync,
 )
@@ -569,6 +573,19 @@ async def billing_phase2_create_invoice(
     return JSONResponse(content=out)
 
 
+@router.get("/billing/bills")
+async def billing_list_cash_bills(
+    limit: int = 100,
+    _user: CurrentUser = Depends(
+        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
+    ),
+) -> JSONResponse:
+    out = list_bills_sync(organization_id=_user.organization_id, limit=limit)
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
+    return JSONResponse(content=out)
+
+
 @router.get("/billing/invoices")
 async def billing_phase2_list_invoices(
     limit: int = 200,
@@ -579,6 +596,64 @@ async def billing_phase2_list_invoices(
     out = list_invoices_sync(organization_id=_user.organization_id, limit=limit)
     if not out.get("ok"):
         raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
+    return JSONResponse(content=out)
+
+
+@router.get("/billing/bill/{bill_id}/html", response_class=HTMLResponse)
+async def billing_cash_bill_print_html(
+    bill_id: int = Path(..., ge=1),
+    _user: CurrentUser = Depends(
+        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
+    ),
+) -> HTMLResponse:
+    out = build_cash_bill_html_sync(organization_id=_user.organization_id, bill_id=bill_id)
+    if not out.get("ok"):
+        raise HTTPException(status_code=404, detail=out.get("error") or "not found")
+    return HTMLResponse(content=out.get("html") or "")
+
+
+@router.get("/billing/invoice/{invoice_id}/html", response_class=HTMLResponse)
+async def billing_invoice_print_html(
+    invoice_id: int = Path(..., ge=1),
+    supply_mode: str = Query("intra", description="intra (CGST+SGST) or inter (IGST)"),
+    _user: CurrentUser = Depends(
+        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
+    ),
+) -> HTMLResponse:
+    out = build_structured_invoice_html_sync(
+        organization_id=_user.organization_id,
+        invoice_id=invoice_id,
+        supply_mode=supply_mode,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=404, detail=out.get("error") or "not found")
+    return HTMLResponse(content=out.get("html") or "")
+
+
+class SimpleBillLineBody(BaseModel):
+    description: str = Field(..., min_length=1)
+    quantity: float = Field(1, gt=0)
+    unit_price_inr: float = Field(..., ge=0, description="Tax-inclusive unit price (non-GST)")
+
+
+class SimpleBillBody(BaseModel):
+    lines: list[SimpleBillLineBody] = Field(..., min_length=1)
+
+
+@router.post("/billing/simple-bill")
+async def billing_simple_cash_bill(
+    body: SimpleBillBody,
+    _user: CurrentUser = Depends(require_permission(Permission.BILLING_INVOICE_CREATE)),
+) -> JSONResponse:
+    """Non-GST cash / local sale bill (lines stored on ``bills``; included in daily P&L sales)."""
+    _require_factory_billing_active(_user.organization_id)
+    out = create_simple_cash_bill_sync(
+        organization_id=_user.organization_id,
+        lines=[ln.model_dump() for ln in body.lines],
+        user_id=_user.id if _user.id > 0 else None,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "create failed")
     return JSONResponse(content=out)
 
 

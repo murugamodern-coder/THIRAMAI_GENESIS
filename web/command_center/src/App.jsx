@@ -1,5 +1,13 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import BusinessShellLayout from "./layout/BusinessShellLayout.jsx";
+import BusinessBillingPage from "./pages/business/BusinessBillingPage.jsx";
+import BusinessDashboardPage from "./pages/business/BusinessDashboardPage.jsx";
+import BusinessExpensesPage from "./pages/business/BusinessExpensesPage.jsx";
+import BusinessInventoryPage from "./pages/business/BusinessInventoryPage.jsx";
+import BusinessProductionPage from "./pages/business/BusinessProductionPage.jsx";
+import BusinessTasksPage from "./pages/business/BusinessTasksPage.jsx";
+
 import { useCommandStore } from "./store/useCommandStore.js";
 import ShellLayout from "./layout/ShellLayout.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
@@ -63,6 +71,22 @@ export default function App() {
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="billing" element={<BillingPage />} />
         <Route path="production" element={<ProductionPage />} />
+      </Route>
+      <Route
+        path="/business/:orgId"
+        element={
+          <Protected>
+            <BusinessShellLayout />
+          </Protected>
+        }
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<BusinessDashboardPage />} />
+        <Route path="inventory" element={<BusinessInventoryPage />} />
+        <Route path="billing" element={<BusinessBillingPage />} />
+        <Route path="expenses" element={<BusinessExpensesPage />} />
+        <Route path="production" element={<BusinessProductionPage />} />
+        <Route path="tasks" element={<BusinessTasksPage />} />
       </Route>
       <Route
         path="/ai"

@@ -105,6 +105,12 @@ class Organization(Base):
     personal_meetings: Mapped[list["PersonalMeeting"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
+    agro_subsidy_cases: Mapped[list["AgroSubsidyCase"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
+    business_tasks: Mapped[list["BusinessTask"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
 
 
 class Role(Base):
@@ -1251,6 +1257,67 @@ class OperationalExpense(Base):
     organization: Mapped["Organization"] = relationship(back_populates="operational_expenses")
 
 
+class AgroSubsidyCase(Base):
+    """Government subsidy tracking per farmer (Agro Agency and similar tenants)."""
+
+    __tablename__ = "agro_subsidy_cases"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    farmer_name: Mapped[str] = mapped_column(Text, nullable=False)
+    village: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    survey_number: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    scheme_name: Mapped[str] = mapped_column(Text, nullable=False)
+    application_status: Mapped[str] = mapped_column(String(64), nullable=False, default="draft")
+    subsidy_pending_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    subsidy_received_inr: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    follow_up_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship(back_populates="agro_subsidy_cases")
+
+
+class BusinessTask(Base):
+    """Operational tasks, checklists, and reminders per organization."""
+
+    __tablename__ = "business_tasks"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    task_type: Mapped[str] = mapped_column(String(64), nullable=False, default="general")
+    checklist_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship(back_populates="business_tasks")
+
+
 class Inventory(Base):
     __tablename__ = "inventory"
 
@@ -1356,6 +1423,8 @@ class ProductionLog(Base):
     yield_out: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
     labor_cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     external_ref: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    machine_hours: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    quality_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
     asset: Mapped["Asset"] = relationship(back_populates="production_logs")
 

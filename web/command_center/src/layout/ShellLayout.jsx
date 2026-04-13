@@ -51,6 +51,9 @@ export default function ShellLayout() {
     }
   }, [me, navigate]);
 
+  const bizOrgId =
+    orgs.find((o) => o.is_current)?.organization?.id ?? orgs[0]?.organization?.id ?? 1;
+
   async function onOrgChange(e) {
     const id = Number(e.target.value);
     const current = orgs.find((o) => o.is_current)?.organization?.id;
@@ -86,6 +89,9 @@ export default function ShellLayout() {
           </NavLink>
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/dashboard/production">
             Production
+          </NavLink>
+          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to={`/business/${bizOrgId}/dashboard`}>
+            Business OS
           </NavLink>
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/personal">
             Personal

@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.database import get_session_factory
-from core.db.models import GstRecord, Invoice, InvoiceItem, Payment
+from core.db.models import Bill, GstRecord, Invoice, InvoiceItem, Payment
 from services import audit_log as system_audit
 
 
@@ -20,6 +20,16 @@ def _dec(x: Any) -> Decimal:
     if x is None:
         return Decimal("0")
     return Decimal(str(x))
+
+
+def _html_escape(s: str) -> str:
+    return (
+        (s or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def _serialize_invoice(inv: Invoice, session: Session, *, include_lines: bool = True) -> dict[str, Any]:
@@ -153,6 +163,32 @@ def create_structured_invoice_sync(
         },
     )
     return {"ok": True, "invoice_id": iid, "grand_total_inr": float(grand), "invoice_no": no}
+
+
+def list_bills_sync(*, organization_id: int, limit: int = 100) -> dict[str, Any]:
+    oid = int(organization_id)
+    if oid <= 0:
+        return {"ok": False, "error": "organization_id required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    lim = max(1, min(int(limit), 500))
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(Bill).where(Bill.organization_id == oid).order_by(Bill.id.desc()).limit(lim)
+            ).all()
+        )
+        items = [
+            {
+                "id": int(r.id),
+                "total_amount_inr": float(r.total_amount or 0),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "line_count": len(r.items) if isinstance(r.items, list) else 0,
+            }
+            for r in rows
+        ]
+    return {"ok": True, "bills": items}
 
 
 def list_invoices_sync(*, organization_id: int, limit: int = 200) -> dict[str, Any]:
@@ -335,3 +371,227 @@ def gst_report_sync(
         metadata={"channel": "billing_phase2.gst_report", "period_start": period_start.isoformat()},
     )
     return {"ok": True, "report": data, "gst_record_period_start": period_start.isoformat()}
+
+
+def create_simple_cash_bill_sync(
+    *,
+    organization_id: int,
+    lines: list[dict[str, Any]],
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    """
+    Non-GST retail / cash bill: one row per line, ``unit_price_inr`` is tax-inclusive (no GST split).
+    """
+    oid = int(organization_id)
+    if oid <= 0:
+        return {"ok": False, "error": "organization_id required"}
+    if not lines:
+        return {"ok": False, "error": "lines required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+
+    items: list[dict[str, Any]] = []
+    grand = Decimal("0")
+    for ln in lines:
+        desc = str(ln.get("description") or "Item").strip()[:2000]
+        qty = _dec(ln.get("quantity", 1))
+        if qty <= 0:
+            return {"ok": False, "error": "each line needs positive quantity"}
+        up = _dec(ln.get("unit_price_inr"))
+        if up < 0:
+            return {"ok": False, "error": "unit_price_inr must be non-negative"}
+        line_tot = (qty * up).quantize(Decimal("0.01"))
+        grand += line_tot
+        items.append(
+            {
+                "description": desc,
+                "quantity": float(qty),
+                "unit_price_pre_tax": float(up),
+                "taxable_value": float(line_tot),
+                "gst_rate_percent": 0.0,
+                "cgst": 0.0,
+                "sgst": 0.0,
+                "igst": 0.0,
+                "gst_total": 0.0,
+                "line_total_with_tax": float(line_tot),
+                "supply_type": "non_gst_cash",
+            }
+        )
+
+    bid = 0
+    with factory() as session:
+        with session.begin():
+            bill = Bill(organization_id=oid, items=items, total_amount=grand)
+            session.add(bill)
+            session.flush()
+            bid = int(bill.id)
+
+    system_audit.record_system_audit(
+        action=system_audit.ACTION_FINANCIAL_EXECUTION,
+        outcome="success",
+        organization_id=oid,
+        user_id=user_id if user_id and int(user_id) > 0 else None,
+        resource_type="bill",
+        metadata={
+            "channel": "billing_phase2.simple_cash_bill",
+            "bill_id": bid,
+            "grand_total_inr": float(grand),
+        },
+    )
+    return {"ok": True, "bill_id": bid, "total_amount_inr": float(grand)}
+
+
+def build_structured_invoice_html_sync(
+    *,
+    organization_id: int,
+    invoice_id: int,
+    supply_mode: str = "intra",
+) -> dict[str, Any]:
+    """
+    Printable tax invoice HTML. ``supply_mode`` ``intra`` → CGST+SGST split; ``inter`` → IGST.
+    """
+    oid = int(organization_id)
+    iid = int(invoice_id)
+    if oid <= 0 or iid <= 0:
+        return {"ok": False, "error": "organization_id and invoice_id required"}
+    mode = (supply_mode or "intra").strip().lower()
+    inter = mode in ("inter", "interstate", "igst")
+
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+
+    with factory() as session:
+        inv = session.get(Invoice, iid)
+        if inv is None or int(inv.organization_id) != oid:
+            return {"ok": False, "error": "invoice not found"}
+        lines = list(
+            session.scalars(
+                select(InvoiceItem).where(InvoiceItem.invoice_id == iid).order_by(InvoiceItem.line_no)
+            ).all()
+        )
+
+    rows_html: list[str] = []
+    total_taxable = Decimal("0")
+    total_gst = Decimal("0")
+    total_cgst = Decimal("0")
+    total_sgst = Decimal("0")
+    total_igst = Decimal("0")
+
+    for li in lines:
+        qty = _dec(li.quantity)
+        up = _dec(li.unit_price_pre_tax)
+        taxable = (qty * up).quantize(Decimal("0.01"))
+        gstp = _dec(li.gst_rate_percent)
+        gst_amt = (taxable * gstp / Decimal("100")).quantize(Decimal("0.01"))
+        if inter:
+            cgst = Decimal("0")
+            sgst = Decimal("0")
+            igst = gst_amt
+        else:
+            half = (gst_amt / Decimal("2")).quantize(Decimal("0.01"))
+            cgst = half
+            sgst = gst_amt - half
+            igst = Decimal("0")
+        total_taxable += taxable
+        total_gst += gst_amt
+        total_cgst += cgst
+        total_sgst += sgst
+        total_igst += igst
+        hsn = (li.hsn_code or "") or "—"
+        rows_html.append(
+            "<tr>"
+            f"<td>{li.line_no}</td>"
+            f"<td>{_html_escape(li.description)}</td>"
+            f"<td>{hsn}</td>"
+            f"<td class='num'>{float(qty):g}</td>"
+            f"<td class='num'>{float(up):.2f}</td>"
+            f"<td class='num'>{float(taxable):.2f}</td>"
+            f"<td class='num'>{float(gstp):g}%</td>"
+            f"<td class='num'>{float(cgst):.2f}</td>"
+            f"<td class='num'>{float(sgst):.2f}</td>"
+            f"<td class='num'>{float(igst):.2f}</td>"
+            f"<td class='num'>{float(li.line_total_inr):.2f}</td>"
+            "</tr>"
+        )
+
+    grand = _dec(inv.grand_total_inr)
+    title = "Tax Invoice (IGST)" if inter else "Tax Invoice (CGST / SGST)"
+    body = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>{_html_escape(inv.invoice_no)}</title>
+<style>
+body {{ font-family: system-ui, sans-serif; margin: 24px; color: #111; }}
+h1 {{ font-size: 1.25rem; }}
+table {{ width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 0.9rem; }}
+th, td {{ border: 1px solid #ccc; padding: 6px 8px; }}
+th {{ background: #f4f4f4; text-align: left; }}
+td.num {{ text-align: right; }}
+.meta {{ margin: 8px 0; color: #444; }}
+.totals {{ margin-top: 16px; text-align: right; }}
+@media print {{ body {{ margin: 12px; }} }}
+</style></head><body>
+<h1>{title}</h1>
+<div class="meta">Invoice No: <strong>{_html_escape(inv.invoice_no)}</strong>
+ &nbsp;|&nbsp; Date: {_html_escape(inv.invoice_date.isoformat() if inv.invoice_date else '')}
+ &nbsp;|&nbsp; Status: {_html_escape(inv.payment_status)}</div>
+<table>
+<thead><tr><th>#</th><th>Description</th><th>HSN</th><th>Qty</th><th>Rate</th><th>Taxable</th><th>GST%</th>
+<th>CGST</th><th>SGST</th><th>IGST</th><th>Line total</th></tr></thead>
+<tbody>{"".join(rows_html)}</tbody>
+</table>
+<div class="totals">
+<div>Taxable value: ₹{float(total_taxable):,.2f}</div>
+<div>CGST: ₹{float(total_cgst):,.2f} &nbsp; SGST: ₹{float(total_sgst):,.2f} &nbsp; IGST: ₹{float(total_igst):,.2f}</div>
+<div><strong>Grand total: ₹{float(grand):,.2f}</strong></div>
+</div>
+<p class="meta">Supply: {"Inter-state (IGST)" if inter else "Intra-state (CGST + SGST)"}. Use browser Print → Save as PDF.</p>
+</body></html>"""
+    return {"ok": True, "html": body}
+
+
+def build_cash_bill_html_sync(*, organization_id: int, bill_id: int) -> dict[str, Any]:
+    """Printable HTML for a non-GST ``bills`` row."""
+    oid = int(organization_id)
+    bid = int(bill_id)
+    if oid <= 0 or bid <= 0:
+        return {"ok": False, "error": "organization_id and bill_id required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    with factory() as session:
+        row = session.get(Bill, bid)
+        if row is None or int(row.organization_id) != oid:
+            return {"ok": False, "error": "bill not found"}
+        items = row.items or []
+        total = float(row.total_amount or 0)
+        created = row.created_at.isoformat() if row.created_at else ""
+
+    rows: list[str] = []
+    for i, it in enumerate(items, start=1):
+        if not isinstance(it, dict):
+            continue
+        desc = _html_escape(str(it.get("description") or it.get("sku_name") or "Item"))
+        qty = it.get("quantity", 0)
+        line_tot = it.get("line_total_with_tax", it.get("taxable_value", 0))
+        rows.append(
+            f"<tr><td>{i}</td><td>{desc}</td><td class='num'>{qty}</td>"
+            f"<td class='num'>{float(line_tot or 0):.2f}</td></tr>"
+        )
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>Bill #{bid}</title>
+<style>
+body {{ font-family: system-ui, sans-serif; margin: 24px; }}
+table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
+th, td {{ border: 1px solid #ccc; padding: 8px; }}
+td.num {{ text-align: right; }}
+</style></head><body>
+<h1>Bill (non-GST)</h1>
+<p>Bill #{bid} &nbsp;|&nbsp; {created}</p>
+<table><thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Amount</th></tr></thead>
+<tbody>{"".join(rows)}</tbody></table>
+<p><strong>Total: ₹{total:,.2f}</strong></p>
+<p style="color:#555">Print or Save as PDF from your browser.</p>
+</body></html>"""
+    return {"ok": True, "html": html}

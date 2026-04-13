@@ -14,6 +14,7 @@ from services.production_phase2_service import (
     create_maintenance_log_sync,
     create_production_log_sync,
     list_machines_sync,
+    list_org_assets_sync,
     production_summary_sync,
 )
 
@@ -46,6 +47,8 @@ class ProductionLogBody(BaseModel):
     raw_material_in: float | None = None
     yield_out: float | None = None
     labor_cost: float | None = Field(None, ge=0)
+    machine_hours: float | None = Field(None, ge=0)
+    quality_status: str | None = Field(None, max_length=16, description="pass, fail, or hold")
     external_ref: str | None = None
     raw_consumptions: list[RawConsumptionBody] | None = None
 
@@ -68,6 +71,8 @@ async def production_create_log(
         raw_material_in=body.raw_material_in,
         yield_out=body.yield_out,
         labor_cost=body.labor_cost,
+        machine_hours=body.machine_hours,
+        quality_status=body.quality_status,
         external_ref=body.external_ref,
         raw_consumptions=rcs,
         user_id=_user.id if _user.id > 0 else None,
@@ -100,6 +105,16 @@ async def production_list_machines(
     _user: CurrentUser = Depends(require_permission(Permission.PRODUCTION_READ)),
 ) -> JSONResponse:
     out = list_machines_sync(organization_id=_user.organization_id)
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
+    return JSONResponse(content=out)
+
+
+@router.get("/production/assets")
+async def production_list_assets(
+    _user: CurrentUser = Depends(require_permission(Permission.PRODUCTION_READ)),
+) -> JSONResponse:
+    out = list_org_assets_sync(organization_id=_user.organization_id)
     if not out.get("ok"):
         raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
     return JSONResponse(content=out)

@@ -1,5 +1,32 @@
 import api from "./client.js";
 
+/** Open GST invoice HTML in a new tab (uses JWT from axios). */
+export async function openStructuredInvoicePrint(invoiceId, supplyMode = "intra") {
+  const { data } = await api.get(`/billing/invoice/${invoiceId}/html`, {
+    params: { supply_mode: supplyMode },
+    responseType: "text",
+    transformResponse: [(d) => d],
+  });
+  const w = window.open("", "_blank");
+  if (!w) return false;
+  w.document.write(data);
+  w.document.close();
+  return true;
+}
+
+/** Open non-GST cash bill HTML in a new tab. */
+export async function openCashBillPrint(billId) {
+  const { data } = await api.get(`/billing/bill/${billId}/html`, {
+    responseType: "text",
+    transformResponse: [(d) => d],
+  });
+  const w = window.open("", "_blank");
+  if (!w) return false;
+  w.document.write(data);
+  w.document.close();
+  return true;
+}
+
 export async function fetchCommandCenterSnapshot(params = {}) {
   const { data } = await api.get("/dashboard/command-center", { params });
   return data;
@@ -121,6 +148,11 @@ export async function fetchProductionSummary(startDate, endDate) {
 
 export async function fetchProductionMachines() {
   const { data } = await api.get("/production/machines");
+  return data;
+}
+
+export async function fetchProductionAssets() {
+  const { data } = await api.get("/production/assets");
   return data;
 }
 
@@ -269,5 +301,81 @@ export async function postGoogleCalendarSync() {
 
 export async function postGoogleCalendarDisconnect() {
   const { data } = await api.post("/integrations/google/disconnect");
+  return data;
+}
+
+/** Tenant Business OS (`/business/*`) — active org from JWT. */
+export async function fetchBusinessSnapshot() {
+  const { data } = await api.get("/business/snapshot");
+  return data;
+}
+
+export async function fetchBusinessPlDaily() {
+  const { data } = await api.get("/business/pl-daily");
+  return data;
+}
+
+export async function fetchBusinessExpenseList(params = {}) {
+  const { data } = await api.get("/business/expenses/list", { params });
+  return data;
+}
+
+export async function postBusinessExpense(payload) {
+  const { data } = await api.post("/business/expenses", payload);
+  return data;
+}
+
+export async function fetchSubsidyCases(limit = 200) {
+  const { data } = await api.get("/business/subsidy", { params: { limit } });
+  return data;
+}
+
+export async function postSubsidyCase(payload) {
+  const { data } = await api.post("/business/subsidy", payload);
+  return data;
+}
+
+export async function patchSubsidyCase(caseId, payload) {
+  const { data } = await api.patch(`/business/subsidy/${caseId}`, payload);
+  return data;
+}
+
+export async function fetchBusinessTasks(limit = 200) {
+  const { data } = await api.get("/business/tasks", { params: { limit } });
+  return data;
+}
+
+export async function postBusinessTask(payload) {
+  const { data } = await api.post("/business/tasks", payload);
+  return data;
+}
+
+export async function patchBusinessTask(taskId, payload) {
+  const { data } = await api.patch(`/business/tasks/${taskId}`, payload);
+  return data;
+}
+
+export async function fetchBillingBills(limit = 100) {
+  const { data } = await api.get("/billing/bills", { params: { limit } });
+  return data;
+}
+
+export async function postSimpleCashBill(payload) {
+  const { data } = await api.post("/billing/simple-bill", payload);
+  return data;
+}
+
+export async function postInventoryStockMovement(payload) {
+  const { data } = await api.post("/inventory/movement", payload);
+  return data;
+}
+
+export async function fetchInventorySuppliers() {
+  const { data } = await api.get("/inventory/suppliers");
+  return data;
+}
+
+export async function createInventorySupplier(payload) {
+  const { data } = await api.post("/inventory/supplier", payload);
   return data;
 }

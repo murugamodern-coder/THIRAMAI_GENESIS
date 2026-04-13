@@ -9,11 +9,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
 from api.dependencies import CurrentUser, get_current_user
-from services import audit_service, business_depth_service
+from services import audit_service, business_depth_service, business_os_service
 from services.business_snapshot_service import build_business_snapshot
 from services.economics_service import get_business_margin
 
@@ -213,3 +213,210 @@ async def operational_expense_create(
         extra={"expense_id": eid, "category": body.category[:64], "amount_inr": str(body.amount_inr)},
     )
     return {"status": "ok", "expense_id": eid}
+
+
+@router.get("/expenses/list", summary="List operational expenses for active organization")
+async def operational_expense_list(
+    limit: int = Query(200, ge=1, le=500),
+    from_date: str | None = Query(None, description="YYYY-MM-DD inclusive lower bound"),
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    fd: date | None = None
+    if from_date and from_date.strip():
+        try:
+            parts = from_date.strip().split("-")
+            if len(parts) == 3:
+                fd = date(int(parts[0]), int(parts[1]), int(parts[2]))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="from_date must be YYYY-MM-DD") from None
+    out = business_os_service.list_operational_expenses_sync(
+        organization_id=_user.organization_id,
+        limit=limit,
+        from_date=fd,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
+    return out
+
+
+@router.get("/pl-daily", summary="Today vs MTD sales, opex, and net (bills + dated invoices)")
+async def business_pl_daily(_user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    out = business_os_service.daily_pl_summary_sync(organization_id=_user.organization_id)
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "pl failed")
+    return out
+
+
+@router.get("/subsidy", summary="List agro subsidy cases")
+async def subsidy_list(
+    limit: int = Query(200, ge=1, le=500),
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    out = business_os_service.list_subsidy_cases_sync(organization_id=_user.organization_id, limit=limit)
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
+    return out
+
+
+class SubsidyCreateBody(BaseModel):
+    farmer_name: str = Field(..., min_length=1)
+    village: str = ""
+    survey_number: str = ""
+    scheme_name: str = Field(..., min_length=1)
+    application_status: str = "draft"
+    subsidy_pending_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
+    subsidy_received_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
+    follow_up_date: date | None = None
+    notes: str | None = None
+
+
+@router.post("/subsidy", summary="Create agro subsidy case")
+async def subsidy_create(
+    request: Request,
+    body: SubsidyCreateBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    out = business_os_service.create_subsidy_case_sync(
+        organization_id=_user.organization_id,
+        farmer_name=body.farmer_name,
+        village=body.village,
+        survey_number=body.survey_number,
+        scheme_name=body.scheme_name,
+        application_status=body.application_status,
+        subsidy_pending_inr=body.subsidy_pending_inr,
+        subsidy_received_inr=body.subsidy_received_inr,
+        follow_up_date=body.follow_up_date,
+        notes=body.notes,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "create failed")
+    audit_service.log_business_depth_mutation(
+        correlation_id=_correlation_id(request),
+        action_name="agro_subsidy_create",
+        user_id=_user.id,
+        organization_id=_user.organization_id,
+        resource_type="agro_subsidy_case",
+        extra={"case_id": out.get("id")},
+    )
+    return {"status": "ok", "id": out.get("id")}
+
+
+class SubsidyPatchBody(BaseModel):
+    farmer_name: str | None = None
+    village: str | None = None
+    survey_number: str | None = None
+    scheme_name: str | None = None
+    application_status: str | None = None
+    subsidy_pending_inr: Decimal | None = None
+    subsidy_received_inr: Decimal | None = None
+    follow_up_date: date | None = None
+    notes: str | None = None
+
+
+@router.patch("/subsidy/{case_id}", summary="Update agro subsidy case")
+async def subsidy_patch(
+    request: Request,
+    case_id: int = Path(..., ge=1),
+    body: SubsidyPatchBody | None = None,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, str]:
+    b = body or SubsidyPatchBody()
+    payload = {k: v for k, v in b.model_dump().items() if v is not None}
+    out = business_os_service.update_subsidy_case_sync(
+        organization_id=_user.organization_id,
+        case_id=case_id,
+        **payload,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "update failed")
+    audit_service.log_business_depth_mutation(
+        correlation_id=_correlation_id(request),
+        action_name="agro_subsidy_patch",
+        user_id=_user.id,
+        organization_id=_user.organization_id,
+        resource_type="agro_subsidy_case",
+        extra={"case_id": case_id},
+    )
+    return {"status": "ok"}
+
+
+@router.get("/tasks", summary="List business tasks and checklists")
+async def business_tasks_list(
+    limit: int = Query(200, ge=1, le=500),
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    out = business_os_service.list_business_tasks_sync(organization_id=_user.organization_id, limit=limit)
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
+    return out
+
+
+class BusinessTaskCreateBody(BaseModel):
+    title: str = Field(..., min_length=1)
+    owner_name: str = ""
+    due_at: datetime | None = None
+    task_type: str = "general"
+    checklist_json: list[Any] | None = None
+
+
+@router.post("/tasks", summary="Create business task")
+async def business_tasks_create(
+    request: Request,
+    body: BusinessTaskCreateBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    out = business_os_service.create_business_task_sync(
+        organization_id=_user.organization_id,
+        title=body.title,
+        owner_name=body.owner_name,
+        due_at=body.due_at,
+        task_type=body.task_type,
+        checklist_json=body.checklist_json,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "create failed")
+    audit_service.log_business_depth_mutation(
+        correlation_id=_correlation_id(request),
+        action_name="business_task_create",
+        user_id=_user.id,
+        organization_id=_user.organization_id,
+        resource_type="business_task",
+        extra={"task_id": out.get("id")},
+    )
+    return {"status": "ok", "id": out.get("id")}
+
+
+class BusinessTaskPatchBody(BaseModel):
+    title: str | None = None
+    owner_name: str | None = None
+    due_at: datetime | None = None
+    status: str | None = None
+    task_type: str | None = None
+    checklist_json: list[Any] | None = None
+
+
+@router.patch("/tasks/{task_id}", summary="Update business task or checklist")
+async def business_tasks_patch(
+    request: Request,
+    task_id: int = Path(..., ge=1),
+    body: BusinessTaskPatchBody | None = None,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, str]:
+    b = body or BusinessTaskPatchBody()
+    payload = {k: v for k, v in b.model_dump().items() if v is not None}
+    out = business_os_service.update_business_task_sync(
+        organization_id=_user.organization_id,
+        task_id=task_id,
+        **payload,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "update failed")
+    audit_service.log_business_depth_mutation(
+        correlation_id=_correlation_id(request),
+        action_name="business_task_patch",
+        user_id=_user.id,
+        organization_id=_user.organization_id,
+        resource_type="business_task",
+        extra={"task_id": task_id},
+    )
+    return {"status": "ok"}

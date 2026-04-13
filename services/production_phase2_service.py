@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 from core.database import get_session_factory
-from core.db.models import Asset, Equipment, MaintenanceLog, ProductionLog, RawMaterial
+from core.db.models import Asset, AssetStatusEnum, Equipment, MaintenanceLog, ProductionLog, RawMaterial
 from services import audit_log as system_audit
 
 
@@ -32,6 +32,8 @@ def create_production_log_sync(
     yield_out: float | Decimal | None = None,
     labor_cost: float | Decimal | None = None,
     external_ref: str | None = None,
+    machine_hours: float | Decimal | None = None,
+    quality_status: str | None = None,
     raw_consumptions: list[dict[str, Any]] | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any]:
@@ -61,6 +63,8 @@ def create_production_log_sync(
                     yield_out=_dec(yield_out) if yield_out is not None else None,
                     labor_cost=_dec(labor_cost) if labor_cost is not None else None,
                     external_ref=(external_ref or "").strip() or None,
+                    machine_hours=_dec(machine_hours) if machine_hours is not None else None,
+                    quality_status=(quality_status or "").strip()[:16] or None,
                 )
                 session.add(row)
                 session.flush()
@@ -131,6 +135,37 @@ def production_summary_sync(
             "total_blocks_out": float(_dec(blk)),
             "total_labor_cost_inr": float(_dec(lab)),
         }
+
+
+def list_org_assets_sync(*, organization_id: int) -> dict[str, Any]:
+    """Production logs reference ``assets.id``; list active assets for the tenant."""
+    oid = int(organization_id)
+    if oid <= 0:
+        return {"ok": False, "error": "organization_id required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(Asset)
+                .where(
+                    Asset.organization_id == oid,
+                    Asset.status_enum == AssetStatusEnum.active,
+                )
+                .order_by(Asset.name)
+            ).all()
+        )
+    items = [
+        {
+            "id": int(r.id),
+            "name": r.name,
+            "category": r.category,
+            "external_ref": r.external_ref,
+        }
+        for r in rows
+    ]
+    return {"ok": True, "assets": items}
 
 
 def list_machines_sync(*, organization_id: int) -> dict[str, Any]:
