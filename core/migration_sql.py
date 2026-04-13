@@ -49,6 +49,8 @@ SQL_BASELINE_FILES: tuple[str, ...] = (
     "db/bills_table.sql",
     "db/departments.sql",
     "db/invoices.sql",
+    # Phase 2 enterprise inventory / PO / payments (needs organizations, invoices, users)
+    "db/phase2_core_business.sql",
     "db/inventory_gst_columns.sql",
     "db/inventory_hsn_code.sql",
     "db/idempotency_and_jobs.sql",
@@ -197,6 +199,21 @@ def _apply_statements_from_file(
         raise FileNotFoundError(f"Alembic baseline SQL missing: {path}")
     raw = path.read_text(encoding="utf-8")
     statements = iter_statements(raw)
+    # Files that reference ``users`` (or alter ``roles``) also often contain follow-on DDL
+    # (e.g. ``CREATE INDEX ON approvals``) that must run *after* ``users`` exists but does not
+    # literally include the substring ``REFERENCES users``. Run the whole file in order post-identity.
+    if _file_requires_post_identity(root, rel):
+        if not _users_table_exists(bind):
+            raise RuntimeError(
+                f"Baseline file {rel!r} requires `users` but table is missing — "
+                f"ensure {_BASELINE_IDENTITY!r} ran earlier (check normalize_baseline_sql_paths)."
+            )
+        for statement in statements:
+            sp = f"th_baseline_{sp_counter}"
+            sp_counter += 1
+            _execute_one_statement(bind=bind, statement=statement, sp_name=sp)
+        return sp_counter
+
     without_users: list[str] = []
     with_users: list[str] = []
     for statement in statements:
