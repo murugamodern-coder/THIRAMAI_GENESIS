@@ -14,8 +14,23 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from api.dependencies import CurrentUser, get_current_user
+from core.database import get_session_factory
 from services import life_os_service
 from services import personal_command_center_service as pcc
+from services.personal_meetings_service import (
+    ARRANGED_BY,
+    LOCATION_TYPES,
+    MEETING_STATUSES,
+    MEETING_TYPES,
+    PRIORITIES,
+    create_meeting,
+    get_meeting_or_none,
+    list_meetings,
+    list_today,
+    list_upcoming,
+    serialize_meeting,
+    update_meeting_fields,
+)
 
 router = APIRouter(prefix="/personal/os", tags=["Personal Command Center"])
 
@@ -329,3 +344,318 @@ async def create_research(body: ResearchCreateBody, user: CurrentUser = Depends(
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return {"status": "ok", "id": rid}
+
+
+# --- Personal meetings / appointments ---
+
+
+class AttendeeItem(BaseModel):
+    name: str = Field("", max_length=200)
+    phone: str = Field("", max_length=64)
+    email: str = Field("", max_length=320)
+    role: str = Field("", max_length=120)
+
+
+class MeetingCreateBody(BaseModel):
+    title: str = Field(..., max_length=4000)
+    meeting_type: str = Field(..., max_length=32)
+    location_type: str = Field(..., max_length=32)
+    location_name: str = Field("", max_length=2000)
+    location_address: str | None = Field(None, max_length=8000)
+    location_maps_url: str | None = Field(None, max_length=8000)
+    scheduled_at: datetime
+    duration_minutes: int = Field(60, ge=5, le=24 * 60)
+    priority: str = Field("normal", max_length=16)
+    agenda: str | None = Field(None, max_length=16000)
+    arranged_by: str = Field("self", max_length=16)
+    organizer_name: str | None = Field(None, max_length=2000)
+    organizer_phone: str | None = Field(None, max_length=64)
+    organizer_email: str | None = Field(None, max_length=320)
+    attendees_json: list[AttendeeItem] = Field(default_factory=list)
+    reminder_minutes: int = Field(30, ge=0, le=24 * 60)
+    is_recurring: bool = False
+    recurrence_rule: str | None = Field(None, max_length=256)
+
+
+class MeetingUpdateBody(BaseModel):
+    title: str | None = Field(None, max_length=4000)
+    meeting_type: str | None = Field(None, max_length=32)
+    location_type: str | None = Field(None, max_length=32)
+    location_name: str | None = Field(None, max_length=2000)
+    location_address: str | None = None
+    location_maps_url: str | None = None
+    scheduled_at: datetime | None = None
+    duration_minutes: int | None = Field(None, ge=5, le=24 * 60)
+    status: str | None = Field(None, max_length=20)
+    priority: str | None = Field(None, max_length=16)
+    agenda: str | None = None
+    notes: str | None = None
+    outcome: str | None = None
+    arranged_by: str | None = Field(None, max_length=16)
+    organizer_name: str | None = None
+    organizer_phone: str | None = None
+    organizer_email: str | None = None
+    attendees_json: list[AttendeeItem] | None = None
+    reminder_minutes: int | None = Field(None, ge=0, le=24 * 60)
+    is_recurring: bool | None = None
+    recurrence_rule: str | None = Field(None, max_length=256)
+
+
+class MeetingCompleteBody(BaseModel):
+    outcome: str | None = Field(None, max_length=16000)
+
+
+def _require_db():
+    factory = get_session_factory()
+    if factory is None:
+        raise HTTPException(status_code=503, detail="Database not configured.")
+    return factory
+
+
+def _validate_meeting_type(v: str) -> None:
+    if v not in MEETING_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid meeting_type: {v!r}")
+
+
+def _validate_location_type(v: str) -> None:
+    if v not in LOCATION_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid location_type: {v!r}")
+
+
+def _validate_priority(v: str) -> None:
+    if v not in PRIORITIES:
+        raise HTTPException(status_code=400, detail=f"Invalid priority: {v!r}")
+
+
+def _validate_arranged_by(v: str) -> None:
+    if v not in ARRANGED_BY:
+        raise HTTPException(status_code=400, detail=f"Invalid arranged_by: {v!r}")
+
+
+def _validate_status(v: str) -> None:
+    if v not in MEETING_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {v!r}")
+
+
+@router.get("/meetings/today", summary="Today's scheduled meetings")
+async def meetings_today(user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    factory = _require_db()
+    now = datetime.now(timezone.utc)
+    with factory() as session:
+        items = list_today(session, user_id=int(user.id), organization_id=int(user.organization_id), now=now)
+    return {"items": items}
+
+
+@router.get("/meetings/upcoming", summary="Meetings in the next 7 days (active)")
+async def meetings_upcoming(user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    factory = _require_db()
+    now = datetime.now(timezone.utc)
+    with factory() as session:
+        items = list_upcoming(session, user_id=int(user.id), organization_id=int(user.organization_id), now=now)
+    return {"items": items}
+
+
+@router.get("/meetings", summary="List meetings with optional filters")
+async def meetings_list(
+    user: CurrentUser = Depends(get_current_user),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    meeting_type: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    if meeting_type:
+        _validate_meeting_type(meeting_type.strip())
+    if status:
+        _validate_status(status.strip())
+    factory = _require_db()
+    with factory() as session:
+        items = list_meetings(
+            session,
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            date_from=date_from,
+            date_to=date_to,
+            meeting_type=meeting_type.strip() if meeting_type else None,
+            status=status.strip() if status else None,
+            limit=limit,
+        )
+    return {"items": items}
+
+
+@router.post("/meetings", summary="Create meeting / appointment")
+async def meetings_create(body: MeetingCreateBody, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    _validate_meeting_type(body.meeting_type.strip())
+    _validate_location_type(body.location_type.strip())
+    _validate_priority(body.priority.strip())
+    _validate_arranged_by(body.arranged_by.strip())
+    if body.arranged_by.strip() == "other" and not (body.organizer_name or "").strip():
+        raise HTTPException(status_code=400, detail="organizer_name required when arranged_by is other")
+    factory = _require_db()
+    attendees = [a.model_dump() for a in body.attendees_json]
+    with factory() as session:
+        with session.begin():
+            row = create_meeting(
+                session,
+                user_id=int(user.id),
+                organization_id=int(user.organization_id),
+                title=body.title,
+                meeting_type=body.meeting_type.strip(),
+                location_type=body.location_type.strip(),
+                location_name=body.location_name,
+                location_address=body.location_address,
+                location_maps_url=body.location_maps_url,
+                scheduled_at=body.scheduled_at,
+                duration_minutes=body.duration_minutes,
+                priority=body.priority.strip(),
+                agenda=body.agenda,
+                arranged_by=body.arranged_by.strip(),
+                organizer_name=body.organizer_name,
+                organizer_phone=body.organizer_phone,
+                organizer_email=body.organizer_email,
+                attendees_json=attendees,
+                reminder_minutes=body.reminder_minutes,
+                is_recurring=body.is_recurring,
+                recurrence_rule=body.recurrence_rule,
+            )
+            out = serialize_meeting(row)
+    return {"status": "ok", "meeting": out}
+
+
+@router.get("/meetings/{meeting_id}", summary="Get one meeting")
+async def meetings_get(meeting_id: int, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    factory = _require_db()
+    with factory() as session:
+        m = get_meeting_or_none(
+            session,
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            meeting_id=meeting_id,
+        )
+        if m is None:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        out = serialize_meeting(m)
+    return {"meeting": out}
+
+
+@router.put("/meetings/{meeting_id}", summary="Update meeting")
+async def meetings_update(
+    meeting_id: int,
+    body: MeetingUpdateBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    data = body.model_dump(exclude_unset=True)
+    if "meeting_type" in data and data["meeting_type"]:
+        _validate_meeting_type(str(data["meeting_type"]).strip())
+    if "location_type" in data and data["location_type"]:
+        _validate_location_type(str(data["location_type"]).strip())
+    if "priority" in data and data["priority"]:
+        _validate_priority(str(data["priority"]).strip())
+    if "arranged_by" in data and data["arranged_by"]:
+        _validate_arranged_by(str(data["arranged_by"]).strip())
+    if "status" in data and data["status"]:
+        _validate_status(str(data["status"]).strip())
+    if "attendees_json" in data and data["attendees_json"] is not None:
+        norm: list[dict[str, Any]] = []
+        for x in data["attendees_json"]:
+            if isinstance(x, dict):
+                norm.append(AttendeeItem(**{k: x.get(k, "") for k in ("name", "phone", "email", "role")}).model_dump())
+        data["attendees_json"] = norm
+    allowed = {
+        "title",
+        "meeting_type",
+        "location_type",
+        "location_name",
+        "location_address",
+        "location_maps_url",
+        "scheduled_at",
+        "duration_minutes",
+        "status",
+        "priority",
+        "agenda",
+        "notes",
+        "outcome",
+        "arranged_by",
+        "organizer_name",
+        "organizer_phone",
+        "organizer_email",
+        "attendees_json",
+        "reminder_minutes",
+        "is_recurring",
+        "recurrence_rule",
+    }
+    kw = {k: v for k, v in data.items() if k in allowed}
+    if not kw:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+    factory = _require_db()
+    with factory() as session:
+        m = get_meeting_or_none(
+            session,
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            meeting_id=meeting_id,
+        )
+        if m is None:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        with session.begin():
+            update_meeting_fields(m, **kw)
+            out = serialize_meeting(m)
+    return {"status": "ok", "meeting": out}
+
+
+@router.delete("/meetings/{meeting_id}", summary="Cancel meeting (soft delete)")
+async def meetings_delete(meeting_id: int, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    factory = _require_db()
+    with factory() as session:
+        m = get_meeting_or_none(
+            session,
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            meeting_id=meeting_id,
+        )
+        if m is None:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        with session.begin():
+            m.status = "cancelled"
+            out = serialize_meeting(m)
+    return {"status": "ok", "meeting": out}
+
+
+@router.post("/meetings/{meeting_id}/complete", summary="Mark meeting completed")
+async def meetings_complete(
+    meeting_id: int,
+    body: MeetingCompleteBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    factory = _require_db()
+    with factory() as session:
+        m = get_meeting_or_none(
+            session,
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            meeting_id=meeting_id,
+        )
+        if m is None:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        with session.begin():
+            m.status = "completed"
+            if body.outcome is not None:
+                m.outcome = body.outcome
+            out = serialize_meeting(m)
+    return {"status": "ok", "meeting": out}

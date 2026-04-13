@@ -27,6 +27,7 @@ from core.db.models import (
 )
 from core.personal_ai_engine import generate_daily_guidance
 from services import life_os_service
+from services import personal_meetings_service
 from services.personal_crypto import encrypt_utf8
 from services.personal_os_aggregate import MISSION_OPEN_STATUSES
 
@@ -98,6 +99,10 @@ def build_morning_brief_sync(
     ai_insight: str = ""
 
     factory = _factory()
+    meetings_today_payload: list[dict[str, Any]] = []
+    meetings_upcoming_7d_count = 0
+    meeting_soon_alert: dict[str, Any] | None = None
+
     if factory is None:
         return {
             "as_of_utc": now.isoformat(),
@@ -105,6 +110,8 @@ def build_morning_brief_sync(
             "weather": weather,
             "priorities": [],
             "meetings": [],
+            "meetings_upcoming_7d_count": 0,
+            "meeting_soon_alert": None,
             "pending_decisions": [],
             "financial_snapshot": financial,
             "health_score": health_score,
@@ -205,6 +212,18 @@ def build_morning_brief_sync(
                     "had_vitals": True,
                 }
 
+        try:
+            meetings_today_payload, meetings_upcoming_7d_count, meeting_soon_alert = (
+                personal_meetings_service.meetings_morning_brief_payload(
+                    session,
+                    user_id=uid,
+                    organization_id=int(organization_id),
+                    now=now,
+                )
+            )
+        except Exception:
+            meetings_today_payload, meetings_upcoming_7d_count, meeting_soon_alert = [], 0, None
+
     snap = {
         "tasks": [{"id": p["id"], "title": p["title"]} for p in priorities],
         "reminders": [],
@@ -229,7 +248,9 @@ def build_morning_brief_sync(
         "date": today.isoformat(),
         "weather": weather,
         "priorities": priorities,
-        "meetings": [],
+        "meetings": meetings_today_payload,
+        "meetings_upcoming_7d_count": meetings_upcoming_7d_count,
+        "meeting_soon_alert": meeting_soon_alert,
         "pending_decisions": [],
         "financial_snapshot": financial,
         "health_score": health_score,

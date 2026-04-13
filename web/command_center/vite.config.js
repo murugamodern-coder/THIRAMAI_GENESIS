@@ -38,6 +38,8 @@ export default defineConfig({
       "/inventory": backend,
       "/billing": backend,
       "/production": backend,
+      "/personal": backend,
+      "/life": backend,
       "/org": backend,
       "/analytics": backend,
       "/ws": { target: backend, ws: true },

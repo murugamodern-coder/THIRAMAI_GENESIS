@@ -102,6 +102,9 @@ class Organization(Base):
     control_plane_jobs: Mapped[list["ControlPlaneJob"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
+    personal_meetings: Mapped[list["PersonalMeeting"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
 
 
 class Role(Base):
@@ -228,6 +231,9 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     personal_budgets: Mapped[list["PersonalBudget"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    personal_meetings: Mapped[list["PersonalMeeting"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -2220,6 +2226,62 @@ class PersonalBudget(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="personal_budgets")
+
+
+class PersonalMeeting(Base):
+    """Personal / business meetings and appointments (Personal Command Center)."""
+
+    __tablename__ = "personal_meetings"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    organization_id: Mapped[int] = mapped_column(
+        "organization_id",
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    meeting_type: Mapped[str] = mapped_column(String(32), nullable=False, default="other", index=True)
+    location_type: Mapped[str] = mapped_column(String(32), nullable=False, default="other")
+    location_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    location_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    location_maps_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="scheduled", index=True)
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
+    agenda: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    outcome: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    arranged_by: Mapped[str] = mapped_column(String(16), nullable=False, default="self")
+    organizer_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    organizer_phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    organizer_email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True)
+    attendees_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=list,
+    )
+    reminder_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    is_recurring: Mapped[bool] = mapped_column(default=False, nullable=False)
+    recurrence_rule: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="personal_meetings")
+    organization: Mapped["Organization"] = relationship(back_populates="personal_meetings")
 
 
 # Back-compat alias (deprecated)

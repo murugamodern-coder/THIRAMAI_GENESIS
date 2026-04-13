@@ -1094,6 +1094,20 @@ table.cc-table {
   border-bottom: none;
 }
 
+.personal-os-meeting-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cc-border);
+  font-size: 14px;
+}
+
+.personal-os-meeting-row:last-child {
+  border-bottom: none;
+}
+
 .personal-os-quick-forms {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

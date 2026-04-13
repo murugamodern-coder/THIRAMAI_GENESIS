@@ -212,3 +212,24 @@ export async function postLifeMission(payload) {
   const { data } = await api.post("/life/mission", payload);
   return data;
 }
+
+/** Personal OS — meetings / appointments */
+export async function fetchPersonalMeetingsToday() {
+  const { data } = await api.get("/personal/os/meetings/today");
+  return data;
+}
+
+export async function fetchPersonalMeetingsUpcoming() {
+  const { data } = await api.get("/personal/os/meetings/upcoming");
+  return data;
+}
+
+export async function createPersonalMeeting(payload) {
+  const { data } = await api.post("/personal/os/meetings", payload);
+  return data;
+}
+
+export async function completePersonalMeeting(meetingId, payload) {
+  const { data } = await api.post(`/personal/os/meetings/${meetingId}/complete`, payload ?? {});
+  return data;
+}

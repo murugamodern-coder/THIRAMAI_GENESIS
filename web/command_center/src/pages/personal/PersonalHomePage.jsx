@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
+  completePersonalMeeting,
   createPersonalExpense,
+  createPersonalMeeting,
   fetchLifeDashboard,
   fetchPendingDecisions,
   fetchPersonalMorningBrief,
@@ -47,6 +49,55 @@ function todayIsoDate() {
 
 const EMPTY_LIFE_DASH = { habits: [], habits_pending_today: 0, health_today: [], missions_open: [], legacy_health_log: null };
 
+const MEETING_TYPE_OPTIONS = [
+  { value: "personal", label: "Personal" },
+  { value: "business", label: "Business" },
+  { value: "family", label: "Family" },
+  { value: "friends", label: "Friends" },
+  { value: "medical", label: "Medical" },
+  { value: "legal", label: "Legal" },
+  { value: "government", label: "Government" },
+  { value: "vendor", label: "Vendor" },
+  { value: "client", label: "Client" },
+  { value: "team", label: "Team" },
+  { value: "interview", label: "Interview" },
+  { value: "site_visit", label: "Site visit" },
+  { value: "other", label: "Other" },
+];
+
+const LOCATION_TYPE_OPTIONS = [
+  { value: "in_person", label: "In person" },
+  { value: "online", label: "Online" },
+  { value: "phone_call", label: "Phone call" },
+  { value: "home", label: "Home" },
+  { value: "office", label: "Office" },
+  { value: "client_office", label: "Client office" },
+  { value: "restaurant", label: "Restaurant" },
+  { value: "hospital", label: "Hospital" },
+  { value: "court", label: "Court" },
+  { value: "site", label: "Site" },
+  { value: "other", label: "Other" },
+];
+
+const MEETING_PRIORITY_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "normal", label: "Normal" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" },
+];
+
+const LOCATION_TYPES_WITH_NAME = new Set([
+  "in_person",
+  "home",
+  "office",
+  "client_office",
+  "restaurant",
+  "hospital",
+  "court",
+  "site",
+  "other",
+]);
+
 export default function PersonalHomePage() {
   const [vaultPass, setVaultPass] = useState("");
   const vaultRef = useRef("");
@@ -79,6 +130,22 @@ export default function PersonalHomePage() {
   const [feCat, setFeCat] = useState("personal");
   const [feNote, setFeNote] = useState("");
   const [feBusy, setFeBusy] = useState(false);
+
+  const [mtTitle, setMtTitle] = useState("");
+  const [mtType, setMtType] = useState("personal");
+  const [mtDate, setMtDate] = useState(() => todayIsoDate());
+  const [mtTime, setMtTime] = useState("09:00");
+  const [mtDurationPreset, setMtDurationPreset] = useState("60");
+  const [mtDurationCustom, setMtDurationCustom] = useState("");
+  const [mtLocType, setMtLocType] = useState("in_person");
+  const [mtLocName, setMtLocName] = useState("");
+  const [mtPriority, setMtPriority] = useState("normal");
+  const [mtArrangedBy, setMtArrangedBy] = useState("self");
+  const [mtOrgName, setMtOrgName] = useState("");
+  const [mtOrgPhone, setMtOrgPhone] = useState("");
+  const [mtAgenda, setMtAgenda] = useState("");
+  const [mtAttendees, setMtAttendees] = useState([{ name: "", phone: "" }]);
+  const [mtBusy, setMtBusy] = useState(false);
 
   useEffect(() => {
     vaultRef.current = vaultPass;
@@ -239,6 +306,85 @@ export default function PersonalHomePage() {
     }
   };
 
+  const onSaveMeeting = async (e) => {
+    e.preventDefault();
+    setFormMsg(null);
+    const title = mtTitle.trim();
+    if (!title) {
+      setFormMsg("Enter a meeting title.");
+      return;
+    }
+    if (mtArrangedBy === "other" && !mtOrgName.trim()) {
+      setFormMsg("Enter organizer name when “Someone else” arranged the meeting.");
+      return;
+    }
+    let dm = 60;
+    if (mtDurationPreset === "30") dm = 30;
+    else if (mtDurationPreset === "60") dm = 60;
+    else if (mtDurationPreset === "120") dm = 120;
+    else {
+      const c = Number(mtDurationCustom);
+      if (!c || c < 5) {
+        setFormMsg("Enter custom duration in minutes (minimum 5).");
+        return;
+      }
+      dm = Math.min(24 * 60, Math.floor(c));
+    }
+    const scheduledLocal = new Date(`${mtDate}T${mtTime}:00`);
+    if (Number.isNaN(scheduledLocal.getTime())) {
+      setFormMsg("Invalid date or time.");
+      return;
+    }
+    setMtBusy(true);
+    try {
+      await createPersonalMeeting({
+        title,
+        meeting_type: mtType,
+        location_type: mtLocType,
+        location_name: mtLocName.trim(),
+        location_address: null,
+        location_maps_url: null,
+        scheduled_at: scheduledLocal.toISOString(),
+        duration_minutes: dm,
+        priority: mtPriority,
+        agenda: mtAgenda.trim() || null,
+        arranged_by: mtArrangedBy,
+        organizer_name: mtArrangedBy === "other" ? mtOrgName.trim() || null : null,
+        organizer_phone: mtArrangedBy === "other" ? mtOrgPhone.trim() || null : null,
+        organizer_email: null,
+        attendees_json: mtAttendees
+          .filter((a) => (a.name && a.name.trim()) || (a.phone && a.phone.trim()))
+          .map((a) => ({ name: (a.name || "").trim(), phone: (a.phone || "").trim(), email: "", role: "" })),
+        reminder_minutes: 30,
+        is_recurring: false,
+        recurrence_rule: null,
+      });
+      setMtTitle("");
+      setMtAgenda("");
+      setMtLocName("");
+      setMtOrgName("");
+      setMtOrgPhone("");
+      setMtAttendees([{ name: "", phone: "" }]);
+      setFormMsg("Meeting saved.");
+      await load();
+    } catch (err) {
+      setFormMsg(err?.response?.data?.detail || err?.message || "Could not save meeting.");
+    } finally {
+      setMtBusy(false);
+    }
+  };
+
+  const onMeetingComplete = async (meetingId) => {
+    setFormMsg(null);
+    try {
+      await completePersonalMeeting(meetingId, {});
+      setFormMsg("Meeting marked complete.");
+      await load();
+    } catch (err) {
+      setFormMsg(err?.response?.data?.detail || err?.message || "Could not update meeting.");
+    }
+  };
+
   const onHabitDone = async (habitId) => {
     setFormMsg(null);
     try {
@@ -282,6 +428,11 @@ export default function PersonalHomePage() {
 
       {error && <div className="personal-os-banner personal-os-banner--error">{String(error)}</div>}
       {formMsg && <div className="personal-os-banner">{formMsg}</div>}
+      {brief?.meeting_soon_alert && (
+        <div className="personal-os-banner personal-os-banner--error" role="status">
+          <strong>Starting soon:</strong> {brief.meeting_soon_alert.message || brief.meeting_soon_alert.title}
+        </div>
+      )}
       {loading && !brief && <p className="cc-muted">Loading your brief…</p>}
 
       <p className="personal-os-section-lead cc-muted">Quick add — habit, health, task, expense (scroll for snapshot and brief).</p>
@@ -376,6 +527,154 @@ export default function PersonalHomePage() {
           </label>
           <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" disabled={missionBusy}>
             {missionBusy ? "Saving…" : "Save task"}
+          </button>
+        </form>
+
+        <form className="personal-os-card personal-os-quick-form" onSubmit={onSaveMeeting}>
+          <h3 className="personal-os-card-title">Add meeting</h3>
+          <p className="personal-os-form-help">Schedule with type, location, priority, agenda, attendees → POST /personal/os/meetings.</p>
+          <label className="personal-os-label">
+            Title
+            <input className="cc-input" value={mtTitle} onChange={(e) => setMtTitle(e.target.value)} placeholder="Meeting subject" />
+          </label>
+          <div className="personal-os-form-grid personal-os-form-grid--dense">
+            <label className="personal-os-label">
+              Meeting type
+              <select className="cc-select" value={mtType} onChange={(e) => setMtType(e.target.value)}>
+                {MEETING_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="personal-os-label">
+              Date
+              <input className="cc-input" type="date" value={mtDate} onChange={(e) => setMtDate(e.target.value)} />
+            </label>
+            <label className="personal-os-label">
+              Time
+              <input className="cc-input" type="time" value={mtTime} onChange={(e) => setMtTime(e.target.value)} />
+            </label>
+            <label className="personal-os-label">
+              Duration
+              <select className="cc-select" value={mtDurationPreset} onChange={(e) => setMtDurationPreset(e.target.value)}>
+                <option value="30">30 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="custom">Custom…</option>
+              </select>
+            </label>
+            {mtDurationPreset === "custom" && (
+              <label className="personal-os-label">
+                Minutes
+                <input
+                  className="cc-input"
+                  type="number"
+                  min={5}
+                  max={1440}
+                  value={mtDurationCustom}
+                  onChange={(e) => setMtDurationCustom(e.target.value)}
+                  placeholder="e.g. 45"
+                />
+              </label>
+            )}
+            <label className="personal-os-label">
+              Location type
+              <select className="cc-select" value={mtLocType} onChange={(e) => setMtLocType(e.target.value)}>
+                {LOCATION_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {LOCATION_TYPES_WITH_NAME.has(mtLocType) && (
+              <label className="personal-os-label personal-os-label--full">
+                Location name
+                <input
+                  className="cc-input"
+                  value={mtLocName}
+                  onChange={(e) => setMtLocName(e.target.value)}
+                  placeholder="Branch name, Zoom link label, room…"
+                />
+              </label>
+            )}
+            <label className="personal-os-label">
+              Priority
+              <select className="cc-select" value={mtPriority} onChange={(e) => setMtPriority(e.target.value)}>
+                {MEETING_PRIORITY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="personal-os-label">
+              Arranged by
+              <select className="cc-select" value={mtArrangedBy} onChange={(e) => setMtArrangedBy(e.target.value)}>
+                <option value="self">Me</option>
+                <option value="other">Someone else</option>
+              </select>
+            </label>
+            {mtArrangedBy === "other" && (
+              <>
+                <label className="personal-os-label">
+                  Organizer name
+                  <input className="cc-input" value={mtOrgName} onChange={(e) => setMtOrgName(e.target.value)} />
+                </label>
+                <label className="personal-os-label">
+                  Organizer phone
+                  <input className="cc-input" value={mtOrgPhone} onChange={(e) => setMtOrgPhone(e.target.value)} />
+                </label>
+              </>
+            )}
+          </div>
+          <label className="personal-os-label personal-os-label--full">
+            Agenda (optional)
+            <textarea className="cc-input" rows={2} value={mtAgenda} onChange={(e) => setMtAgenda(e.target.value)} placeholder="What to cover" />
+          </label>
+          <div className="personal-os-form-help">Attendees</div>
+          {mtAttendees.map((row, idx) => (
+            <div key={idx} className="personal-os-form-grid personal-os-form-grid--dense" style={{ marginBottom: 8 }}>
+              <label className="personal-os-label">
+                Name
+                <input
+                  className="cc-input"
+                  value={row.name}
+                  onChange={(e) => {
+                    const next = [...mtAttendees];
+                    next[idx] = { ...next[idx], name: e.target.value };
+                    setMtAttendees(next);
+                  }}
+                  placeholder="Name"
+                />
+              </label>
+              <label className="personal-os-label">
+                Phone
+                <input
+                  className="cc-input"
+                  value={row.phone}
+                  onChange={(e) => {
+                    const next = [...mtAttendees];
+                    next[idx] = { ...next[idx], phone: e.target.value };
+                    setMtAttendees(next);
+                  }}
+                  placeholder="Phone"
+                />
+              </label>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="cc-btn"
+            style={{ marginBottom: 12 }}
+            onClick={() => setMtAttendees([...mtAttendees, { name: "", phone: "" }])}
+          >
+            + Add attendee row
+          </button>
+          <button type="submit" className="cc-btn cc-btn-primary personal-os-btn-touch" disabled={mtBusy}>
+            {mtBusy ? "Saving…" : "Save meeting"}
           </button>
         </form>
 
@@ -505,6 +804,13 @@ export default function PersonalHomePage() {
                   </span>
                 )}
               </div>
+              <div>
+                <span className="personal-os-stat-label">Meetings (7 days)</span>
+                <span className="personal-os-stat-value">{brief.meetings_upcoming_7d_count ?? 0}</span>
+                <span className="cc-muted" style={{ display: "block", fontSize: 12 }}>
+                  Active in the next week
+                </span>
+              </div>
             </div>
           </section>
 
@@ -549,12 +855,41 @@ export default function PersonalHomePage() {
           </section>
 
           <section className="personal-os-card">
-            <h2 className="personal-os-card-title">Meetings</h2>
-            <p className="cc-muted">
-              {(brief.meetings || []).length === 0
-                ? "Planner sync for today arrives in a later phase — use your calendar for now."
-                : JSON.stringify(brief.meetings)}
-            </p>
+            <h2 className="personal-os-card-title">
+              Today&apos;s meetings
+              <span className="personal-os-pill personal-os-pill--p2" style={{ marginLeft: 8, fontSize: 11 }}>
+                Next 7d: {brief.meetings_upcoming_7d_count ?? 0}
+              </span>
+            </h2>
+            {(brief.meetings || []).length === 0 ? (
+              <p className="cc-muted">No meetings scheduled for today. Add one above.</p>
+            ) : (
+              <ul className="personal-os-list personal-os-list--plain">
+                {(brief.meetings || []).map((m) => (
+                  <li key={m.id} className="personal-os-meeting-row">
+                    <div>
+                      <strong>
+                        {m.scheduled_at
+                          ? new Date(m.scheduled_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+                          : "—"}{" "}
+                        · {m.title}
+                      </strong>
+                      <span className="personal-os-pill personal-os-pill--p2" style={{ marginLeft: 6, fontSize: 10 }}>
+                        {m.meeting_type}
+                      </span>
+                      <span className="cc-muted" style={{ display: "block", fontSize: 12 }}>
+                        {m.location_type}
+                        {m.location_name ? ` · ${m.location_name}` : ""}
+                        {m.arranged_by === "other" && m.organizer_name ? ` · Organizer: ${m.organizer_name}` : ""}
+                      </span>
+                    </div>
+                    <button type="button" className="cc-btn cc-btn-primary personal-os-btn-compact" onClick={() => onMeetingComplete(m.id)}>
+                      Done
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section className="personal-os-card personal-os-card--wide">
