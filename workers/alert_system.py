@@ -304,6 +304,20 @@ def start_alert_scheduler() -> BackgroundScheduler | None:
     except Exception as exc:
         _log.warning("alert_system.autonomy_schedule_skipped: %s", exc)
 
+    try:
+        from services.personal_meeting_intelligence import register_meeting_reminder_job
+
+        register_meeting_reminder_job(sched)
+    except Exception as exc:
+        _log.warning("alert_system.meeting_reminders_skipped: %s", exc)
+
+    try:
+        from services.web_push_service import register_web_push_jobs
+
+        register_web_push_jobs(sched)
+    except Exception as exc:
+        _log.warning("alert_system.web_push_jobs_skipped: %s", exc)
+
     sched.start()
     _scheduler = sched
     rid = new_request_id()
@@ -391,7 +405,7 @@ def main() -> None:
 
     from dotenv import load_dotenv
 
-    load_dotenv(dotenv_path=Path(".") / ".env", override=True)
+    load_dotenv(dotenv_path=Path(".") / ".env", override=False)
     ensure_thiramai_logging()
     start_alert_scheduler()
     run_alert_scan()
@@ -400,6 +414,19 @@ def main() -> None:
 
         if jarvis_email_poll_enabled():
             run_jarvis_email_scan()
+    except Exception:
+        pass
+    try:
+        from services.personal_meeting_intelligence import run_meeting_reminder_scan
+
+        run_meeting_reminder_scan()
+    except Exception:
+        pass
+    try:
+        from services.web_push_service import run_daily_brief_web_push_scan, run_emi_web_push_scan
+
+        run_emi_web_push_scan()
+        run_daily_brief_web_push_scan()
     except Exception:
         pass
     try:

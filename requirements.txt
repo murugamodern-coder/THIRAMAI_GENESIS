@@ -36,6 +36,7 @@ cryptography>=42.0.0
 python-multipart>=0.0.9
 email-validator>=2.0.0
 redis>=5.0.0
+pywebpush>=2.0.0
 
 # Docker SDK — micro-kernel sandbox (optional; set THIRAMAI_KERNEL_SANDBOX=1)
 docker>=7.0.0

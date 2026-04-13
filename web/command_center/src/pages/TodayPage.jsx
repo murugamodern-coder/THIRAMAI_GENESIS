@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 
 import { fetchPersonalTodayBrief } from "../api/commandCenterApi.js";
 import { requestNotificationPermission, useSmartNotifications } from "../hooks/useSmartNotifications.js";
+import { registerWebPushSubscription } from "../lib/webPushSubscribe.js";
+import { showToastDedup } from "../lib/toastDedup.js";
 
 function formatLongDate(isoDate) {
   if (!isoDate) return "";
@@ -57,6 +59,7 @@ export default function TodayPage() {
     () => typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted",
   );
   const [winText, setWinText] = useState("");
+  const [pushBusy, setPushBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +130,36 @@ export default function TodayPage() {
     setNotifOn(p === "granted");
   }
 
+  const pushSupported =
+    typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+
+  async function onBackgroundPush() {
+    if (!pushSupported) {
+      showToastDedup({ type: "warning", message: "Web Push not supported in this browser" });
+      return;
+    }
+    if (!import.meta.env.PROD) {
+      showToastDedup({
+        type: "info",
+        message: "Use a production build over HTTPS (or localhost) so the service worker is registered.",
+      });
+    }
+    setPushBusy(true);
+    try {
+      await registerWebPushSubscription();
+      showToastDedup({
+        type: "success",
+        message: "Background push enabled — meeting, EMI, and daily brief alerts when the app is closed.",
+      });
+    } catch (err) {
+      const d = err?.response?.data?.detail;
+      const msg = typeof d === "string" ? d : err?.message || "Push setup failed";
+      showToastDedup({ type: "error", message: msg });
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
   if (loading && !data) {
     return (
       <div className="cc-today-page cc-today-page--loading">
@@ -179,7 +212,16 @@ export default function TodayPage() {
           </p>
           <div className="cc-today-hero-actions">
             <button type="button" className="cc-btn cc-btn-secondary cc-today-notif-btn" onClick={onEnableNotifs}>
-              {notifOn ? "Reminders on" : "Enable reminders"}
+              {notifOn ? "In-app reminders on" : "In-app reminders"}
+            </button>
+            <button
+              type="button"
+              className="cc-btn cc-btn-primary cc-today-notif-btn"
+              disabled={!pushSupported || pushBusy}
+              onClick={onBackgroundPush}
+              title="Requires HTTPS (or localhost), VAPID keys on server, and production PWA build"
+            >
+              {pushBusy ? "Enabling push…" : "Background push (closed app)"}
             </button>
           </div>
         </div>

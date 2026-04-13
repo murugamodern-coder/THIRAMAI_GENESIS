@@ -63,6 +63,8 @@ def _bearer(request: Request) -> str | None:
 
 def _path_exempt(path: str) -> bool:
     p = path or ""
+    if p == "/push/vapid-public-key":
+        return True
     if p in ("/", ""):
         return True
     # Login/register/refresh: tighter in-memory limits on this router; avoid double NAT throttling here.

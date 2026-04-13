@@ -43,6 +43,7 @@ export default defineConfig({
       "/org": backend,
       "/analytics": backend,
       "/integrations": backend,
+      "/push": backend,
       "/auth/google": backend,
       "/ws": { target: backend, ws: true },
     },
