@@ -16,6 +16,7 @@ import PersonalFinancePage from "./pages/personal/PersonalFinancePage.jsx";
 import PersonalHealthPage from "./pages/personal/PersonalHealthPage.jsx";
 import PersonalProductivityPage from "./pages/personal/PersonalProductivityPage.jsx";
 import PersonalResearchPage from "./pages/personal/PersonalResearchPage.jsx";
+import TodayPage from "./pages/TodayPage.jsx";
 
 function Protected({ children }) {
   const token = useCommandStore((s) => s.token);
@@ -37,6 +38,16 @@ export default function App() {
           </Protected>
         }
       />
+      <Route
+        path="/today"
+        element={
+          <Protected>
+            <ShellLayout />
+          </Protected>
+        }
+      >
+        <Route index element={<TodayPage />} />
+      </Route>
       <Route
         path="/dashboard"
         element={

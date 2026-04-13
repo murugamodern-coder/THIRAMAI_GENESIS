@@ -56,7 +56,7 @@ export default function ShellLayout() {
     try {
       const out = await switchOrganization(id);
       if (out?.access_token) setToken(out.access_token);
-      window.location.hash = "#/";
+      window.location.hash = "#/today";
       window.location.reload();
     } catch {
       /* toast could go here */
@@ -66,10 +66,13 @@ export default function ShellLayout() {
   return (
     <div className="cc-app">
       <header className="cc-topbar">
-        <Link className="cc-brand" to="/" style={{ textDecoration: "none", color: "inherit" }}>
+        <Link className="cc-brand" to="/today" style={{ textDecoration: "none", color: "inherit" }}>
           THIRAMAI — AI Command Center
         </Link>
         <nav className="cc-nav" aria-label="Primary">
+          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} end to="/today">
+            Today
+          </NavLink>
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} end to="/dashboard">
             Dashboard
           </NavLink>

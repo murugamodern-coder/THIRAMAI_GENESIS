@@ -137,6 +137,12 @@ export async function fetchPersonalMorningBrief(vaultPassphrase) {
   return data;
 }
 
+/** Unified hero Today payload (morning brief + business + max 3 alerts). */
+export async function fetchPersonalTodayBrief(vaultPassphrase) {
+  const { data } = await api.get("/personal/os/today-brief", { headers: _vaultHeaders(vaultPassphrase) });
+  return data;
+}
+
 export async function fetchPersonalExpenses(limit = 100) {
   const { data } = await api.get("/personal/os/expenses", { params: { limit } });
   return data;

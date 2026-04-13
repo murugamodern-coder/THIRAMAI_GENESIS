@@ -11,7 +11,7 @@ export default function LandingPage() {
         <span className="cc-brand">THIRAMAI</span>
         <nav className="cc-landing-nav">
           {token ? (
-            <Link className="cc-btn cc-btn-primary" to="/dashboard">
+            <Link className="cc-btn cc-btn-primary" to="/today">
               Open command center
             </Link>
           ) : (

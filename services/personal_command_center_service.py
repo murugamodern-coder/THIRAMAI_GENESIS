@@ -14,22 +14,25 @@ from typing import Any
 import httpx
 from cryptography.fernet import Fernet
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 from core.database import get_session_factory
 from core.db.models import (
     DoctorVisit,
+    HealthLog,
     MedicineTracker,
     PersonalBudget,
     PersonalExpense,
     PersonalLoan,
     PersonalMission,
     ResearchProject,
+    User,
     VitalRecord,
 )
 from core.personal_ai_engine import generate_daily_guidance
 from services import life_os_service
 from services import personal_meetings_service
 from services.personal_crypto import encrypt_utf8
-from services.personal_os_aggregate import MISSION_OPEN_STATUSES
+from services.personal_os_aggregate import MISSION_OPEN_STATUSES, build_personal_today_sync
 
 _PRIORITY_ORDER = {"P1": 0, "P2": 1, "P3": 2}
 
@@ -255,6 +258,244 @@ def build_morning_brief_sync(
         "financial_snapshot": financial,
         "health_score": health_score,
         "ai_insight": ai_insight,
+    }
+
+
+def _user_display_name(session: Session, uid: int) -> str:
+    u = session.get(User, int(uid))
+    if u is None:
+        return "there"
+    un = (getattr(u, "username", None) or "").strip()
+    if un:
+        return un
+    local = (u.email or "").split("@", 1)[0].strip()
+    return local or "there"
+
+
+def _days_since_last_health_activity(session: Session, uid: int) -> int | None:
+    """Days since last vital record or legacy health log day; None if never logged."""
+    uid = int(uid)
+    last_v = session.execute(
+        select(VitalRecord.recorded_at)
+        .where(VitalRecord.user_id == uid)
+        .order_by(VitalRecord.recorded_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    last_h = session.execute(
+        select(HealthLog.logged_on)
+        .where(HealthLog.user_id == uid)
+        .order_by(HealthLog.logged_on.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    today = datetime.now(timezone.utc).date()
+    candidates: list[date] = []
+    if last_v is not None:
+        dt = last_v if isinstance(last_v, datetime) else datetime.fromisoformat(str(last_v))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        candidates.append(dt.date())
+    if last_h is not None:
+        if isinstance(last_h, date):
+            candidates.append(last_h)
+        else:
+            try:
+                candidates.append(date.fromisoformat(str(last_h)[:10]))
+            except Exception:
+                pass
+    if not candidates:
+        return None
+    most_recent = max(candidates)
+    return (today - most_recent).days
+
+
+def build_today_brief_sync(
+    *,
+    user_id: int,
+    organization_id: int,
+    fernet: Fernet | None = None,
+) -> dict[str, Any]:
+    """
+    Unified hero \"Today\" payload: morning brief + business snapshot + capped proactive alerts.
+    """
+    uid = int(user_id)
+    oid = int(organization_id)
+    brief = build_morning_brief_sync(user_id=uid, organization_id=oid, fernet=fernet)
+    agg = build_personal_today_sync(user_id=uid, organization_id=oid, low_stock_threshold=5)
+
+    lat = float(os.getenv("PERSONAL_OS_WEATHER_LAT") or "0")
+    lon = float(os.getenv("PERSONAL_OS_WEATHER_LON") or "0")
+    weather_configured = bool(lat and lon and abs(lat) <= 90 and abs(lon) <= 180)
+
+    display_name = "there"
+    factory = _factory()
+    if factory is not None and uid > 0:
+        with factory() as session:
+            display_name = _user_display_name(session, uid)
+
+    # Format first name for greeting (avoid shouting full email)
+    greet = display_name.strip() or "there"
+    if greet != "there":
+        greet = greet.replace("_", " ").split()[0]
+        greet = greet[:1].upper() + greet[1:] if greet else "there"
+
+    focus_task: dict[str, Any] | None = None
+    for p in brief.get("priorities") or []:
+        if str(p.get("priority") or "").upper() == "P1":
+            focus_task = p
+            break
+    if focus_task is None and brief.get("priorities"):
+        focus_task = brief["priorities"][0]
+
+    now = datetime.now(timezone.utc)
+    meetings_raw = list(brief.get("meetings") or [])
+    next_id: int | None = None
+    future: list[tuple[datetime, int]] = []
+    for m in meetings_raw:
+        mid = int(m.get("id") or 0)
+        sa = m.get("scheduled_at")
+        if not sa or not mid:
+            continue
+        try:
+            raw = str(sa).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            if dt >= now:
+                future.append((dt, mid))
+        except Exception:
+            continue
+    if future:
+        future.sort(key=lambda x: x[0])
+        next_id = future[0][1]
+    elif meetings_raw:
+        try:
+            scored: list[tuple[datetime, int]] = []
+            for m in meetings_raw:
+                mid = int(m.get("id") or 0)
+                sa = m.get("scheduled_at")
+                if not sa or not mid:
+                    continue
+                raw = str(sa).replace("Z", "+00:00")
+                dt = datetime.fromisoformat(raw)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                scored.append((dt, mid))
+            if scored:
+                scored.sort(key=lambda x: x[0])
+                next_id = scored[0][1]
+        except Exception:
+            next_id = int(meetings_raw[0].get("id") or 0) or None
+
+    meetings_today: list[dict[str, Any]] = []
+    for m in meetings_raw:
+        mid = int(m.get("id") or 0)
+        meetings_today.append({**m, "is_next": bool(next_id and mid == next_id)})
+
+    business_snapshot: dict[str, Any] = {"ok": False}
+    sales = agg.get("today_sales") if isinstance(agg.get("today_sales"), dict) else {}
+    if oid > 0 and sales.get("ok"):
+        rev = sales.get("revenue_inr") if isinstance(sales.get("revenue_inr"), dict) else {}
+        business_snapshot = {
+            "ok": True,
+            "revenue_today_inr": rev.get("today"),
+            "revenue_week_inr": rev.get("this_week"),
+            "revenue_month_inr": rev.get("this_month"),
+            "top_selling_products": sales.get("top_selling_products") or [],
+        }
+
+    alerts: list[dict[str, Any]] = []
+    soon = brief.get("meeting_soon_alert")
+    if isinstance(soon, dict) and soon.get("message"):
+        alerts.append(
+            {
+                "code": "meeting_soon",
+                "severity": "high",
+                "message": str(soon["message"]),
+            }
+        )
+
+    fin = brief.get("financial_snapshot") if isinstance(brief.get("financial_snapshot"), dict) else {}
+    today_d = datetime.now(timezone.utc).date()
+    for emi in fin.get("upcoming_emis") or []:
+        if not isinstance(emi, dict):
+            continue
+        due_s = emi.get("due")
+        if not due_s:
+            continue
+        try:
+            d_str = str(due_s)[:10]
+            due_d = date.fromisoformat(d_str)
+            days_until = (due_d - today_d).days
+            if 0 <= days_until <= 7:
+                name = str(emi.get("name") or "Loan").strip() or "Loan"
+                if days_until == 0:
+                    msg = f"EMI due today: {name}"
+                elif days_until == 1:
+                    msg = f"EMI due tomorrow: {name}"
+                else:
+                    msg = f"EMI due in {days_until} days: {name}"
+                alerts.append({"code": "emi_due", "severity": "medium", "message": msg})
+                break
+        except Exception:
+            continue
+
+    low = agg.get("low_stock") if isinstance(agg.get("low_stock"), dict) else {}
+    items = low.get("items") if isinstance(low.get("items"), list) else []
+    if oid > 0 and items:
+        first = items[0] if isinstance(items[0], dict) else {}
+        sku = str(first.get("sku_name") or first.get("name") or "Item").strip() or "Item"
+        qty = first.get("quantity")
+        qbit = f" (qty {qty})" if qty is not None else ""
+        alerts.append(
+            {
+                "code": "low_stock",
+                "severity": "high",
+                "message": f"Low stock alert: {sku}{qbit}",
+            }
+        )
+
+    days_stale: int | None = None
+    if factory is not None and uid > 0:
+        with factory() as session:
+            days_stale = _days_since_last_health_activity(session, uid)
+    if days_stale is not None and days_stale >= 2:
+        alerts.append(
+            {
+                "code": "health_stale",
+                "severity": "medium",
+                "message": (
+                    f"You haven't logged health in {days_stale} days."
+                    if days_stale > 2
+                    else "You haven't logged health in 2 days."
+                ),
+            }
+        )
+
+    sev_rank = {"high": 0, "medium": 1, "low": 2}
+    alerts.sort(key=lambda a: sev_rank.get(str(a.get("severity")), 9))
+    proactive_alerts = alerts[:3]
+
+    nudges = agg.get("meeting_nudges") if isinstance(agg.get("meeting_nudges"), list) else []
+
+    return {
+        "ok": True,
+        "as_of_utc": brief.get("as_of_utc"),
+        "date": brief.get("date"),
+        "greeting": {
+            "display_name": greet,
+            "server_time_utc": datetime.now(timezone.utc).isoformat(),
+        },
+        "weather": brief.get("weather"),
+        "weather_configured": weather_configured,
+        "focus_task": focus_task,
+        "meetings_today": meetings_today,
+        "health_score_yesterday": brief.get("health_score"),
+        "business_snapshot": business_snapshot,
+        "proactive_alerts": proactive_alerts,
+        "motivational_insight": brief.get("ai_insight") or "",
+        "meeting_nudges": nudges[:5],
+        "meetings_upcoming_7d_count": brief.get("meetings_upcoming_7d_count", 0),
+        "financial_snapshot": fin,
     }
 
 

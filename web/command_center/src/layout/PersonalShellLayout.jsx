@@ -4,13 +4,16 @@ export default function PersonalShellLayout() {
   return (
     <div className="cc-app">
       <header className="cc-topbar">
-        <Link className="cc-brand" to="/dashboard" style={{ textDecoration: "none", color: "inherit" }}>
+        <Link className="cc-brand" to="/today" style={{ textDecoration: "none", color: "inherit" }}>
           THIRAMAI
         </Link>
         <span className="cc-muted" style={{ fontWeight: 600, color: "var(--cc-text)" }}>
           Personal Command Center
         </span>
         <nav className="cc-nav" aria-label="Personal OS">
+          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} end to="/today">
+            Today
+          </NavLink>
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} end to="/personal">
             Brief
           </NavLink>
@@ -28,7 +31,7 @@ export default function PersonalShellLayout() {
           </NavLink>
         </nav>
         <Link to="/dashboard" className="cc-muted" style={{ marginLeft: "auto", fontSize: 13 }}>
-          ← Business dashboard
+          Business dashboard
         </Link>
       </header>
       <main className="cc-main personal-os-main">

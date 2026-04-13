@@ -43,7 +43,7 @@ export default function OnboardingPage() {
         const uid = me.id;
         setUserId(uid);
         if (uid > 0 && isOnboardingDone(uid)) {
-          navigate("/dashboard", { replace: true });
+          navigate("/today", { replace: true });
           return;
         }
       } finally {
@@ -76,7 +76,7 @@ export default function OnboardingPage() {
         /* non-blocking */
       }
     }
-    navigate("/dashboard", { replace: true });
+    navigate("/today", { replace: true });
   }
 
   function next() {

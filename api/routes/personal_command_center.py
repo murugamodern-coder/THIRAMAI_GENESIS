@@ -11,12 +11,21 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from api.dependencies import CurrentUser, get_current_user
 from core.database import get_session_factory
+from core.db.models import PersonalMission
 from services import life_os_service
 from services import personal_command_center_service as pcc
+from services.personal_meeting_intelligence import (
+    build_meeting_ics,
+    find_overlapping_meeting_ids,
+    follow_up_mission_title,
+    suggest_duration_and_agenda,
+)
 from services.personal_meetings_service import (
     ARRANGED_BY,
     LOCATION_TYPES,
@@ -50,6 +59,21 @@ async def morning_brief(
         raise HTTPException(status_code=400, detail="Real user id required")
     fn = _fernet(int(user.id), x_personal_vault_passphrase)
     return pcc.build_morning_brief_sync(
+        user_id=int(user.id),
+        organization_id=int(user.organization_id),
+        fernet=fn,
+    )
+
+
+@router.get("/today-brief", summary="Unified Today hero — brief + business + alerts (max 3)")
+async def today_brief(
+    user: CurrentUser = Depends(get_current_user),
+    x_personal_vault_passphrase: str | None = Header(default=None, alias="X-Personal-Vault-Passphrase"),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    fn = _fernet(int(user.id), x_personal_vault_passphrase)
+    return pcc.build_today_brief_sync(
         user_id=int(user.id),
         organization_id=int(user.organization_id),
         fernet=fn,
@@ -459,6 +483,17 @@ async def meetings_upcoming(user: CurrentUser = Depends(get_current_user)) -> di
     return {"items": items}
 
 
+@router.get("/meetings/suggestions", summary="Heuristic duration + agenda template (no LLM)")
+async def meetings_suggestions(
+    meeting_type: str = "other",
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    _validate_meeting_type(meeting_type.strip())
+    return suggest_duration_and_agenda(meeting_type.strip())
+
+
 @router.get("/meetings", summary="List meetings with optional filters")
 async def meetings_list(
     user: CurrentUser = Depends(get_current_user),
@@ -501,6 +536,7 @@ async def meetings_create(body: MeetingCreateBody, user: CurrentUser = Depends(g
         raise HTTPException(status_code=400, detail="organizer_name required when arranged_by is other")
     factory = _require_db()
     attendees = [a.model_dump() for a in body.attendees_json]
+    suggestions = suggest_duration_and_agenda(body.meeting_type.strip())
     with factory() as session:
         with session.begin():
             row = create_meeting(
@@ -526,8 +562,44 @@ async def meetings_create(body: MeetingCreateBody, user: CurrentUser = Depends(g
                 is_recurring=body.is_recurring,
                 recurrence_rule=body.recurrence_rule,
             )
+            cids = find_overlapping_meeting_ids(
+                session,
+                user_id=int(user.id),
+                organization_id=int(user.organization_id),
+                scheduled_at=row.scheduled_at,
+                duration_minutes=int(row.duration_minutes or 60),
+                exclude_meeting_id=int(row.id),
+            )
             out = serialize_meeting(row)
-    return {"status": "ok", "meeting": out}
+    return {
+        "status": "ok",
+        "meeting": out,
+        "conflict": bool(cids),
+        "conflicts_with": cids,
+        "suggestions": suggestions,
+    }
+
+
+@router.get("/meetings/{meeting_id}/ics", summary="Download iCalendar (.ics) for one meeting")
+async def meetings_ics(meeting_id: int, user: CurrentUser = Depends(get_current_user)) -> Response:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    factory = _require_db()
+    with factory() as session:
+        m = get_meeting_or_none(
+            session,
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            meeting_id=meeting_id,
+        )
+        if m is None:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        ics = build_meeting_ics(m)
+    return Response(
+        content=ics.encode("utf-8"),
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="meeting-{meeting_id}.ics"'},
+    )
 
 
 @router.get("/meetings/{meeting_id}", summary="Get one meeting")
@@ -611,8 +683,23 @@ async def meetings_update(
             raise HTTPException(status_code=404, detail="Meeting not found")
         with session.begin():
             update_meeting_fields(m, **kw)
+            cids = find_overlapping_meeting_ids(
+                session,
+                user_id=int(user.id),
+                organization_id=int(user.organization_id),
+                scheduled_at=m.scheduled_at,
+                duration_minutes=int(m.duration_minutes or 60),
+                exclude_meeting_id=int(meeting_id),
+            )
             out = serialize_meeting(m)
-    return {"status": "ok", "meeting": out}
+    sug = suggest_duration_and_agenda(str(out.get("meeting_type") or "other"))
+    return {
+        "status": "ok",
+        "meeting": out,
+        "conflict": bool(cids),
+        "conflicts_with": cids,
+        "suggestions": sug,
+    }
 
 
 @router.delete("/meetings/{meeting_id}", summary="Cancel meeting (soft delete)")
@@ -644,6 +731,9 @@ async def meetings_complete(
     if int(user.id) <= 0:
         raise HTTPException(status_code=400, detail="Real user id required")
     factory = _require_db()
+    follow_ref = f"meeting_followup:{int(meeting_id)}"
+    mission_id: int | None = None
+    title_for_follow = "Follow up: meeting"
     with factory() as session:
         m = get_meeting_or_none(
             session,
@@ -653,9 +743,27 @@ async def meetings_complete(
         )
         if m is None:
             raise HTTPException(status_code=404, detail="Meeting not found")
+        existing = session.execute(
+            select(PersonalMission.id).where(
+                PersonalMission.user_id == int(user.id),
+                PersonalMission.source_ref == follow_ref,
+            )
+        ).scalar_one_or_none()
         with session.begin():
             m.status = "completed"
             if body.outcome is not None:
                 m.outcome = body.outcome
+            title_for_follow = follow_up_mission_title(m)
             out = serialize_meeting(m)
-    return {"status": "ok", "meeting": out}
+    if existing is None:
+        ok, _msg, mid = life_os_service.create_personal_mission(
+            user_id=int(user.id),
+            title=title_for_follow,
+            description="Auto-created when you marked the meeting complete.",
+            deadline=None,
+            status="open",
+            source_ref=follow_ref,
+        )
+        if ok and mid:
+            mission_id = int(mid)
+    return {"status": "ok", "meeting": out, "follow_up_mission_id": mission_id}

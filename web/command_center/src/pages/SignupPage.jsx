@@ -16,7 +16,7 @@ export default function SignupPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  if (token) return <Navigate to="/dashboard" replace />;
+  if (token) return <Navigate to="/today" replace />;
 
   async function submit() {
     setError(null);

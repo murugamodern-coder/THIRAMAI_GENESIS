@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  if (token) return <Navigate to="/dashboard" replace />;
+  if (token) return <Navigate to="/today" replace />;
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -26,7 +26,7 @@ export default function LoginPage() {
       const out = await loginWithPassword(username.trim(), password);
       if (out?.access_token) setToken(out.access_token);
       showToastDedup({ type: "success", message: "Welcome back" });
-      navigate("/", { replace: true });
+      navigate("/today", { replace: true });
     } catch (err) {
       const d = err?.response?.data?.detail;
       const msg = typeof d === "string" ? d : "Login failed";
