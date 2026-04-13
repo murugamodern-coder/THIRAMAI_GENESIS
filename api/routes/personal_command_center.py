@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from api.dependencies import CurrentUser, get_current_user
 from core.database import get_session_factory
-from core.db.models import PersonalMission
+from core.db.models import PersonalMeeting, PersonalMission
 from services import life_os_service
 from services import personal_command_center_service as pcc
 from services.personal_meeting_intelligence import (
@@ -761,6 +761,12 @@ async def meetings_delete(meeting_id: int, user: CurrentUser = Depends(get_curre
             from services.google_calendar_integration_service import delete_calendar_event
 
             delete_calendar_event(user_id=int(user.id), event_id=google_ev_s)
+            with factory() as session:
+                with session.begin():
+                    m2 = session.get(PersonalMeeting, meeting_id)
+                    if m2 is not None and getattr(m2, "google_event_id", None):
+                        m2.google_event_id = None
+            out = {**out, "google_event_id": None}
         except Exception:
             pass
     return {"status": "ok", "meeting": out}
