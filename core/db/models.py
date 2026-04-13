@@ -117,6 +117,8 @@ class Organization(Base):
     liquidity_row: Mapped[Optional["OrganizationLiquidity"]] = relationship(
         back_populates="organization", uselist=False
     )
+    research_documents: Mapped[list["ResearchDocument"]] = relationship(back_populates="organization")
+    govt_schemes: Mapped[list["GovtScheme"]] = relationship(back_populates="organization")
 
 
 class Role(Base):
@@ -261,6 +263,12 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     stock_watchlist_rows: Mapped[list["StockWatchlistEntry"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    research_document_rows: Mapped[list["ResearchDocument"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    govt_scheme_rows: Mapped[list["GovtScheme"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -2587,6 +2595,70 @@ class StockWatchlistEntry(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="stock_watchlist_rows")
+
+
+class ResearchDocument(Base):
+    """Structured research outputs (market, DPR, competitors) keyed by user + optional org."""
+
+    __tablename__ = "research_documents"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    type: Mapped[str] = mapped_column(String(64), nullable=False)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    content_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="research_document_rows")
+    organization: Mapped[Optional["Organization"]] = relationship(back_populates="research_documents")
+
+
+class GovtScheme(Base):
+    """Government scheme rows discovered via research engine (Tavily + LLM extraction)."""
+
+    __tablename__ = "govt_schemes"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    sector: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    state: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    scheme_name: Mapped[str] = mapped_column(Text, nullable=False)
+    eligibility: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    subsidy_amount: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    application_process: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    deadline: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[Optional["User"]] = relationship(back_populates="govt_scheme_rows")
+    organization: Mapped[Optional["Organization"]] = relationship(back_populates="govt_schemes")
 
 
 # Back-compat alias (deprecated)

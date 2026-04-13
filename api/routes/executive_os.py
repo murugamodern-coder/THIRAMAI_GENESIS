@@ -14,7 +14,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from api.dependencies import CurrentUser, get_current_user, require_roles
 from services.analytics_service import (
@@ -59,6 +59,26 @@ class DailyPlanUpsertBody(BaseModel):
 
 class ResearchPostBody(BaseModel):
     topic: str = Field(..., min_length=3, max_length=2000)
+
+
+class ResearchMarketBody(BaseModel):
+    query: str = Field(..., min_length=2, max_length=2000)
+
+
+class ResearchSchemesBody(BaseModel):
+    sector: str = Field(..., min_length=2, max_length=500)
+    state: str = Field("TN", max_length=64)
+
+
+class ResearchCompetitorsBody(BaseModel):
+    business_type: str = Field(..., min_length=2, max_length=500)
+    location: str = Field("", max_length=500)
+
+
+class ResearchDprBody(BaseModel):
+    business_type: str = Field(..., min_length=2, max_length=500)
+    capacity: str = Field("", max_length=500)
+    location: str = Field("", max_length=500)
 
 
 class JarvisVoiceBody(BaseModel):
@@ -239,6 +259,106 @@ async def inventory_critical(
         "count": len(items) if isinstance(items, list) else int(data.get("count") or 0),
         "items": items[:100],
     }
+
+
+@router_research.get("/dpr", summary="Part C: DPR-style report (query params; JSON + optional PDF base64)")
+async def research_dpr_get(
+    business_type: str = Query(..., min_length=2, max_length=500),
+    capacity: str = Query("", max_length=500),
+    location: str = Query("", max_length=500),
+    out_format: str = Query("json", description="json | html", alias="format"),
+    _user: CurrentUser = Depends(get_current_user),
+):
+    _require_real_user(_user)
+    from services.dpr_generator_service import generate_dpr_sync
+
+    out = await asyncio.to_thread(
+        generate_dpr_sync,
+        business_type,
+        capacity,
+        location,
+        user_id=int(_user.id),
+        organization_id=int(_user.organization_id),
+        persist=True,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "dpr_failed")
+    if (out_format or "").lower() == "html":
+        return HTMLResponse(content=str(out.get("html") or "<html><body></body></html>"))
+    return out
+
+
+@router_research.post("/engine/market", summary="Part C: market research → structured JSON + save")
+async def research_engine_market(
+    body: ResearchMarketBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_real_user(_user)
+    from services.research_market_service import research_market_sync
+
+    return await asyncio.to_thread(
+        research_market_sync,
+        body.query.strip(),
+        user_id=int(_user.id),
+        organization_id=int(_user.organization_id),
+        persist=True,
+    )
+
+
+@router_research.post("/engine/schemes", summary="Part C: government schemes finder + save")
+async def research_engine_schemes(
+    body: ResearchSchemesBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_real_user(_user)
+    from services.research_schemes_service import find_schemes_sync
+
+    return await asyncio.to_thread(
+        find_schemes_sync,
+        body.sector.strip(),
+        body.state.strip(),
+        user_id=int(_user.id),
+        organization_id=int(_user.organization_id),
+        persist=True,
+        match_alerts=True,
+    )
+
+
+@router_research.post("/engine/competitors", summary="Part C: competitor analysis + save")
+async def research_engine_competitors(
+    body: ResearchCompetitorsBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_real_user(_user)
+    from services.research_competitor_service import analyze_competitors_sync
+
+    return await asyncio.to_thread(
+        analyze_competitors_sync,
+        body.business_type.strip(),
+        body.location.strip(),
+        user_id=int(_user.id),
+        organization_id=int(_user.organization_id),
+        persist=True,
+    )
+
+
+@router_research.post("/engine/dpr", summary="Part C: DPR generator (JSON body)")
+async def research_engine_dpr_post(
+    body: ResearchDprBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_real_user(_user)
+    from services.dpr_generator_service import generate_dpr_sync
+
+    return await asyncio.to_thread(
+        generate_dpr_sync,
+        body.business_type.strip(),
+        body.capacity.strip(),
+        body.location.strip(),
+        user_id=int(_user.id),
+        organization_id=int(_user.organization_id),
+        persist=True,
+    )
 
 
 @router_research.post("", summary="Run Groq research and save Markdown to vault")

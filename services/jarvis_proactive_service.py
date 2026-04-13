@@ -7,18 +7,21 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from core.database import get_session_factory
 from core.db.models import (
     AgroSubsidyCase,
     Asset,
+    GovtScheme,
     Invoice,
     JarvisProactiveAlert,
+    Organization,
     Payment,
     PersonalLoan,
     ProductionLog,
+    ResearchDocument,
     UserOrganizationMembership,
 )
 from services.inventory_phase2_service import list_low_stock_alerts_sync
@@ -139,7 +142,7 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                         alert_type="follow_up",
                         priority="high",
                         message=msg,
-                        action="Call district agriculture helpdesk / visit office",
+                        action_text="Call district agriculture helpdesk / visit office",
                         dedupe_key=dk,
                         payload={"farmer_id": int(r.id), "scheme": r.scheme_name},
                     )
@@ -206,6 +209,68 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                         payload={"invoice_id": int(inv.id)},
                     )
                     alerts_in_memory.append({"type": "collection", "priority": "high", "message": msg})
+
+                # Part C: recent govt schemes & market research matching org profile
+                org_row = session.get(Organization, oid)
+                industry = (org_row.industry or org_row.name or "").strip() if org_row else ""
+                if industry:
+                    cutoff_rs = datetime.now(timezone.utc) - timedelta(days=10)
+                    ind_l = industry.lower()
+                    toks = [t for t in ind_l.split() if len(t) > 3][:12]
+                    for gs in session.scalars(
+                        select(GovtScheme)
+                        .where(GovtScheme.created_at >= cutoff_rs)
+                        .where(or_(GovtScheme.organization_id == oid, GovtScheme.organization_id.is_(None)))
+                        .order_by(GovtScheme.created_at.desc())
+                        .limit(15)
+                    ).all():
+                        blob = f"{gs.sector} {gs.scheme_name}".lower()
+                        if toks and not any(tok in blob for tok in toks):
+                            continue
+                        msg = f"New scheme signal: {gs.scheme_name[:100]} — check eligibility for your sector."
+                        dk = f"new_scheme:{oid}:{gs.id}"
+                        _upsert_alert(
+                            session,
+                            user_id=uid,
+                            organization_id=oid,
+                            alert_type="govt_scheme",
+                            priority="medium",
+                            message=msg,
+                            action_text="Open Research → Govt schemes",
+                            dedupe_key=dk,
+                            payload={"govt_scheme_id": int(gs.id), "sector": gs.sector},
+                        )
+                        alerts_in_memory.append({"type": "govt_scheme", "priority": "medium", "message": msg})
+                    for rd in session.scalars(
+                        select(ResearchDocument)
+                        .where(ResearchDocument.created_at >= cutoff_rs)
+                        .where(ResearchDocument.type == "market")
+                        .where(
+                            or_(
+                                ResearchDocument.organization_id == oid,
+                                ResearchDocument.user_id == uid,
+                            )
+                        )
+                        .order_by(ResearchDocument.created_at.desc())
+                        .limit(5)
+                    ).all():
+                        qlow = (rd.query or "").lower()
+                        if toks and not any(tok in qlow for tok in toks):
+                            continue
+                        msg = f"Market insight refreshed for “{rd.query[:60]}…” — review opportunities."
+                        dk = f"market_doc:{oid}:{rd.id}"
+                        _upsert_alert(
+                            session,
+                            user_id=uid,
+                            organization_id=oid,
+                            alert_type="market_opportunity",
+                            priority="low",
+                            message=msg,
+                            action_text="Open Research → Market",
+                            dedupe_key=dk,
+                            payload={"research_document_id": int(rd.id)},
+                        )
+                        alerts_in_memory.append({"type": "market_opportunity", "priority": "low", "message": msg})
 
             # EMIs due within 3 days (personal loans — user scoped)
             horizon = today + timedelta(days=3)
@@ -338,3 +403,68 @@ def attach_market_brief_to_payload(payload: dict[str, Any], *, user_id: int) -> 
     except Exception as exc:
         payload["jarvis_market_brief"] = {"ok": False, "error": str(exc)}
     return payload
+
+
+def upsert_research_scheme_alert_sync(
+    *,
+    user_id: int,
+    organization_id: int,
+    message: str,
+    payload: dict[str, Any],
+) -> None:
+    """External callers (e.g. scheme finder) can surface a one-off scheme alert."""
+    import hashlib
+
+    uid = int(user_id)
+    oid = int(organization_id)
+    if uid <= 0 or oid <= 0:
+        return
+    factory = get_session_factory()
+    if factory is None:
+        return
+    dk = f"scheme_match:{oid}:{hashlib.sha256(message.encode()).hexdigest()[:24]}"
+    with factory() as session:
+        with session.begin():
+            _upsert_alert(
+                session,
+                user_id=uid,
+                organization_id=oid,
+                alert_type="govt_scheme",
+                priority="medium",
+                message=message[:8000],
+                action_text="Review scheme details in Research",
+                dedupe_key=dk,
+                payload=payload,
+            )
+
+
+def upsert_market_opportunity_alert_sync(
+    *,
+    user_id: int,
+    organization_id: int,
+    message: str,
+    payload: dict[str, Any],
+) -> None:
+    import hashlib
+
+    uid = int(user_id)
+    oid = int(organization_id)
+    if uid <= 0 or oid <= 0:
+        return
+    factory = get_session_factory()
+    if factory is None:
+        return
+    dk = f"market_opp:{oid}:{hashlib.sha256(message.encode()).hexdigest()[:24]}"
+    with factory() as session:
+        with session.begin():
+            _upsert_alert(
+                session,
+                user_id=uid,
+                organization_id=oid,
+                alert_type="market_opportunity",
+                priority="low",
+                message=message[:8000],
+                action_text="Open Research → Market",
+                dedupe_key=dk,
+                payload=payload,
+            )

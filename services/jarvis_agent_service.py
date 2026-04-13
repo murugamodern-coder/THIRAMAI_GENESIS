@@ -311,6 +311,14 @@ def _summarize_tool(name: str, args: dict[str, Any]) -> str:
         return f"Log {args.get('quantity_produced')} {args.get('unit') or ''} from {args.get('machine_name')}"
     if name == "mark_attendance":
         return f"Mark {args.get('worker_name')} as {args.get('status')}"
+    if name == "research_market":
+        return f"Market research: {args.get('query', '')[:80]}"
+    if name == "find_govt_schemes":
+        return f"Find govt schemes — sector {args.get('sector', '')[:60]}"
+    if name == "generate_dpr":
+        return f"Generate DPR for {args.get('business_type', '')[:60]}"
+    if name == "analyze_competitors":
+        return f"Competitor analysis: {args.get('business_type', '')[:60]}"
     return f"Run {name}({json.dumps(args, ensure_ascii=False)[:120]})"
 
 

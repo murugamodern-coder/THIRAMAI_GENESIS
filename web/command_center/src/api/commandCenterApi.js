@@ -84,6 +84,46 @@ export async function fetchAnalyticsSummary(days = 30) {
   return data;
 }
 
+/** Part C — Research engine (JWT). */
+export async function postResearchMarket(query) {
+  const { data } = await api.post("/research/engine/market", { query });
+  return data;
+}
+
+export async function postResearchSchemes(sector, state = "TN") {
+  const { data } = await api.post("/research/engine/schemes", { sector, state });
+  return data;
+}
+
+export async function postResearchCompetitors(businessType, location = "") {
+  const { data } = await api.post("/research/engine/competitors", {
+    business_type: businessType,
+    location,
+  });
+  return data;
+}
+
+export async function postResearchDpr(body) {
+  const { data } = await api.post("/research/engine/dpr", {
+    business_type: body.businessType,
+    capacity: body.capacity || "",
+    location: body.location || "",
+  });
+  return data;
+}
+
+export async function getResearchDprQuery(params) {
+  const { data } = await api.get("/research/dpr", {
+    params: {
+      business_type: params.businessType,
+      capacity: params.capacity || "",
+      location: params.location || "",
+      format: params.format || "json",
+    },
+  });
+  return data;
+}
+
 export async function postUsageEvent(action, metadata) {
   const { data } = await api.post("/analytics/usage-event", { action, metadata: metadata ?? null });
   return data;

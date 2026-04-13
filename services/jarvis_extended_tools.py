@@ -45,7 +45,10 @@ EXTENDED_TOOL_NAMES: frozenset[str] = frozenset(
         "get_stock_status",
         "get_pending_payments",
         "research_topic",
+        "research_market",
         "find_govt_schemes",
+        "generate_dpr",
+        "analyze_competitors",
         "analyze_stock_opportunity",
         "generate_poster_content",
         "draft_business_email",
@@ -62,7 +65,10 @@ AUTO_EXECUTE_TOOL_NAMES: frozenset[str] = frozenset(
         "get_stock_status",
         "get_pending_payments",
         "research_topic",
+        "research_market",
         "find_govt_schemes",
+        "generate_dpr",
+        "analyze_competitors",
         "analyze_stock_opportunity",
         "generate_poster_content",
         "draft_business_email",
@@ -315,6 +321,18 @@ def extended_tool_specs() -> list[dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "research_market",
+                "description": "Structured India market intelligence (size, growth, players, trends) saved to research history.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string", "description": "Product or industry e.g. groundnut oil"}},
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "find_govt_schemes",
                 "description": "Search current government schemes for TN/India sector.",
                 "parameters": {
@@ -324,6 +342,37 @@ def extended_tool_specs() -> list[dict[str, Any]]:
                         "state": {"type": "string"},
                     },
                     "required": ["sector"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "generate_dpr",
+                "description": "Generate a DPR-style project report (executive summary, capex, ROI) as structured sections.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "business_type": {"type": "string"},
+                        "capacity": {"type": "string"},
+                        "location": {"type": "string"},
+                    },
+                    "required": ["business_type"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "analyze_competitors",
+                "description": "Competitor landscape for a business type and location (web-backed).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "business_type": {"type": "string"},
+                        "location": {"type": "string"},
+                    },
+                    "required": ["business_type"],
                 },
             },
         },
@@ -983,6 +1032,40 @@ def execute_jarvis_extended_tool(
                 out["recent_supplier_payments"] = (spay.get("payments") or [])[:10]
             return out
 
+        if name == "research_market":
+            from services.research_market_service import research_market_sync
+
+            q = str(args.get("query") or "").strip()
+            if not q:
+                return {"ok": False, "message": "query required"}
+            return research_market_sync(q, user_id=uid, organization_id=oid, persist=True)
+
+        if name == "generate_dpr":
+            from services.dpr_generator_service import generate_dpr_sync
+
+            bt = str(args.get("business_type") or "").strip()
+            cap = str(args.get("capacity") or "").strip()
+            loc = str(args.get("location") or "").strip()
+            if not bt:
+                return {"ok": False, "message": "business_type required"}
+            out = generate_dpr_sync(
+                bt, cap, loc, user_id=uid, organization_id=oid, persist=True
+            )
+            slim = {k: v for k, v in out.items() if k not in ("pdf_base64", "html")}
+            slim["pdf_note"] = "PDF/HTML generated — open Research → DPR or GET /research/dpr to download."
+            return slim
+
+        if name == "analyze_competitors":
+            from services.research_competitor_service import analyze_competitors_sync
+
+            bt = str(args.get("business_type") or "").strip()
+            loc = str(args.get("location") or "").strip()
+            if not bt:
+                return {"ok": False, "message": "business_type required"}
+            return analyze_competitors_sync(
+                bt, loc, user_id=uid, organization_id=oid, persist=True
+            )
+
         if name == "research_topic":
             q = str(args.get("query") or "").strip()
             depth = str(args.get("depth") or "quick").strip().lower()
@@ -1032,27 +1115,18 @@ def execute_jarvis_extended_tool(
             return out
 
         if name == "find_govt_schemes":
+            from services.research_schemes_service import find_schemes_sync
+
             sector = str(args.get("sector") or "").strip()
             state = str(args.get("state") or "Tamil Nadu").strip()
-            q = f"India {state} government scheme subsidy MSME {sector} 2025 2026 eligibility application"
-            raw = _tavily_search(q, max_results=8)
-            if isinstance(raw, dict) and raw.get("ok") is False:
-                return {"ok": False, "message": raw.get("error") or "search failed"}
-            results = raw.get("results") if isinstance(raw, dict) else []
-            schemes = []
-            for r in results[:8]:
-                if not isinstance(r, dict):
-                    continue
-                schemes.append(
-                    {
-                        "name": r.get("title"),
-                        "snippet": (r.get("content") or r.get("snippet") or "")[:400],
-                        "application_url": r.get("url"),
-                        "deadline": None,
-                        "eligibility": "Verify on official portal; AI summary only.",
-                    }
-                )
-            return {"ok": True, "schemes": schemes}
+            return find_schemes_sync(
+                sector,
+                state,
+                user_id=uid,
+                organization_id=oid,
+                persist=True,
+                match_alerts=True,
+            )
 
         if name == "analyze_stock_opportunity":
             sym = str(args.get("symbol") or "").strip().upper()

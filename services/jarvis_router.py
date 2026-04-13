@@ -52,7 +52,10 @@ BUSINESS_TOOL_NAMES: frozenset[str] = frozenset(
 RESEARCH_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "research_topic",
+        "research_market",
         "find_govt_schemes",
+        "generate_dpr",
+        "analyze_competitors",
         "get_today_brief",
     }
 )
