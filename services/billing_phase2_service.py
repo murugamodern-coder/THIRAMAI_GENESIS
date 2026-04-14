@@ -32,6 +32,25 @@ def _html_escape(s: str) -> str:
     )
 
 
+def _eway_block_html(inv: Invoice) -> str:
+    e = getattr(inv, "eway_bill_no", None) or ""
+    v = getattr(inv, "vehicle_no", None) or ""
+    t = getattr(inv, "transport_mode", None) or ""
+    c = getattr(inv, "consignee_place", None) or ""
+    if not any((e, v, t, c)):
+        return ""
+    parts = []
+    if e:
+        parts.append(f"E-way bill: {_html_escape(e)}")
+    if v:
+        parts.append(f"Vehicle: {_html_escape(v)}")
+    if t:
+        parts.append(f"Transport: {_html_escape(t)}")
+    if c:
+        parts.append(f"Place of supply: {_html_escape(c)}")
+    return "<div class='meta'><strong>E-way / dispatch</strong><br/>" + "<br/>".join(parts) + "</div>"
+
+
 def _serialize_invoice(inv: Invoice, session: Session, *, include_lines: bool = True) -> dict[str, Any]:
     out: dict[str, Any] = {
         "id": int(inv.id),
@@ -42,6 +61,10 @@ def _serialize_invoice(inv: Invoice, session: Session, *, include_lines: bool = 
         "status": inv.status,
         "payment_status": inv.payment_status,
         "external_ref": inv.external_ref,
+        "eway_bill_no": getattr(inv, "eway_bill_no", None),
+        "vehicle_no": getattr(inv, "vehicle_no", None),
+        "transport_mode": getattr(inv, "transport_mode", None),
+        "consignee_place": getattr(inv, "consignee_place", None),
         "created_at": inv.created_at.isoformat() if inv.created_at else None,
     }
     if include_lines:
@@ -87,6 +110,10 @@ def create_structured_invoice_sync(
     invoice_date: date | None,
     lines: list[dict[str, Any]],
     external_ref: str | None = None,
+    eway_bill_no: str | None = None,
+    vehicle_no: str | None = None,
+    transport_mode: str | None = None,
+    consignee_place: str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any]:
     oid = int(organization_id)
@@ -131,6 +158,10 @@ def create_structured_invoice_sync(
                 external_ref=(external_ref or "").strip()[:512] or None,
                 status="posted",
                 payment_status="unpaid",
+                eway_bill_no=(eway_bill_no or "").strip()[:128] or None,
+                vehicle_no=(vehicle_no or "").strip()[:64] or None,
+                transport_mode=(transport_mode or "").strip()[:32] or None,
+                consignee_place=(consignee_place or "").strip()[:512] or None,
             )
             session.add(inv)
             session.flush()
@@ -162,6 +193,18 @@ def create_structured_invoice_sync(
             "grand_total_inr": float(grand),
         },
     )
+    try:
+        from services.jarvis_agent_event_engine import record_invoice_created_event_sync
+
+        record_invoice_created_event_sync(
+            organization_id=oid,
+            invoice_id=iid,
+            invoice_no=no,
+            grand_total_inr=float(grand),
+            user_id=user_id,
+        )
+    except Exception:
+        pass
     return {"ok": True, "invoice_id": iid, "grand_total_inr": float(grand), "invoice_no": no}
 
 
@@ -545,9 +588,73 @@ td.num {{ text-align: right; }}
 <div>CGST: ₹{float(total_cgst):,.2f} &nbsp; SGST: ₹{float(total_sgst):,.2f} &nbsp; IGST: ₹{float(total_igst):,.2f}</div>
 <div><strong>Grand total: ₹{float(grand):,.2f}</strong></div>
 </div>
+{_eway_block_html(inv)}
 <p class="meta">Supply: {"Inter-state (IGST)" if inter else "Intra-state (CGST + SGST)"}. Use browser Print → Save as PDF.</p>
 </body></html>"""
     return {"ok": True, "html": body}
+
+
+def build_structured_invoice_pdf_bytes_sync(
+    *,
+    organization_id: int,
+    invoice_id: int,
+    supply_mode: str = "intra",
+) -> dict[str, Any]:
+    """Simple PDF export (requires ``fpdf2``)."""
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return {"ok": False, "error": "fpdf2 not installed (pip install fpdf2)"}
+
+    oid = int(organization_id)
+    iid = int(invoice_id)
+    if oid <= 0 or iid <= 0:
+        return {"ok": False, "error": "organization_id and invoice_id required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    with factory() as session:
+        inv = session.get(Invoice, iid)
+        if inv is None or int(inv.organization_id) != oid:
+            return {"ok": False, "error": "invoice not found"}
+        lines = list(
+            session.scalars(
+                select(InvoiceItem).where(InvoiceItem.invoice_id == iid).order_by(InvoiceItem.line_no)
+            ).all()
+        )
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "Tax Invoice", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, f"No: {inv.invoice_no}  Date: {inv.invoice_date or ''}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, f"Payment: {inv.payment_status}  Grand total: Rs. {float(inv.grand_total_inr):,.2f}", new_x="LMARGIN", new_y="NEXT")
+    ew = getattr(inv, "eway_bill_no", None) or ""
+    if ew:
+        pdf.cell(0, 6, f"E-way: {ew}", new_x="LMARGIN", new_y="NEXT")
+    vn = getattr(inv, "vehicle_no", None) or ""
+    if vn:
+        pdf.cell(0, 6, f"Vehicle: {vn}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(10, 7, "#", border=1)
+    pdf.cell(70, 7, "Description", border=1)
+    pdf.cell(15, 7, "HSN", border=1)
+    pdf.cell(15, 7, "Qty", border=1)
+    pdf.cell(20, 7, "Total", border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 8)
+    for li in lines:
+        desc = (li.description or "")[:42]
+        hsn = (li.hsn_code or "")[:8]
+        pdf.cell(10, 6, str(li.line_no), border=1)
+        pdf.cell(70, 6, desc, border=1)
+        pdf.cell(15, 6, hsn, border=1)
+        pdf.cell(15, 6, str(float(li.quantity)), border=1)
+        pdf.cell(20, 6, f"{float(li.line_total_inr):.2f}", border=1, new_x="LMARGIN", new_y="NEXT")
+    raw = pdf.output(dest="S")
+    data = raw if isinstance(raw, (bytes, bytearray)) else raw.encode("latin-1")
+    return {"ok": True, "pdf_bytes": bytes(data)}
 
 
 def build_cash_bill_html_sync(*, organization_id: int, bill_id: int) -> dict[str, Any]:

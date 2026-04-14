@@ -542,6 +542,37 @@ async def jarvis_proactive_execute(
     return JSONResponse(content=out)
 
 
+@router.get("/jarvis-agent/captain-brief")
+async def jarvis_agent_captain_brief(user: CurrentUser = Depends(get_current_user)) -> JSONResponse:
+    """Narrative partner brief + clustered top-3 critical insights."""
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_autonomous_agent import cluster_top_insights_sync
+        from services.jarvis_narrative import build_captain_narrative_sync
+
+        uid = int(user.id)
+        nar = build_captain_narrative_sync(user_id=uid)
+        cap = cluster_top_insights_sync(user_id=uid, top_n=3)
+        return {**nar, "clustered": cap}
+
+    return JSONResponse(content=await asyncio.to_thread(_run))
+
+
+@router.get("/jarvis-agent/weekly-strategy")
+async def jarvis_agent_weekly_strategy(user: CurrentUser = Depends(get_current_user)) -> JSONResponse:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_weekly_strategy import generate_weekly_strategy_sync
+
+        return generate_weekly_strategy_sync(user_id=int(user.id))
+
+    return JSONResponse(content=await asyncio.to_thread(_run))
+
+
 @router.post("/jarvis-agent/goals")
 async def jarvis_agent_create_goal(
     body: JarvisGoalCreateBody,

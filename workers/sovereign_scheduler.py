@@ -247,6 +247,23 @@ def run_jarvis_autonomous_morning_bundle() -> None:
         log_event(rid, "jarvis.autonomous_morning", ok=False, error=str(exc))
 
 
+def jarvis_event_queue_drain_enabled() -> bool:
+    """Process ``jarvis_agent_event_queue`` rows (e.g. from PostgreSQL triggers)."""
+    return _truthy("THIRAMAI_JARVIS_EVENT_QUEUE_DRAIN")
+
+
+def run_jarvis_event_queue_drain() -> None:
+    rid = new_request_id()
+    try:
+        from services.jarvis_agent_event_engine import drain_agent_event_queue_sync
+
+        out = drain_agent_event_queue_sync(limit=40)
+        log_event(rid, "jarvis.event_queue_drain", ok=True, extra=out)
+    except Exception as exc:
+        _log.exception("jarvis.event_queue_drain_failed")
+        log_event(rid, "jarvis.event_queue_drain", ok=False, error=str(exc))
+
+
 def start_sovereign_scheduler() -> BackgroundScheduler | None:
     global _scheduler
     if _scheduler is not None:
@@ -347,6 +364,15 @@ def start_sovereign_scheduler() -> BackgroundScheduler | None:
             run_jarvis_autonomous_tick,
             IntervalTrigger(minutes=30),
             id="thiramai_jarvis_autonomous_tick",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+    if jarvis_event_queue_drain_enabled():
+        sched.add_job(
+            run_jarvis_event_queue_drain,
+            IntervalTrigger(minutes=2),
+            id="thiramai_jarvis_event_queue_drain",
             replace_existing=True,
             max_instances=1,
             coalesce=True,

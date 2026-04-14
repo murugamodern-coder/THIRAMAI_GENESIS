@@ -15,7 +15,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.database import get_session_factory
-from core.db.models import InventoryItem, PurchaseOrder, PurchaseOrderLine, StockMovement, Supplier
+from core.db.models import (
+    InventoryItem,
+    OrganizationLiquidity,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    StockMovement,
+    Supplier,
+    SupplierPayment,
+)
 from services import audit_log as system_audit
 from services.inventory_ops import apply_inventory_delta
 
@@ -39,6 +47,7 @@ def _serialize_item(row: InventoryItem) -> dict[str, Any]:
         "gst_rate_percent": float(row.gst_rate_percent) if row.gst_rate_percent is not None else None,
         "hsn_code": row.hsn_code,
         "external_ref": row.external_ref,
+        "unit": row.unit or "",
         "reorder_point": float(row.reorder_point) if row.reorder_point is not None else None,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -55,6 +64,8 @@ def _serialize_movement(row: StockMovement) -> dict[str, Any]:
         "reference_type": row.reference_type,
         "reference_id": row.reference_id,
         "notes": row.notes,
+        "lot_batch": getattr(row, "lot_batch", None),
+        "reason": getattr(row, "reason", None),
         "created_by_user_id": int(row.created_by_user_id) if row.created_by_user_id else None,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
@@ -127,6 +138,7 @@ def create_inventory_item_sync(
     hsn_code: str | None = None,
     external_ref: str | None = None,
     reorder_point: float | Decimal | None = None,
+    unit: str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any]:
     oid = int(organization_id)
@@ -136,6 +148,7 @@ def create_inventory_item_sync(
     if not sku:
         return {"ok": False, "error": "sku_name required"}
     loc = (location or "").strip()
+    u = (unit or "").strip()[:32]
     qty = _dec(quantity)
     if qty < 0:
         return {"ok": False, "error": "quantity cannot be negative"}
@@ -153,6 +166,7 @@ def create_inventory_item_sync(
                     organization_id=oid,
                     sku_name=sku,
                     location=loc,
+                    unit=u,
                     quantity=qty,
                     unit_price=_dec(unit_price) if unit_price is not None else None,
                     unit_cost_pre_tax=_dec(unit_cost_pre_tax) if unit_cost_pre_tax is not None else None,
@@ -214,6 +228,7 @@ def update_inventory_item_sync(
     hsn_code: str | None = None,
     external_ref: str | None = None,
     reorder_point: float | Decimal | None = None,
+    unit: str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any]:
     oid = int(organization_id)
@@ -250,6 +265,8 @@ def update_inventory_item_sync(
                     row.external_ref = (external_ref or "").strip() or None
                 if reorder_point is not None:
                     row.reorder_point = _dec(reorder_point)
+                if unit is not None:
+                    row.unit = (unit or "").strip()[:32]
 
                 if quantity is not None:
                     new_qty = _dec(quantity)
@@ -292,6 +309,20 @@ def update_inventory_item_sync(
         resource_type="inventory_item",
         metadata={"channel": "inventory_phase2.update", "inventory_item_id": iid},
     )
+    if out_item is not None and quantity is not None:
+        try:
+            from services.jarvis_agent_event_engine import record_inventory_quantity_event_sync
+
+            record_inventory_quantity_event_sync(
+                organization_id=oid,
+                inventory_item_id=iid,
+                sku_name=str(out_item.get("sku_name") or ""),
+                quantity=out_item.get("quantity"),
+                reorder_point=out_item.get("reorder_point"),
+                user_id=user_id,
+            )
+        except Exception:
+            pass
     return {"ok": True, "item": out_item}
 
 
@@ -304,6 +335,8 @@ def record_stock_movement_sync(
     reference_type: str | None = None,
     reference_id: str | None = None,
     notes: str | None = None,
+    lot_batch: str | None = None,
+    reason: str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any]:
     oid = int(organization_id)
@@ -339,6 +372,8 @@ def record_stock_movement_sync(
                     reference_type=(reference_type or "")[:64] or None,
                     reference_id=(reference_id or "")[:128] or None,
                     notes=notes,
+                    lot_batch=(lot_batch or "").strip()[:64] or None,
+                    reason=(reason or "").strip()[:256] or None,
                     created_by_user_id=user_id if user_id and user_id > 0 else None,
                 )
                 session.add(mov)
@@ -370,6 +405,20 @@ def record_stock_movement_sync(
             "movement_type": movement_type,
         },
     )
+    if out_item is not None and delta < 0:
+        try:
+            from services.jarvis_agent_event_engine import record_inventory_quantity_event_sync
+
+            record_inventory_quantity_event_sync(
+                organization_id=oid,
+                inventory_item_id=iid,
+                sku_name=str(out_item.get("sku_name") or ""),
+                quantity=out_item.get("quantity"),
+                reorder_point=out_item.get("reorder_point"),
+                user_id=user_id,
+            )
+        except Exception:
+            pass
     return {"ok": True, "movement": out_mov, "item": out_item}
 
 
@@ -558,6 +607,7 @@ def receive_purchase_order_line_sync(
     line_id: int,
     quantity: float | Decimal,
     inventory_location: str = "",
+    lot_batch: str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any]:
     """Receive stock against a PO line: updates line, inventory item (create if needed), movement PO_RECEIPT."""
@@ -612,6 +662,7 @@ def receive_purchase_order_line_sync(
                 _recalc_value(inv)
 
                 line.quantity_received = _dec(line.quantity_received) + qty
+                lb = (lot_batch or "").strip()[:64] or None
                 mov = StockMovement(
                     organization_id=oid,
                     inventory_item_id=int(inv.id),
@@ -620,6 +671,8 @@ def receive_purchase_order_line_sync(
                     reference_type="purchase_order",
                     reference_id=str(po_id),
                     notes=f"line {lid}",
+                    lot_batch=lb,
+                    reason="PO receipt",
                     created_by_user_id=user_id if user_id and user_id > 0 else None,
                 )
                 session.add(mov)
@@ -666,4 +719,212 @@ def receive_purchase_order_line_sync(
             "quantity": float(qty),
         },
     )
+    if out_item is not None:
+        try:
+            from services.jarvis_agent_event_engine import record_inventory_quantity_event_sync
+
+            record_inventory_quantity_event_sync(
+                organization_id=oid,
+                inventory_item_id=int(out_item.get("id") or 0),
+                sku_name=str(out_item.get("sku_name") or ""),
+                quantity=out_item.get("quantity"),
+                reorder_point=out_item.get("reorder_point"),
+                user_id=user_id,
+            )
+        except Exception:
+            pass
     return {"ok": True, "item": out_item, "line": out_line, "purchase_order_status": po_status}
+
+
+def list_stock_movements_sync(
+    *,
+    organization_id: int,
+    limit: int = 200,
+    inventory_item_id: int | None = None,
+) -> dict[str, Any]:
+    oid = int(organization_id)
+    if oid <= 0:
+        return {"ok": False, "error": "organization_id required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    lim = max(1, min(int(limit), 500))
+    with factory() as session:
+        q = select(StockMovement).where(StockMovement.organization_id == oid)
+        if inventory_item_id is not None and int(inventory_item_id) > 0:
+            q = q.where(StockMovement.inventory_item_id == int(inventory_item_id))
+        q = q.order_by(StockMovement.id.desc()).limit(lim)
+        rows = list(session.scalars(q).all())
+    return {"ok": True, "movements": [_serialize_movement(r) for r in rows]}
+
+
+def list_purchase_orders_sync(*, organization_id: int, limit: int = 100) -> dict[str, Any]:
+    oid = int(organization_id)
+    if oid <= 0:
+        return {"ok": False, "error": "organization_id required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    lim = max(1, min(int(limit), 200))
+    with factory() as session:
+        pos = list(
+            session.scalars(
+                select(PurchaseOrder)
+                .where(PurchaseOrder.organization_id == oid)
+                .order_by(PurchaseOrder.id.desc())
+                .limit(lim)
+            ).all()
+        )
+        out: list[dict[str, Any]] = []
+        for po in pos:
+            lines = list(
+                session.scalars(
+                    select(PurchaseOrderLine).where(PurchaseOrderLine.purchase_order_id == int(po.id))
+                ).all()
+            )
+            out.append(
+                {
+                    "id": int(po.id),
+                    "supplier_id": int(po.supplier_id),
+                    "status": po.status,
+                    "order_date": po.order_date.isoformat() if po.order_date else None,
+                    "expected_date": po.expected_date.isoformat() if po.expected_date else None,
+                    "notes": po.notes,
+                    "supplier_invoice_no": getattr(po, "supplier_invoice_no", None),
+                    "supplier_invoice_date": po.supplier_invoice_date.isoformat()
+                    if getattr(po, "supplier_invoice_date", None)
+                    else None,
+                    "total_inr": float(po.total_inr or 0),
+                    "lines": [
+                        {
+                            "id": int(ln.id),
+                            "sku_name": ln.sku_name,
+                            "quantity_ordered": float(ln.quantity_ordered),
+                            "quantity_received": float(ln.quantity_received),
+                            "unit_cost_pre_tax": float(ln.unit_cost_pre_tax),
+                            "line_total_inr": float(ln.line_total_inr or 0),
+                        }
+                        for ln in lines
+                    ],
+                }
+            )
+    return {"ok": True, "purchase_orders": out}
+
+
+def update_purchase_order_supplier_invoice_sync(
+    *,
+    organization_id: int,
+    purchase_order_id: int,
+    supplier_invoice_no: str | None = None,
+    supplier_invoice_date: date | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    oid = int(organization_id)
+    pid = int(purchase_order_id)
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    with factory() as session:
+        with session.begin():
+            po = session.get(PurchaseOrder, pid)
+            if po is None or int(po.organization_id) != oid:
+                return {"ok": False, "error": "purchase order not found"}
+            if supplier_invoice_no is not None:
+                po.supplier_invoice_no = (supplier_invoice_no or "").strip()[:256] or None
+            if supplier_invoice_date is not None:
+                po.supplier_invoice_date = supplier_invoice_date
+    system_audit.record_system_audit(
+        action=system_audit.ACTION_STOCK_UPDATE,
+        outcome="success",
+        organization_id=oid,
+        user_id=user_id if user_id and int(user_id) > 0 else None,
+        resource_type="purchase_order",
+        metadata={"channel": "inventory_phase2.po_supplier_invoice", "purchase_order_id": pid},
+    )
+    return {"ok": True}
+
+
+def record_supplier_payment_sync(
+    *,
+    organization_id: int,
+    supplier_id: int,
+    amount_inr: float | Decimal,
+    purchase_order_id: int | None = None,
+    method: str = "bank",
+    reference: str | None = None,
+    notes: str | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    oid = int(organization_id)
+    sid = int(supplier_id)
+    amt = _dec(amount_inr)
+    if oid <= 0 or sid <= 0 or amt <= 0:
+        return {"ok": False, "error": "invalid organization, supplier, or amount"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    pid = int(purchase_order_id) if purchase_order_id is not None and int(purchase_order_id) > 0 else None
+    pay_id = 0
+    with factory() as session:
+        with session.begin():
+            sup = session.get(Supplier, sid)
+            if sup is None or int(sup.organization_id) != oid:
+                return {"ok": False, "error": "supplier not found"}
+            if pid is not None:
+                po = session.get(PurchaseOrder, pid)
+                if po is None or int(po.organization_id) != oid:
+                    return {"ok": False, "error": "purchase order not found"}
+            row = SupplierPayment(
+                organization_id=oid,
+                supplier_id=sid,
+                purchase_order_id=pid,
+                amount_inr=amt,
+                method=(method or "bank")[:32],
+                reference=(reference or "").strip() or None,
+                notes=(notes or "").strip() or None,
+            )
+            session.add(row)
+            session.flush()
+            pay_id = int(row.id)
+    system_audit.record_system_audit(
+        action=system_audit.ACTION_FINANCIAL_EXECUTION,
+        outcome="success",
+        organization_id=oid,
+        user_id=user_id if user_id and int(user_id) > 0 else None,
+        resource_type="supplier_payment",
+        metadata={"channel": "inventory_phase2.supplier_payment", "payment_id": pay_id},
+    )
+    return {"ok": True, "payment_id": pay_id}
+
+
+def list_supplier_payments_sync(*, organization_id: int, limit: int = 100) -> dict[str, Any]:
+    oid = int(organization_id)
+    if oid <= 0:
+        return {"ok": False, "error": "organization_id required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    lim = max(1, min(int(limit), 300))
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(SupplierPayment)
+                .where(SupplierPayment.organization_id == oid)
+                .order_by(SupplierPayment.id.desc())
+                .limit(lim)
+            ).all()
+        )
+    items = [
+        {
+            "id": int(r.id),
+            "supplier_id": int(r.supplier_id),
+            "purchase_order_id": int(r.purchase_order_id) if r.purchase_order_id else None,
+            "amount_inr": float(r.amount_inr),
+            "method": r.method,
+            "reference": r.reference,
+            "notes": r.notes,
+            "paid_at": r.paid_at.isoformat() if r.paid_at else None,
+        }
+        for r in rows
+    ]
+    return {"ok": True, "payments": items}

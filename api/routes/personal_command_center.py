@@ -597,6 +597,17 @@ async def meetings_create(body: MeetingCreateBody, user: CurrentUser = Depends(g
         )
     except Exception:
         pass
+    try:
+        from services.jarvis_agent_event_engine import record_meeting_created_event_sync
+
+        record_meeting_created_event_sync(
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            meeting_id=int(out["id"]),
+            title=str(out.get("title") or body.title),
+        )
+    except Exception:
+        pass
     return result
 
 

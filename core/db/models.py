@@ -2892,6 +2892,38 @@ class JarvisAgentActionLog(Base):
     user: Mapped["User"] = relationship(back_populates="jarvis_agent_action_log_rows")
 
 
+class JarvisAgentEventQueue(Base):
+    """DB-backed queue for inventory / meeting / invoice events (Upgrade 2.3)."""
+
+    __tablename__ = "jarvis_agent_event_queue"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    organization: Mapped[Optional["Organization"]] = relationship()
+    user: Mapped[Optional["User"]] = relationship()
+
+
 class StockWatchlistEntry(Base):
     """User NSE/BSE watchlist symbols for Jarvis market tools."""
 

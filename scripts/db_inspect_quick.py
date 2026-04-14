@@ -37,7 +37,7 @@ def main() -> None:
               'inventory_items', 'jarvis_memory', 'jarvis_episodes', 'jarvis_facts',
               'jarvis_sessions', 'jarvis_session_turns', 'jarvis_proactive_alerts',
               'jarvis_proactive_feedback', 'jarvis_goals', 'jarvis_goal_subtasks',
-              'jarvis_daily_agent_plans', 'jarvis_agent_action_log',
+              'jarvis_daily_agent_plans', 'jarvis_agent_action_log', 'jarvis_agent_event_queue',
               'personal_meetings', 'notifications', 'meetings', 'stock_movements', 'suppliers'
             )
             ORDER BY 1

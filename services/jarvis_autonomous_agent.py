@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from core.database import get_session_factory
 from core.db.models import JarvisAgentActionLog, JarvisDailyAgentPlan, JarvisFact
@@ -727,3 +727,74 @@ def run_jarvis_autonomous_morning_bundle_sync() -> dict[str, Any]:
             _log.debug("daily_plan user=%s: %s", uid, exc)
     cyc = run_autonomous_cycle_all_users_sync()
     return {"ok": True, "daily_plans_written": plans, "autonomous_cycle": cyc}
+
+
+def cluster_top_insights_sync(*, user_id: int, top_n: int = 3) -> dict[str, Any]:
+    """Step 6 — UI-friendly cluster + cap (delegates to narrative layer)."""
+    from services.jarvis_narrative import cluster_critical_insights_sync
+
+    uid = int(user_id)
+    ins = get_cached_proactive_insights_sync(user_id=uid)
+    return cluster_critical_insights_sync(ins, top_n=top_n)
+
+
+def record_goal_long_term_learning_sync(*, user_id: int) -> dict[str, Any]:
+    """
+    Step 7 — track goal completion rate for long-horizon adaptation (stored in ``JarvisFact``).
+    """
+    uid = int(user_id)
+    if uid <= 0:
+        return {"ok": False, "error": "invalid user"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "no database"}
+    from core.db.models import JarvisGoal
+
+    with factory() as session:
+        total = int(
+            session.scalar(select(func.count()).select_from(JarvisGoal).where(JarvisGoal.user_id == uid)) or 0
+        )
+        done = int(
+            session.scalar(
+                select(func.count())
+                .select_from(JarvisGoal)
+                .where(JarvisGoal.user_id == uid, JarvisGoal.status == "completed")
+            )
+            or 0
+        )
+    rate = round(done / max(1, total), 4)
+    blob = json.dumps({"goals_total": total, "goals_completed": done, "completion_rate": rate, "as_of": datetime.now(timezone.utc).isoformat()})[
+        :12000
+    ]
+    now = datetime.now(timezone.utc)
+    try:
+        with factory() as session:
+            with session.begin():
+                row = session.execute(
+                    select(JarvisFact).where(
+                        JarvisFact.user_id == uid,
+                        JarvisFact.fact_type == "agent_learning",
+                        JarvisFact.key == "goal_long_term_stats",
+                    ).limit(1)
+                ).scalar_one_or_none()
+                if row:
+                    r2 = session.get(JarvisFact, row.id)
+                    if r2:
+                        r2.value = blob
+                        r2.last_verified = now
+                else:
+                    session.add(
+                        JarvisFact(
+                            user_id=uid,
+                            fact_type="agent_learning",
+                            key="goal_long_term_stats",
+                            value=blob,
+                            confidence=Decimal("0.7"),
+                            source="autonomous_agent",
+                            last_verified=now,
+                        )
+                    )
+    except Exception as exc:
+        _log.debug("record_goal_long_term_learning_sync: %s", exc)
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "completion_rate": rate, "goals_total": total, "goals_completed": done}

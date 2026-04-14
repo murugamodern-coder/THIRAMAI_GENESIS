@@ -161,6 +161,13 @@ def track_progress_sync(*, goal_id: int, user_id: int) -> dict[str, Any]:
             elif goal.status == "open":
                 goal.status = "in_progress"
             st_out = goal.status
+        if st_out == "completed":
+            try:
+                from services.jarvis_autonomous_agent import record_goal_long_term_learning_sync
+
+                record_goal_long_term_learning_sync(user_id=uid)
+            except Exception:
+                pass
         return {"ok": True, "goal_id": gid, "percent": pct, "status": st_out}
 
 
@@ -259,6 +266,66 @@ def mark_subtask_done_sync(*, goal_id: int, subtask_id: int, user_id: int) -> di
                 return {"ok": False, "error": "subtask not found"}
             st.status = "done"
     return track_progress_sync(goal_id=gid, user_id=uid)
+
+
+def resolve_goal_conflicts(goals: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Step 2 — rank goals by urgency, financial impact signal, and dependency/progress shape.
+
+    Returns the **best** goal to act on now plus a ranked list (highest score first).
+    """
+    if not goals:
+        return {"ok": False, "error": "no goals", "best": None, "ranked": [], "scores": []}
+    today = date.today()
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for g in goals:
+        if not isinstance(g, dict):
+            continue
+        desc = (g.get("description") or "").lower()
+        urg = 0.5
+        if g.get("deadline"):
+            try:
+                dl_s = str(g.get("deadline"))[:10]
+                dl = date.fromisoformat(dl_s)
+                days = (dl - today).days
+                if days <= 3:
+                    urg = 0.95
+                elif days <= 14:
+                    urg = 0.78
+                elif days > 90:
+                    urg = 0.28
+            except Exception:
+                pass
+        fin = 0.42
+        tv = g.get("target_value")
+        if tv:
+            try:
+                raw = float(str(tv).replace(",", "").split()[0])
+                fin = min(1.0, max(0.2, raw / 75000.0))
+            except Exception:
+                fin = 0.55
+        if "profit" in desc or "revenue" in desc or (g.get("goal_type") == "revenue"):
+            fin = min(1.0, fin + 0.18)
+        dep = 0.48
+        prog = g.get("progress") if isinstance(g.get("progress"), dict) else {}
+        pct = float(prog.get("percent") or 0)
+        if 0 < pct < 70:
+            dep = 0.72
+        subs = g.get("subtasks") or []
+        if isinstance(subs, list):
+            pending = sum(1 for s in subs if isinstance(s, dict) and (s.get("status") or "").lower() == "pending")
+            if pending >= 3:
+                dep = min(1.0, dep + 0.12)
+        score = 0.45 * urg + 0.38 * fin + 0.17 * min(1.0, dep)
+        scored.append((score, g))
+    scored.sort(key=lambda x: -x[0])
+    best = scored[0][1] if scored else None
+    return {
+        "ok": True,
+        "best": best,
+        "ranked": [x[1] for x in scored[:16]],
+        "scores": [round(x[0], 4) for x in scored[:16]],
+    }
 
 
 def create_goal(user_id: int, description: str, **kwargs: Any) -> dict[str, Any]:
