@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.database import get_session_factory
-from core.db.models import AgroSubsidyCase, Bill, BusinessTask, Invoice, OperationalExpense
+from core.db.models import AgroSubsidyCase, Bill, BusinessTask, Invoice, OperationalExpense, OrganizationLiquidity
 
 
 def _utc_now() -> datetime:
@@ -26,6 +26,12 @@ def _day_bounds_utc(d: date) -> tuple[datetime, datetime]:
 
 def _month_start_utc(now: datetime) -> datetime:
     return datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+
+
+def _prev_month_start_utc(now: datetime) -> datetime:
+    if now.month == 1:
+        return datetime(now.year - 1, 12, 1, tzinfo=timezone.utc)
+    return datetime(now.year, now.month - 1, 1, tzinfo=timezone.utc)
 
 
 def list_operational_expenses_sync(
@@ -118,6 +124,8 @@ def daily_pl_summary_sync(*, organization_id: int) -> dict[str, Any]:
     today_date = now.date()
     day_start, day_end = _day_bounds_utc(today_date)
     month_start = _month_start_utc(now)
+    prev_month_start = _prev_month_start_utc(now)
+    prev_month_end_date = month_start.date() - timedelta(days=1)
 
     with factory() as session:
         bills_today = _sum_bills_period(session, organization_id=oid, start=day_start, end=day_end)
@@ -140,8 +148,27 @@ def daily_pl_summary_sync(*, organization_id: int) -> dict[str, Any]:
             session, organization_id=oid, start_d=month_start.date(), end_d=today_date
         )
 
+        bills_prev = _sum_bills_period(session, organization_id=oid, start=prev_month_start, end=month_start)
+        inv_prev = _sum_invoices_by_invoice_date(
+            session,
+            organization_id=oid,
+            start_d=prev_month_start.date(),
+            end_d=prev_month_end_date,
+        )
+        sales_prev = (bills_prev + inv_prev).quantize(Decimal("0.01"))
+        opex_prev = _sum_opex_period(
+            session, organization_id=oid, start_d=prev_month_start.date(), end_d=prev_month_end_date
+        )
+
+        liq = session.get(OrganizationLiquidity, oid)
+        cash_bal = float(liq.cash_inr) if liq is not None else 0.0
+        bank_bal = float(liq.bank_inr) if liq is not None else 0.0
+
     def _f(d: Decimal) -> float:
         return float(d)
+
+    net_prev = sales_prev - opex_prev
+    net_mtd = sales_mtd - opex_mtd
 
     return {
         "ok": True,
@@ -156,7 +183,19 @@ def daily_pl_summary_sync(*, organization_id: int) -> dict[str, Any]:
         "month_to_date": {
             "sales_inr": _f(sales_mtd),
             "expenses_inr": _f(opex_mtd),
-            "net_inr": _f(sales_mtd - opex_mtd),
+            "net_inr": _f(net_mtd),
+        },
+        "previous_calendar_month": {
+            "label": f"{prev_month_start.year}-{prev_month_start.month:02d}",
+            "sales_inr": _f(sales_prev),
+            "expenses_inr": _f(opex_prev),
+            "net_inr": _f(net_prev),
+            "net_vs_current_mtd_inr": _f(net_mtd - net_prev),
+        },
+        "liquidity_inr": {
+            "cash": cash_bal,
+            "bank": bank_bal,
+            "total": cash_bal + bank_bal,
         },
     }
 
@@ -167,10 +206,15 @@ def _serialize_subsidy(r: AgroSubsidyCase) -> dict[str, Any]:
         "farmer_name": r.farmer_name,
         "village": r.village or "",
         "survey_number": r.survey_number or "",
+        "farmer_phone": getattr(r, "farmer_phone", None),
+        "land_acres": float(r.land_acres) if getattr(r, "land_acres", None) is not None else None,
         "scheme_name": r.scheme_name,
         "application_status": r.application_status,
+        "subsidy_applied_inr": float(getattr(r, "subsidy_applied_inr", 0) or 0),
+        "subsidy_approved_inr": float(getattr(r, "subsidy_approved_inr", 0) or 0),
         "subsidy_pending_inr": float(r.subsidy_pending_inr),
         "subsidy_received_inr": float(r.subsidy_received_inr),
+        "commission_earned_inr": float(getattr(r, "commission_earned_inr", 0) or 0),
         "follow_up_date": r.follow_up_date.isoformat() if r.follow_up_date else None,
         "notes": r.notes,
         "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -204,10 +248,15 @@ def create_subsidy_case_sync(
     farmer_name: str,
     village: str = "",
     survey_number: str = "",
+    farmer_phone: str | None = None,
+    land_acres: Decimal | float | None = None,
     scheme_name: str,
     application_status: str = "draft",
+    subsidy_applied_inr: Decimal | float = 0,
+    subsidy_approved_inr: Decimal | float = 0,
     subsidy_pending_inr: Decimal | float = 0,
     subsidy_received_inr: Decimal | float = 0,
+    commission_earned_inr: Decimal | float = 0,
     follow_up_date: date | None = None,
     notes: str | None = None,
 ) -> dict[str, Any]:
@@ -222,8 +271,16 @@ def create_subsidy_case_sync(
     if factory is None:
         return {"ok": False, "error": "DATABASE_URL is not configured"}
     try:
+        appl = Decimal(str(subsidy_applied_inr)).quantize(Decimal("0.01"))
+        appr = Decimal(str(subsidy_approved_inr)).quantize(Decimal("0.01"))
         pend = Decimal(str(subsidy_pending_inr)).quantize(Decimal("0.01"))
         recv = Decimal(str(subsidy_received_inr)).quantize(Decimal("0.01"))
+        comm = Decimal(str(commission_earned_inr)).quantize(Decimal("0.01"))
+        acres = (
+            Decimal(str(land_acres)).quantize(Decimal("0.0001"))
+            if land_acres is not None
+            else None
+        )
     except Exception:
         return {"ok": False, "error": "invalid subsidy amounts"}
     with factory() as session:
@@ -233,10 +290,15 @@ def create_subsidy_case_sync(
                 farmer_name=fn,
                 village=(village or "").strip(),
                 survey_number=(survey_number or "").strip(),
+                farmer_phone=(farmer_phone or "").strip()[:32] or None,
+                land_acres=acres,
                 scheme_name=sn,
                 application_status=(application_status or "draft").strip()[:64],
+                subsidy_applied_inr=appl,
+                subsidy_approved_inr=appr,
                 subsidy_pending_inr=pend,
                 subsidy_received_inr=recv,
+                commission_earned_inr=comm,
                 follow_up_date=follow_up_date,
                 notes=(notes or "").strip()[:4000] or None,
             )
@@ -272,7 +334,20 @@ def update_subsidy_case_sync(
                 row.scheme_name = str(fields["scheme_name"]).strip()[:2000]
             if "application_status" in fields and fields["application_status"] is not None:
                 row.application_status = str(fields["application_status"]).strip()[:64]
-            for key in ("subsidy_pending_inr", "subsidy_received_inr"):
+            if "farmer_phone" in fields:
+                row.farmer_phone = (str(fields["farmer_phone"] or "").strip()[:32] or None)
+            if "land_acres" in fields and fields["land_acres"] is not None:
+                try:
+                    row.land_acres = Decimal(str(fields["land_acres"])).quantize(Decimal("0.0001"))
+                except Exception:
+                    return {"ok": False, "error": "invalid land_acres"}
+            for key in (
+                "subsidy_applied_inr",
+                "subsidy_approved_inr",
+                "subsidy_pending_inr",
+                "subsidy_received_inr",
+                "commission_earned_inr",
+            ):
                 if key in fields and fields[key] is not None:
                     try:
                         val = Decimal(str(fields[key])).quantize(Decimal("0.01"))
@@ -383,3 +458,94 @@ def update_business_task_sync(
                 cj = fields["checklist_json"]
                 row.checklist_json = cj if isinstance(cj, list) else []
     return {"ok": True}
+
+
+def get_liquidity_sync(*, organization_id: int) -> dict[str, Any]:
+    oid = int(organization_id)
+    if oid <= 0:
+        return {"ok": False, "error": "organization_id required"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    with factory() as session:
+        row = session.get(OrganizationLiquidity, oid)
+        if row is None:
+            return {"ok": True, "cash_inr": 0.0, "bank_inr": 0.0, "updated_at": None}
+        return {
+            "ok": True,
+            "cash_inr": float(row.cash_inr),
+            "bank_inr": float(row.bank_inr),
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+
+def upsert_liquidity_sync(
+    *,
+    organization_id: int,
+    cash_inr: Decimal | float,
+    bank_inr: Decimal | float,
+) -> dict[str, Any]:
+    oid = int(organization_id)
+    if oid <= 0:
+        return {"ok": False, "error": "organization_id required"}
+    try:
+        c = Decimal(str(cash_inr)).quantize(Decimal("0.01"))
+        b = Decimal(str(bank_inr)).quantize(Decimal("0.01"))
+    except Exception:
+        return {"ok": False, "error": "invalid amounts"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    with factory() as session:
+        with session.begin():
+            row = session.get(OrganizationLiquidity, oid)
+            if row is None:
+                row = OrganizationLiquidity(organization_id=oid, cash_inr=c, bank_inr=b)
+                session.add(row)
+            else:
+                row.cash_inr = c
+                row.bank_inr = b
+    return {"ok": True}
+
+
+def monthly_expense_report_sync(*, organization_id: int, year: int, month: int) -> dict[str, Any]:
+    oid = int(organization_id)
+    if oid <= 0 or month < 1 or month > 12:
+        return {"ok": False, "error": "invalid organization or month"}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "DATABASE_URL is not configured"}
+    start_d = date(year, month, 1)
+    if month == 12:
+        end_d = date(year, 12, 31)
+    else:
+        end_d = date(year, month + 1, 1) - timedelta(days=1)
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(OperationalExpense)
+                .where(
+                    OperationalExpense.organization_id == oid,
+                    OperationalExpense.expense_date >= start_d,
+                    OperationalExpense.expense_date <= end_d,
+                )
+                .order_by(OperationalExpense.expense_date, OperationalExpense.id)
+            ).all()
+        )
+    by_cat: dict[str, Decimal] = {}
+    total = Decimal("0")
+    for r in rows:
+        cat = (r.category or "other").strip()
+        amt = Decimal(str(r.amount_inr or 0)).quantize(Decimal("0.01"))
+        by_cat[cat] = by_cat.get(cat, Decimal("0")) + amt
+        total += amt
+    return {
+        "ok": True,
+        "year": year,
+        "month": month,
+        "period_start": start_d.isoformat(),
+        "period_end": end_d.isoformat(),
+        "total_inr": float(total),
+        "by_category": {k: float(v) for k, v in sorted(by_cat.items())},
+        "line_count": len(rows),
+    }

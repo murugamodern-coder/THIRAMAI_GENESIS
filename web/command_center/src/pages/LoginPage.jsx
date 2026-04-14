@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
-import { fetchAuthMe, loginWithPassword } from "../api/commandCenterApi.js";
-import { isOnboardingDone } from "../lib/onboarding.js";
+import { fetchProductBootstrap, loginWithPassword } from "../api/commandCenterApi.js";
 import { showToastDedup } from "../lib/toastDedup.js";
 import { useCommandStore } from "../store/useCommandStore.js";
 
@@ -10,7 +9,6 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const token = useCommandStore((s) => s.token);
   const setToken = useCommandStore((s) => s.setToken);
-  const setMe = useCommandStore((s) => s.setMe);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
@@ -26,7 +24,17 @@ export default function LoginPage() {
       const out = await loginWithPassword(username.trim(), password);
       if (out?.access_token) setToken(out.access_token);
       showToastDedup({ type: "success", message: "Welcome back" });
-      navigate("/today", { replace: true });
+      let dest = "/today";
+      try {
+        const boot = await fetchProductBootstrap();
+        const ob = boot?.product_profile?.onboarding || {};
+        if (!ob?.insights_done && boot?.hints && !boot.hints.onboarding_complete) {
+          dest = "/onboarding";
+        }
+      } catch {
+        /* default today */
+      }
+      navigate(dest, { replace: true });
     } catch (err) {
       const d = err?.response?.data?.detail;
       const msg = typeof d === "string" ? d : "Login failed";

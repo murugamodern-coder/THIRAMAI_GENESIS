@@ -21,10 +21,15 @@ from services.inventory_service import (
     create_supplier_sync,
     list_inventory_items_sync,
     list_low_stock_alerts_sync,
+    list_purchase_orders_sync,
+    list_stock_movements_sync,
+    list_supplier_payments_sync,
     list_suppliers_sync,
     receive_purchase_order_line_sync,
     record_stock_movement_sync,
+    record_supplier_payment_sync,
     update_inventory_item_sync,
+    update_purchase_order_supplier_invoice_sync,
 )
 from services.sale_execution import execute_sell_stock_sync
 
@@ -57,6 +62,7 @@ async def inventory_list_v2(
 class InventoryItemCreateBody(BaseModel):
     sku_name: str = Field(..., min_length=1)
     location: str = ""
+    unit: str = ""
     quantity: float = Field(0, ge=0)
     unit_price: float | None = Field(None, ge=0)
     unit_cost_pre_tax: float | None = Field(None, ge=0)
@@ -82,6 +88,7 @@ async def inventory_create_item(
         hsn_code=body.hsn_code,
         external_ref=body.external_ref,
         reorder_point=body.reorder_point,
+        unit=body.unit,
         user_id=_user.id if _user.id > 0 else None,
     )
     if not out.get("ok"):
@@ -101,6 +108,7 @@ async def inventory_create_item(
 class InventoryItemUpdateBody(BaseModel):
     sku_name: str | None = None
     location: str | None = None
+    unit: str | None = None
     quantity: float | None = Field(None, ge=0)
     unit_price: float | None = Field(None, ge=0)
     unit_cost_pre_tax: float | None = Field(None, ge=0)
@@ -122,6 +130,7 @@ async def inventory_update_item(
         item_id=item_id,
         sku_name=b.sku_name,
         location=b.location,
+        unit=b.unit,
         quantity=b.quantity,
         unit_price=b.unit_price,
         unit_cost_pre_tax=b.unit_cost_pre_tax,
@@ -152,6 +161,8 @@ class StockMovementBody(BaseModel):
     reference_type: str | None = None
     reference_id: str | None = None
     notes: str | None = None
+    lot_batch: str | None = None
+    reason: str | None = None
 
 
 @router.post("/inventory/movement")
@@ -167,10 +178,28 @@ async def inventory_movement(
         reference_type=body.reference_type,
         reference_id=body.reference_id,
         notes=body.notes,
+        lot_batch=body.lot_batch,
+        reason=body.reason,
         user_id=_user.id if _user.id > 0 else None,
     )
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("error") or "movement failed")
+    return JSONResponse(content=out)
+
+
+@router.get("/inventory/movements")
+async def inventory_movements_list(
+    limit: int = Query(200, ge=1, le=500),
+    inventory_item_id: int | None = Query(None, ge=1),
+    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+) -> JSONResponse:
+    out = list_stock_movements_sync(
+        organization_id=_user.organization_id,
+        limit=limit,
+        inventory_item_id=inventory_item_id,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
     return JSONResponse(content=out)
 
 
@@ -266,6 +295,7 @@ class POReceiveBody(BaseModel):
     line_id: int = Field(..., ge=1)
     quantity: float = Field(..., gt=0)
     inventory_location: str = ""
+    lot_batch: str | None = None
 
 
 @router.post("/inventory/purchase-order/{po_id}/receive-line")
@@ -280,10 +310,87 @@ async def inventory_receive_po_line(
         line_id=body.line_id,
         quantity=body.quantity,
         inventory_location=body.inventory_location,
+        lot_batch=body.lot_batch,
         user_id=_user.id if _user.id > 0 else None,
     )
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("error") or "receive failed")
+    return JSONResponse(content=out)
+
+
+@router.get("/inventory/purchase-orders")
+async def inventory_purchase_orders_list(
+    limit: int = Query(100, ge=1, le=200),
+    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+) -> JSONResponse:
+    out = list_purchase_orders_sync(organization_id=_user.organization_id, limit=limit)
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
+    return JSONResponse(content=out)
+
+
+class POSupplierInvoiceBody(BaseModel):
+    supplier_invoice_no: str | None = None
+    supplier_invoice_date: str | None = Field(None, description="YYYY-MM-DD")
+
+
+@router.patch("/inventory/purchase-order/{po_id}/supplier-invoice")
+async def inventory_po_supplier_invoice(
+    po_id: int = Path(..., ge=1),
+    body: POSupplierInvoiceBody | None = None,
+    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+) -> JSONResponse:
+    b = body or POSupplierInvoiceBody()
+    inv_date = _parse_date(b.supplier_invoice_date) if b.supplier_invoice_date else None
+    out = update_purchase_order_supplier_invoice_sync(
+        organization_id=_user.organization_id,
+        purchase_order_id=po_id,
+        supplier_invoice_no=b.supplier_invoice_no,
+        supplier_invoice_date=inv_date,
+        user_id=_user.id if _user.id > 0 else None,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "update failed")
+    return JSONResponse(content=out)
+
+
+class SupplierPaymentBody(BaseModel):
+    supplier_id: int = Field(..., ge=1)
+    amount_inr: float = Field(..., gt=0)
+    purchase_order_id: int | None = Field(None, ge=1)
+    method: str = "bank"
+    reference: str | None = None
+    notes: str | None = None
+
+
+@router.post("/inventory/supplier-payment")
+async def inventory_supplier_payment(
+    body: SupplierPaymentBody,
+    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+) -> JSONResponse:
+    out = record_supplier_payment_sync(
+        organization_id=_user.organization_id,
+        supplier_id=body.supplier_id,
+        amount_inr=body.amount_inr,
+        purchase_order_id=body.purchase_order_id,
+        method=body.method,
+        reference=body.reference,
+        notes=body.notes,
+        user_id=_user.id if _user.id > 0 else None,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "payment failed")
+    return JSONResponse(content=out)
+
+
+@router.get("/inventory/supplier-payments")
+async def inventory_supplier_payments_list(
+    limit: int = Query(100, ge=1, le=300),
+    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+) -> JSONResponse:
+    out = list_supplier_payments_sync(organization_id=_user.organization_id, limit=limit)
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
     return JSONResponse(content=out)
 
 

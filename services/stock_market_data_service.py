@@ -11,7 +11,32 @@ from typing import Any
 _log = logging.getLogger("thiramai.stock_market_data")
 
 _CACHE_FALLBACK: dict[str, tuple[float, str]] = {}
-_DEFAULT_TTL = max(5, min(int((os.getenv("THIRAMAI_STOCK_QUOTE_CACHE_SEC") or "15").strip()), 120))
+_DEFAULT_TTL = max(15, min(int((os.getenv("THIRAMAI_STOCK_QUOTE_CACHE_SEC") or "60").strip()), 600))
+
+
+def _nsepython_last_price(symbol_with_suffix: str) -> float | None:
+    """Best-effort NSE cash quote when yfinance is empty or errors (optional ``nsepython``)."""
+    raw = (symbol_with_suffix or "").strip().upper().replace(".NS", "").replace(".BO", "")
+    if not raw:
+        return None
+    try:
+        from nsepython import nse_eq  # type: ignore[import-not-found]
+    except Exception:
+        return None
+    try:
+        row = nse_eq(raw)
+    except Exception:
+        return None
+    if not isinstance(row, dict):
+        return None
+    for k in ("lastPrice", "lastprice", "ltp", "close"):
+        v = row.get(k)
+        if v is not None:
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+    return None
 
 
 def _yf_symbol(symbol: str, exchange_suffix: str = "NS") -> str:
@@ -73,6 +98,10 @@ def get_live_price(symbol: str, *, exchange_suffix: str = "NS") -> dict[str, Any
             df = yf.download(sym, period="5d", interval="1d", progress=False, threads=False)
             if df is not None and not df.empty and "Close" in df.columns:
                 last = float(df["Close"].dropna().iloc[-1])
+        if last is None and (exchange_suffix or "NS").strip().upper() in ("NS", "NSE", ""):
+            nlp = _nsepython_last_price(sym)
+            if nlp is not None:
+                last = nlp
         if last is None:
             return {"ok": False, "error": f"no price for {sym}"}
         out = {"ok": True, "symbol": sym, "last": round(float(last), 4), "currency": "INR"}
@@ -80,6 +109,12 @@ def get_live_price(symbol: str, *, exchange_suffix: str = "NS") -> dict[str, Any
         return {**out, "cached": False}
     except Exception as exc:
         _log.warning("get_live_price %s: %s", sym, exc)
+        if (exchange_suffix or "NS").strip().upper() in ("NS", "NSE", ""):
+            nlp = _nsepython_last_price(sym)
+            if nlp is not None:
+                out = {"ok": True, "symbol": sym, "last": round(float(nlp), 4), "currency": "INR"}
+                _cache_set(key, {k: v for k, v in out.items()})
+                return {**out, "cached": False, "source": "nsepython"}
         return {"ok": False, "error": str(exc)}
 
 

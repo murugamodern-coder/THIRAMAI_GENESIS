@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import CurrentUser, get_current_user
 from services import audit_service, business_depth_service, business_os_service
+from services.product_plans import organization_plan_sync, plan_allows
 from services.business_snapshot_service import build_business_snapshot
 from services.economics_service import get_business_margin
 
@@ -26,6 +27,15 @@ def _correlation_id(request: Request) -> str | None:
         return h[:128]
     cid = getattr(request.state, "correlation_id", None)
     return cid if isinstance(cid, str) else None
+
+
+def _require_auto_accounting(user: CurrentUser) -> None:
+    p = organization_plan_sync(int(user.organization_id))
+    if not plan_allows(p, "auto_accounting"):
+        raise HTTPException(
+            status_code=402,
+            detail="Auto accounting (receipts, bank import, GST assist) requires Pro or Business.",
+        )
 
 
 def _low_stock_threshold() -> int:
@@ -485,6 +495,7 @@ async def business_gst_suggest(
     description: str = Query("", max_length=2000),
     _user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
+    _require_auto_accounting(_user)
     from services.auto_accounting_service import gst_rate_from_hsn_sync
 
     _ = _user
@@ -497,6 +508,7 @@ async def business_import_bank_statement(
     file: UploadFile = File(...),
     _user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
+    _require_auto_accounting(_user)
     from services.auto_accounting_service import (
         extract_bank_transactions_from_text_sync,
         import_bank_statement_sync,

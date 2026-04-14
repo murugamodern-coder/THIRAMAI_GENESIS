@@ -61,8 +61,9 @@ services:
       THIRAMAI_LOG_JSON: ${THIRAMAI_LOG_JSON:-1}
       THIRAMAI_RL_TRUST_X_FORWARDED_FOR: ${THIRAMAI_RL_TRUST_X_FORWARDED_FOR:-1}
       THIRAMAI_PROXY_TRUSTED_HOSTS: ${THIRAMAI_PROXY_TRUSTED_HOSTS:-*}
+      THIRAMAI_ALLOWED_HOSTS: ${THIRAMAI_ALLOWED_HOSTS:-}
       THIRAMAI_JOB_QUEUE: db
-      THIRAMAI_ENABLE_ALERT_SCHEDULER: "0"
+      THIRAMAI_ENABLE_ALERT_SCHEDULER: ${THIRAMAI_ENABLE_ALERT_SCHEDULER:-0}
       THIRAMAI_AUTH_DISABLED: ${THIRAMAI_AUTH_DISABLED:-0}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
     depends_on:
@@ -74,6 +75,9 @@ services:
   worker-jobs:
     build: .
     restart: unless-stopped
+    # Image HEALTHCHECK targets Gunicorn on :8000; this process has no HTTP server.
+    healthcheck:
+      disable: true
     command: ["python", "-m", "workers.run_worker"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
@@ -89,6 +93,8 @@ services:
   worker-alerts:
     build: .
     restart: unless-stopped
+    healthcheck:
+      disable: true
     command: ["python", "-m", "workers.alert_system"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}

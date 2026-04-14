@@ -16,6 +16,10 @@
 #   then after workers are healthy, run: python scripts/go_live_checklist.py
 #   Or: bring the stack up first (compose + alembic), then run only the checklist as a gate.
 #
+# Non-interactive Docker exec (avoids TTY freezes in SSH/IDE):
+#   docker compose -f docker-compose.production.yml --env-file .env.production exec -T web alembic current
+# Stack checks: docs/OPS_TERMINAL_AND_DOCKER.md — scripts/verify_stack.sh / verify_stack.ps1
+#
 # Usage:
 #   chmod +x scripts/deploy_production.sh
 #   ./scripts/deploy_production.sh

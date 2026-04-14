@@ -35,7 +35,8 @@ class OrgCreateBody(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     organization_name: str = Field(..., min_length=1, max_length=240)
-    plan: Literal["free", "pro", "enterprise"] = "free"
+    plan: Literal["free", "pro", "business", "enterprise"] = "free"
+    invite_code: str | None = Field(None, max_length=64)
 
 
 class OrgCreateResponse(TokenResponse):
@@ -76,6 +77,19 @@ async def create_organization(request: Request, body: OrgCreateBody) -> OrgCreat
                         password=body.password,
                         plan=body.plan,
                     )
+                    inv = (body.invite_code or "").strip()
+                    if inv:
+                        try:
+                            from services.invite_service import peek_invite
+
+                            meta = peek_invite(inv)
+                            user.product_profile = {
+                                "invite_signup": {"code": inv, "payload": meta or {}},
+                            }
+                            session.add(user)
+                            session.flush()
+                        except Exception:
+                            pass
                     token = create_access_token(
                         sub_user_id=int(user.id),
                         org_id=int(org.id),

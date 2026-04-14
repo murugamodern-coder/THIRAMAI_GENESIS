@@ -9,8 +9,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from core.database import get_engine
+from core.http_metrics import snapshot as http_metrics_snapshot
 from core.migration_head import EXPECTED_ALEMBIC_REVISION
 from core.schema_mode import allow_create_all_auto
+from services.stock_market_data_service import get_live_price
 from services.worker_heartbeat import expected_worker_roles_from_env, redis_ping_ok, workers_ready_detail
 
 router = APIRouter(tags=["System"])
@@ -59,12 +61,36 @@ def health_index() -> dict:
         "service": "thiramai-genesis",
         "live": "/health/live",
         "ready": "/health/ready",
+        "metrics": "/health/metrics",
+        "stocks": "/health/stocks",
     }
 
 
 @router.get("/health/live", summary="Liveness — process is up")
 def health_live() -> dict:
     return {"status": "alive", "service": "thiramai-genesis"}
+
+
+@router.get("/health/metrics", summary="In-process HTTP counters (since process start)")
+def health_metrics() -> dict:
+    """``requests_total`` and ``errors_total`` (5xx responses) from CorrelationId middleware."""
+    return {"service": "thiramai-genesis", **http_metrics_snapshot()}
+
+
+@router.get("/health/stocks", summary="Optional quote probe (yfinance / nsepython fallback)")
+def health_stocks() -> dict:
+    """
+    Non-authenticated smoke check for market data stack (best-effort).
+
+    Uses a liquid NSE symbol; failures return ``ok: false`` without failing liveness.
+    """
+    q = get_live_price("RELIANCE", exchange_suffix="NS")
+    return {
+        "service": "thiramai-genesis",
+        "ok": bool(q.get("ok")),
+        "symbol": q.get("symbol"),
+        "detail": "quote ok" if q.get("ok") else (q.get("error") or "quote failed"),
+    }
 
 
 @router.get("/health/ready", summary="Readiness — DB, optional Redis, Alembic, optional worker heartbeats")
@@ -132,9 +158,15 @@ def health_ready() -> JSONResponse:
         "hint": "production should set ENV=production or THIRAMAI_DISABLE_CREATE_ALL=1 and use Alembic only",
     }
 
+    checks["today_brief"] = {
+        "ok": True,
+        "detail": "Command Center /personal and GET /personal/today expose the daily brief when authenticated.",
+    }
+
     body = {
         "status": "ready" if ok_all else "not_ready",
         "checks": checks,
         "expected_workers_env": expected_worker_roles_from_env(),
+        "metrics": http_metrics_snapshot(),
     }
     return JSONResponse(status_code=200 if ok_all else 503, content=body)

@@ -15,7 +15,7 @@ from core.auth import hash_password
 from core.db.models import Department, Organization, Role, User, UserOrganizationMembership
 from core.db.provisioning import provision_new_organization
 
-VALID_SAAS_PLANS: frozenset[str] = frozenset({"free", "pro", "enterprise"})
+VALID_SAAS_PLANS: frozenset[str] = frozenset({"free", "pro", "business", "enterprise"})
 
 # Beyond **General** (created by ``provision_new_organization`` / provisioning).
 _DEFAULT_BUSINESS_UNITS: tuple[str, ...] = ("Operations", "Sales")

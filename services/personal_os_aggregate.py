@@ -13,6 +13,7 @@ from core.database import get_session_factory
 from core.db.models import Habit, HabitLog, LearningLog, PersonalMission
 from services.analytics_service import compute_dashboard_summary_sync, list_low_stock_alerts_sync
 from services.life_os_service import MISSION_OPEN_STATUSES, list_upcoming_reminders
+from services.personal_meeting_intelligence import list_meeting_nudges_sync
 
 
 def build_personal_today_sync(
@@ -35,6 +36,7 @@ def build_personal_today_sync(
     habits_completed_today = 0
     tasks_completed_today = 0
 
+    meeting_nudges: list[dict[str, Any]] = []
     factory = get_session_factory()
     if factory is not None and uid > 0:
         with factory() as session:
@@ -95,6 +97,12 @@ def build_personal_today_sync(
                 )
 
             if oid > 0:
+                meeting_nudges = list_meeting_nudges_sync(
+                    session,
+                    user_id=uid,
+                    organization_id=oid,
+                    horizon_minutes=120,
+                )
                 ex_stmt = (
                     select(LearningLog)
                     .where(LearningLog.organization_id == oid)
@@ -130,4 +138,5 @@ def build_personal_today_sync(
         "today_sales": sales,
         "habits_completed_today": habits_completed_today,
         "tasks_completed_today": tasks_completed_today,
+        "meeting_nudges": meeting_nudges,
     }

@@ -20,7 +20,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(dotenv_path=ROOT / ".env", override=True)
+# Do not override OS env (Docker Compose / k8s inject DATABASE_URL, etc.).
+load_dotenv(dotenv_path=ROOT / ".env", override=False)
 
 from core.observability import ensure_thiramai_logging, log_event, new_request_id
 from services.job_queue import process_one_job, use_db_job_queue

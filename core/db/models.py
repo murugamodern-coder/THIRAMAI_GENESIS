@@ -219,6 +219,9 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    product_profile: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True, default=None
+    )
 
     memberships: Mapped[list["UserOrganizationMembership"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

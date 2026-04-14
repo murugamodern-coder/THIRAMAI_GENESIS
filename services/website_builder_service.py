@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_session_factory
 from core.db.models import GeneratedWebsite, InventoryItem, Organization, User, UserOrganizationMembership
-from services.membership_service import membership_for_organization
+from core.security.org_access import verify_org_membership
 from services.website_template_service import TEMPLATE_TYPES, get_template_bundle
 
 _log = logging.getLogger("thiramai.website_builder")
@@ -96,7 +96,7 @@ def _pick_contact_email(session: Session, organization_id: int) -> str | None:
 
 
 def assert_user_can_manage_org(session: Session, *, user_id: int, organization_id: int) -> bool:
-    return membership_for_organization(session, int(user_id), int(organization_id)) is not None
+    return verify_org_membership(session, user_id=int(user_id), organization_id=int(organization_id))
 
 
 def user_can_access_org_sync(*, user_id: int, organization_id: int) -> bool:

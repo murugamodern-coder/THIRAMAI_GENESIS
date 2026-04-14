@@ -20,6 +20,13 @@ _log = logging.getLogger("thiramai.portfolio")
 _IST = ZoneInfo("Asia/Kolkata")
 
 
+def _watchlist_max_symbols() -> int:
+    try:
+        return max(1, min(int((os.getenv("THIRAMAI_STOCK_WATCHLIST_MAX") or "20").strip()), 100))
+    except ValueError:
+        return 20
+
+
 def _factory() -> sessionmaker[Session] | None:
     return get_session_factory()  # type: ignore[return-value]
 
@@ -329,6 +336,7 @@ def add_to_watchlist_sync(user_id: int, symbol: str, *, exchange_suffix: str = "
     factory = _factory()
     if factory is None:
         return {"ok": False, "error": "database not configured"}
+    cap = _watchlist_max_symbols()
     with factory() as session:
         with session.begin():
             existing = session.execute(
@@ -337,18 +345,25 @@ def add_to_watchlist_sync(user_id: int, symbol: str, *, exchange_suffix: str = "
             if existing:
                 existing.exchange_suffix = ex
                 return {"ok": True, "symbol": sym, "updated": True}
+            n = int(session.scalar(select(func.count(StockWatchlistEntry.id)).where(StockWatchlistEntry.user_id == uid)) or 0)
+            if n >= cap:
+                return {
+                    "ok": False,
+                    "error": f"Watchlist is limited to {cap} symbols; remove one before adding another.",
+                }
             session.add(StockWatchlistEntry(user_id=uid, symbol=sym, exchange_suffix=ex))
     return {"ok": True, "symbol": sym, "created": True}
 
 
-def list_watchlist_symbols_sync(user_id: int, *, limit: int = 24) -> list[str]:
+def list_watchlist_symbols_sync(user_id: int, *, limit: int = 20) -> list[str]:
     uid = int(user_id)
     if uid <= 0:
         return []
     factory = _factory()
     if factory is None:
         return []
-    lim = max(1, min(int(limit), 48))
+    cap = _watchlist_max_symbols()
+    lim = max(1, min(int(limit), cap))
     with factory() as session:
         rows = session.scalars(
             select(StockWatchlistEntry.symbol)

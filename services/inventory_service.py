@@ -122,8 +122,13 @@ from services.inventory_phase2_service import (  # noqa: E402
     create_supplier_sync,
     list_inventory_items_sync,
     list_low_stock_alerts_sync,
+    list_purchase_orders_sync,
+    list_stock_movements_sync,
+    list_supplier_payments_sync,
     list_suppliers_sync,
     receive_purchase_order_line_sync,
     record_stock_movement_sync,
+    record_supplier_payment_sync,
     update_inventory_item_sync,
+    update_purchase_order_supplier_invoice_sync,
 )

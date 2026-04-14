@@ -68,6 +68,31 @@ def compute_proactive_alerts(snapshot: dict[str, Any], *, engagement_extra: dict
             }
         )
 
+    meeting_nudges = snapshot.get("meeting_nudges") if isinstance(snapshot.get("meeting_nudges"), list) else []
+    for mn in meeting_nudges[:5]:
+        if not isinstance(mn, dict):
+            continue
+        title = str(mn.get("title") or "Meeting")[:100]
+        try:
+            mins = int(mn.get("minutes_until") or 0)
+        except (TypeError, ValueError):
+            mins = 0
+        if mins <= 30:
+            pri = PRIORITY_HIGH
+        elif mins <= 90:
+            pri = PRIORITY_MEDIUM
+        else:
+            pri = PRIORITY_INFO
+        alerts.append(
+            {
+                "priority": pri,
+                "code": "meeting_upcoming",
+                "message": f"Upcoming meeting in ~{mins} min: {title}",
+                "hint": "review_meeting_agenda",
+                "meeting_id": mn.get("id"),
+            }
+        )
+
     for t in tasks:
         if not isinstance(t, dict):
             continue

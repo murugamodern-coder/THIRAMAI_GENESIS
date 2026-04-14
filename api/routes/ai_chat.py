@@ -489,8 +489,15 @@ async def chat_query(
         return JSONResponse(content=payload)
     if body.agent_mode:
         from core.ai_usage_limits import consume_llm_units
+        from services.product_plans import organization_plan_sync, plan_allows
 
-        allowed, umsg = consume_llm_units(int(_user.id))
+        raw_plan = organization_plan_sync(int(_user.organization_id))
+        if not plan_allows(raw_plan, "advanced_ai"):
+            raise HTTPException(
+                status_code=402,
+                detail="Jarvis agent (tool-calling) requires Pro or Business. Open /pricing to upgrade.",
+            )
+        allowed, umsg = consume_llm_units(int(_user.id), plan=raw_plan)
         if not allowed:
             raise HTTPException(status_code=429, detail=umsg or "LLM budget exceeded")
         from services import jarvis_agent_service as jarvis

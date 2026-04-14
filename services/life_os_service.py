@@ -718,6 +718,7 @@ def upsert_personal_mission(
     status: str = "open",
     progress_percent: int | None = None,
     priority: str | None = None,
+    source_ref: str | None = None,
 ) -> tuple[bool, str, int | None, bool]:
     """
     Create or update a personal mission. When ``mission_id`` is set, updates that row if it belongs to the user.
@@ -755,6 +756,8 @@ def upsert_personal_mission(
                     row.progress_percent = pp
                 if priority is not None:
                     row.priority = pr
+                if source_ref is not None:
+                    row.source_ref = (source_ref or "")[:256] or None
                 return True, "ok", int(row.id), False
             row = PersonalMission(
                 user_id=uid,
@@ -764,6 +767,7 @@ def upsert_personal_mission(
                 status=st,
                 priority=pr,
                 progress_percent=max(0, min(100, int(progress_percent))) if progress_percent is not None else None,
+                source_ref=(source_ref or "")[:256] if source_ref else None,
             )
             session.add(row)
             session.flush()
@@ -778,6 +782,7 @@ def create_personal_mission(
     description: str | None = None,
     deadline: datetime | None = None,
     status: str = "open",
+    source_ref: str | None = None,
 ) -> tuple[bool, str, int | None]:
     ok, msg, mid, _ = upsert_personal_mission(
         user_id=user_id,
@@ -787,6 +792,7 @@ def create_personal_mission(
         deadline=deadline,
         status=status,
         priority=None,
+        source_ref=source_ref,
     )
     return ok, msg, mid
 

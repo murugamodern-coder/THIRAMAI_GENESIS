@@ -701,6 +701,38 @@ def execute_jarvis_extended_tool(
         return {"ok": False, "message": "invalid organization"}
 
     try:
+        from services.product_plans import organization_plan_sync, plan_allows
+
+        raw_plan = organization_plan_sync(oid)
+
+        def _paywall(feature: str) -> dict[str, Any] | None:
+            if not plan_allows(raw_plan, feature):
+                return {
+                    "ok": False,
+                    "message": f"This capability requires Pro or Business ({feature}). See Pricing in the app.",
+                    "paywall": True,
+                    "feature": feature,
+                    "plan": raw_plan,
+                }
+            return None
+
+        if name in (
+            "research_market",
+            "deep_research",
+            "find_cheapest_machine",
+            "generate_dpr",
+            "analyze_competitors",
+            "research_topic",
+            "find_govt_schemes",
+        ):
+            hit = _paywall("deep_research")
+            if hit:
+                return hit
+        if name in ("suggest_personal_expense_from_receipt", "match_unpaid_invoices", "apply_invoice_payment_match"):
+            hit = _paywall("auto_accounting")
+            if hit:
+                return hit
+
         if name == "create_invoice":
             cust = str(args.get("customer_name") or "").strip()
             phone = str(args.get("customer_phone") or "").strip()

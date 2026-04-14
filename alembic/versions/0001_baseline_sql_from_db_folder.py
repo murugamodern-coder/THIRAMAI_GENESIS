@@ -11,6 +11,9 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
+from alembic import op
+
 from core.migration_sql import SQL_BASELINE_FILES, apply_sql_files
 
 revision: str = "0001"
@@ -21,6 +24,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     apply_sql_files(SQL_BASELINE_FILES)
+    # Default Alembic column is VARCHAR(32); revision ids in this repo exceed that.
+    op.execute(sa.text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"))
 
 
 def downgrade() -> None:

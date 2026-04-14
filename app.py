@@ -45,6 +45,7 @@ from api.middleware.request_logging import RequestLoggingMiddleware
 from api.openapi_metadata import OPENAPI_DESCRIPTION, OPENAPI_TAGS
 from api.routes.auth import router as auth_router, seed_default_roles_on_startup
 from api.routes.registry import attach_domain_routers
+from core.exceptions import ThiramaiAppError
 from core.observability import ensure_thiramai_logging
 from core.production_safety import assert_safe_production_config
 from core.rate_limit_middleware import RateLimitMiddleware
@@ -210,6 +211,21 @@ async def http_exception_safe_handler(request: Request, exc: HTTPException) -> J
         status_code=exc.status_code,
         content=body,
         headers=merge_response_headers(exc),
+    )
+
+
+@app.exception_handler(ThiramaiAppError)
+async def thiramai_app_error_handler(request: Request, exc: ThiramaiAppError) -> JSONResponse:
+    """Structured API errors (``core.exceptions``) with stable JSON shape."""
+    _ = request
+    if safe_errors_enabled() and exc.status_code >= 500:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": "Request could not be completed.", "code": exc.code},
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.message, "code": exc.code},
     )
 
 

@@ -1,33 +1,47 @@
-# CI: install deps, smoke tests.
-# CD: deploy to staging when pushing to `main` (requires GitHub Secrets on the repo).
+# Production CD — DigitalOcean / Docker Compose
 #
-# Required secrets for deploy (Settings → Secrets → Actions):
-#   STAGING_SSH_KEY     — private key (PEM) for SSH to the staging host
-#   STAGING_HOST        — hostname or IP
-#   STAGING_USER        — SSH user (e.g. deploy)
-#   STAGING_DEPLOY_PATH — absolute path on server where repo/docker-compose live (e.g. /opt/thiramai)
+# Trigger: push to `main` or manual `workflow_dispatch`.
+# Flow: gate with pytest → SSH to server → git pull → docker compose build → recreate services → /health/ready → optional rollback.
 #
-# SSH uses port 22 by default; fork the workflow to pass a custom port to appleboy/ssh-action if needed.
+# Required GitHub Actions secrets (Repository → Settings → Secrets and variables → Actions):
+#   PRODUCTION_SSH_KEY        — private key (full PEM / OpenSSH block, including BEGIN/END lines)
+#   PRODUCTION_HOST           — hostname or IP (e.g. app.thiramai.co.in or droplet IP)
+#   PRODUCTION_USER           — SSH user (e.g. root)
+#   PRODUCTION_DEPLOY_PATH    — repo root on server (e.g. /root/thiramai-app)
+#
+# Optional secrets:
+#   PRODUCTION_SSH_PORT                 — default 22
+#   PRODUCTION_SSH_FINGERPRINT          — host key SHA256 fingerprint (see .github/DEPLOY_SETUP.md)
+#   PRODUCTION_DOCKER_BUILD_NO_CACHE    — set to "true" to force docker build --no-cache (slower)
+#   PRODUCTION_DEPLOY_SERVICES          — space-separated service names (default: web worker-jobs worker-alerts)
+#   PRODUCTION_HEALTH_URL               — override health URL (default: http://127.0.0.1:$WEB_PORT/health/ready from .env.production)
+#
+# Environments (optional): create a `production` environment with required reviewers for extra safety.
 
-name: CI and deploy
+name: Deploy production
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Skip pytest gate (emergency only)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
-  test:
-    name: Test
+  verify:
+    name: Test (gate)
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.skip_tests != true
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -43,51 +57,127 @@ jobs:
           pip install pytest httpx
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short --import-mode=importlib --capture=no
+        run: pytest tests/ -q --tb=short --import-mode=importlib
 
-      - name: Docker build (CI only)
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
-          tags: thiramai-genesis:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy-staging:
-    name: Deploy staging
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  deploy:
+    name: SSH deploy
     runs-on: ubuntu-latest
-    environment: staging
+    needs: [verify]
+    if: always() && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
+    environment: production
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Require production SSH secrets
+        env:
+          KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          HOST: ${{ secrets.PRODUCTION_HOST }}
+          USER_NAME: ${{ secrets.PRODUCTION_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          test -n "$KEY" || { echo "::error::Missing PRODUCTION_SSH_KEY — see .github/DEPLOY_SETUP.md"; exit 1; }
+          test -n "$HOST" || { echo "::error::Missing PRODUCTION_HOST"; exit 1; }
+          test -n "$USER_NAME" || { echo "::error::Missing PRODUCTION_USER"; exit 1; }
+          test -n "$DEPLOY_PATH" || { echo "::error::Missing PRODUCTION_DEPLOY_PATH"; exit 1; }
+          echo "Production secrets present (values not shown)."
+
+      - name: Resolve SSH port
+        id: sshport
+        env:
+          P: ${{ secrets.PRODUCTION_SSH_PORT }}
+        run: |
+          if [ -z "${P:-}" ]; then echo "port=22" >> "$GITHUB_OUTPUT"; else echo "port=${P}" >> "$GITHUB_OUTPUT"; fi
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         env:
-          STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          COMPOSE_FILE: docker-compose.production.yml
+          ENV_BASENAME: .env.production
+          DEPLOY_SERVICES: ${{ secrets.PRODUCTION_DEPLOY_SERVICES }}
+          BUILD_NO_CACHE: ${{ secrets.PRODUCTION_DOCKER_BUILD_NO_CACHE }}
+          HEALTH_URL_OVERRIDE: ${{ secrets.PRODUCTION_HEALTH_URL }}
+          GITHUB_SHA: ${{ github.sha }}
         with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
-          envs: STAGING_DEPLOY_PATH
-          script_stop: true
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: ${{ steps.sshport.outputs.port }}
+          fingerprint: ${{ secrets.PRODUCTION_SSH_FINGERPRINT }}
+          command_timeout: 45m
+          envs: DEPLOY_PATH,COMPOSE_FILE,ENV_BASENAME,DEPLOY_SERVICES,BUILD_NO_CACHE,HEALTH_URL_OVERRIDE,GITHUB_SHA
           script: |
             set -euo pipefail
-            if [ -z "${STAGING_DEPLOY_PATH}" ]; then
-              echo "STAGING_DEPLOY_PATH secret is not set"
-              exit 1
+            set -x
+            export DEPLOY_PATH="${DEPLOY_PATH:?}"
+            export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.production.yml}"
+            export ENV_BASENAME="${ENV_BASENAME:-.env.production}"
+            ENV_FILE="${DEPLOY_PATH}/${ENV_BASENAME}"
+
+            compose() {
+              docker compose -f "${DEPLOY_PATH}/${COMPOSE_FILE}" --env-file "${ENV_FILE}" "$@"
+            }
+
+            cd "${DEPLOY_PATH}"
+            test -f "${ENV_FILE}" || { echo "::error::Missing ${ENV_FILE}"; exit 1; }
+
+            SVC="${DEPLOY_SERVICES:-web worker-jobs worker-alerts}"
+            BUILD_ARGS=""
+            if [ "${BUILD_NO_CACHE:-}" = "true" ]; then
+              BUILD_ARGS="--no-cache"
             fi
-            cd "$STAGING_DEPLOY_PATH"
+
+            PREV="$(git rev-parse HEAD)"
+            echo "=== Previous commit: ${PREV} ==="
+
+            rollback() {
+              echo "::error::Deploy failed — rolling back git to ${PREV} and recreating containers."
+              git reset --hard "${PREV}" || true
+              compose build ${BUILD_ARGS} ${SVC} || true
+              compose up -d --force-recreate ${SVC} || true
+              exit 1
+            }
+
             git fetch origin main
             git checkout main
-            git pull origin main
-            docker compose pull || true
-            docker compose build --pull
-            docker compose up -d --remove-orphans
-            docker compose ps
+            if ! git pull origin main; then
+              echo "::error::git pull failed"
+              exit 1
+            fi
+            NEW="$(git rev-parse HEAD)"
+            echo "=== Deploying commit: ${NEW} (trigger SHA ${GITHUB_SHA:-n/a}) ==="
+
+            set -a
+            # shellcheck disable=SC1090
+            . "${ENV_FILE}"
+            set +a
+            HEALTH_PORT="${WEB_PORT:-8000}"
+            READY_URL="${HEALTH_URL_OVERRIDE:-http://127.0.0.1:${HEALTH_PORT}/health/ready}"
+
+            if ! compose build ${BUILD_ARGS} ${SVC}; then
+              rollback
+            fi
+            if ! compose up -d --force-recreate ${SVC}; then
+              rollback
+            fi
+
+            compose ps
+
+            echo "=== Waiting for health: ${READY_URL} ==="
+            ok=0
+            for i in $(seq 1 90); do
+              if curl -fsS "${READY_URL}" >/dev/null 2>&1; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "${ok}" -ne 1 ]; then
+              echo "::error::Health check failed after ~180s"
+              rollback
+            fi
+
+            echo "=== Recent web container logs (last 100 lines) ==="
+            compose logs --tail=100 web || true
+
+            echo "=== Deploy succeeded at ${NEW} ==="

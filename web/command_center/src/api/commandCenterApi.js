@@ -146,13 +146,45 @@ export async function loginWithPassword(username, password) {
 }
 
 /** SaaS onboarding — same as POST /auth/register with explicit plan. */
-export async function createOrganization({ email, password, organization_name, plan = "free" }) {
-  const { data } = await api.post("/org/create", {
+export async function createOrganization({ email, password, organization_name, plan = "free", invite_code = null }) {
+  const body = {
     email,
     password,
     organization_name,
     plan,
-  });
+  };
+  if (invite_code) body.invite_code = String(invite_code).trim();
+  const { data } = await api.post("/org/create", body);
+  return data;
+}
+
+export async function fetchProductBootstrap() {
+  const { data } = await api.get("/product/bootstrap");
+  return data;
+}
+
+export async function fetchProductPlans() {
+  const { data } = await api.get("/product/plans");
+  return data;
+}
+
+export async function postProductDemoSeed() {
+  const { data } = await api.post("/product/demo-seed");
+  return data;
+}
+
+export async function postProductOnboarding(patch) {
+  const { data } = await api.post("/product/onboarding", patch);
+  return data;
+}
+
+export async function fetchWowInsights() {
+  const { data } = await api.get("/product/wow-insights");
+  return data;
+}
+
+export async function createInviteLink() {
+  const { data } = await api.post("/product/invite-link");
   return data;
 }
 

@@ -8,7 +8,7 @@ from datetime import date, datetime
 
 import asset_portal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from api.billing_policy import enforce_billing_tool_policy
@@ -22,6 +22,7 @@ from services import billing_service
 from services.billing_phase2_service import (
     build_cash_bill_html_sync,
     build_structured_invoice_html_sync,
+    build_structured_invoice_pdf_bytes_sync,
     create_simple_cash_bill_sync,
     create_structured_invoice_sync,
     gst_report_sync,
@@ -29,6 +30,7 @@ from services.billing_phase2_service import (
     list_invoices_sync,
     record_payment_sync,
 )
+from services.usage_log_service import ACTION_INVOICE_CREATE, log_usage_sync
 from services import workflow_rules
 from core.recursive_learning import context_from_approval_row, record_learning_log
 from services.execution_engine import BRAIN_ACTION_INTENT_TYPE, queue_action_intent_for_hitl
@@ -525,6 +527,10 @@ class StructuredInvoiceBody(BaseModel):
     invoice_no: str = ""
     invoice_date: str = Field("", description="YYYY-MM-DD; default today")
     external_ref: str | None = None
+    eway_bill_no: str | None = None
+    vehicle_no: str | None = None
+    transport_mode: str | None = None
+    consignee_place: str | None = None
     lines: list[StructuredInvoiceLineBody] = Field(..., min_length=1)
 
 
@@ -554,6 +560,10 @@ async def billing_phase2_create_invoice(
         invoice_date=inv_date,
         lines=[ln.model_dump() for ln in body.lines],
         external_ref=body.external_ref,
+        eway_bill_no=body.eway_bill_no,
+        vehicle_no=body.vehicle_no,
+        transport_mode=body.transport_mode,
+        consignee_place=body.consignee_place,
         user_id=_user.id if _user.id > 0 else None,
     )
     if not out.get("ok"):
@@ -628,6 +638,34 @@ async def billing_invoice_print_html(
     if not out.get("ok"):
         raise HTTPException(status_code=404, detail=out.get("error") or "not found")
     return HTMLResponse(content=out.get("html") or "")
+
+
+@router.get("/billing/invoice/{invoice_id}/pdf")
+async def billing_invoice_pdf(
+    invoice_id: int = Path(..., ge=1),
+    supply_mode: str = Query("intra", description="intra (CGST+SGST) or inter (IGST)"),
+    _user: CurrentUser = Depends(
+        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
+    ),
+) -> Response:
+    """Download structured tax invoice as PDF (requires ``fpdf2``)."""
+    out = await asyncio.to_thread(
+        build_structured_invoice_pdf_bytes_sync,
+        organization_id=_user.organization_id,
+        invoice_id=invoice_id,
+        supply_mode=supply_mode,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=404, detail=out.get("error") or "pdf failed")
+    pdf_bytes = out.get("pdf_bytes")
+    if not isinstance(pdf_bytes, (bytes, bytearray)):
+        raise HTTPException(status_code=500, detail="invalid pdf payload")
+    fname = f"invoice-{invoice_id}.pdf"
+    return Response(
+        content=bytes(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{fname}"'},
+    )
 
 
 class SimpleBillLineBody(BaseModel):

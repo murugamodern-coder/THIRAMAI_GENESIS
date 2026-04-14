@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
-from typing import Any, Generator, Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -69,7 +69,8 @@ def get_session_factory() -> Optional[sessionmaker[Session]]:
     return _session_factory
 
 
-def session_scope() -> Generator[Session, None, None]:
+@contextmanager
+def session_scope() -> Iterator[Session]:
     factory = get_session_factory()
     if factory is None:
         raise RuntimeError("DATABASE_URL is not set or engine could not be created.")

@@ -13,7 +13,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import BackgroundTasks
 from sqlalchemy import func, select, text, update
@@ -73,6 +73,41 @@ def enqueue_issue_invoice(
             "organization_id": organization_id,
             "correlation_id": (correlation_id or "").strip()[:128] or None,
         },
+    )
+    return jid
+
+
+def enqueue_jarvis_proactive_scan(
+    *,
+    kind: Literal["morning", "realtime"],
+    idempotency_key: str,
+    correlation_id: str | None = None,
+) -> int:
+    """Enqueue global Jarvis proactive scan (``kind`` = morning all-users or realtime all-users)."""
+    factory = get_session_factory()
+    if factory is None:
+        raise RuntimeError("DATABASE_URL is not configured (cannot enqueue jobs).")
+    body: dict[str, Any] = {"handler": "jarvis_proactive", "kind": str(kind)}
+    if correlation_id and str(correlation_id).strip():
+        body["correlation_id"] = str(correlation_id).strip()[:128]
+    with factory() as session:
+        with session.begin():
+            row = BackgroundJob(
+                job_type="jarvis_proactive",
+                organization_id=None,
+                idempotency_key=idempotency_key[:512],
+                payload=body,
+                status="pending",
+            )
+            session.add(row)
+            session.flush()
+            jid = int(row.id)
+    rid = new_request_id()
+    log_event(
+        rid,
+        "job_queue.enqueued",
+        ok=True,
+        extra={"job_id": jid, "job_type": "jarvis_proactive", "kind": kind, "correlation_id": correlation_id},
     )
     return jid
 
@@ -321,6 +356,9 @@ def dispatch_job_snap(snap: _JobSnap) -> None:
             user_feedback=str(p.get("user_feedback") or ""),
             resolved_by_user_id=p.get("resolved_by_user_id"),
         )
+        return
+    if handler == "jarvis_proactive":
+        worker_jobs.job_execute_jarvis_proactive(kind=str(p.get("kind") or "").strip().lower())
         return
     raise ValueError(f"unknown job handler: {handler!r}")
 

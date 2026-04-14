@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { fetchPersonalTodayBrief } from "../api/commandCenterApi.js";
+import {
+  createInviteLink,
+  fetchPersonalTodayBrief,
+  fetchProductBootstrap,
+  fetchWowInsights,
+  postProductOnboarding,
+} from "../api/commandCenterApi.js";
 import { requestNotificationPermission, useSmartNotifications } from "../hooks/useSmartNotifications.js";
 import { registerWebPushSubscription } from "../lib/webPushSubscribe.js";
 import { showToastDedup } from "../lib/toastDedup.js";
@@ -61,6 +67,11 @@ export default function TodayPage() {
   );
   const [winText, setWinText] = useState("");
   const [pushBusy, setPushBusy] = useState(false);
+  const [wowOpen, setWowOpen] = useState(false);
+  const [wowInsights, setWowInsights] = useState([]);
+  const [wowCaptain, setWowCaptain] = useState("");
+  const [wowBusy, setWowBusy] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,6 +91,26 @@ export default function TodayPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const boot = await fetchProductBootstrap();
+        if (cancelled || !boot?.hints?.wow_pending) return;
+        const w = await fetchWowInsights();
+        if (cancelled || !w?.insights?.length) return;
+        setWowInsights(w.insights.slice(0, 3));
+        setWowCaptain(typeof w.captain_message === "string" ? w.captain_message : "");
+        setWowOpen(true);
+      } catch {
+        /* non-fatal */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -135,6 +166,39 @@ export default function TodayPage() {
   const pushSupported =
     typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
 
+  async function onDismissWow() {
+    setWowBusy(true);
+    try {
+      await postProductOnboarding({ wow_ack: true });
+      setWowOpen(false);
+    } catch (err) {
+      const d = err?.response?.data?.detail;
+      showToastDedup({ type: "error", message: typeof d === "string" ? d : "Could not save" });
+    } finally {
+      setWowBusy(false);
+    }
+  }
+
+  async function onShareThiramai() {
+    setShareBusy(true);
+    try {
+      const r = await createInviteLink();
+      const path = r?.share_url || (r?.code ? `/signup?ref=${encodeURIComponent(r.code)}` : "");
+      if (!path) throw new Error("No invite link");
+      const url = `${window.location.origin}${path.startsWith("/") ? path : `/${path}`}`;
+      await navigator.clipboard.writeText(url);
+      showToastDedup({ type: "success", message: "Invite link copied — share with a teammate" });
+    } catch (err) {
+      const d = err?.response?.data?.detail;
+      showToastDedup({
+        type: "error",
+        message: typeof d === "string" ? d : err?.message || "Could not create invite",
+      });
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
   async function onBackgroundPush() {
     if (!pushSupported) {
       showToastDedup({ type: "warning", message: "Web Push not supported in this browser" });
@@ -162,30 +226,65 @@ export default function TodayPage() {
     }
   }
 
-  if (loading && !data) {
-    return (
-      <div className="cc-today-page cc-today-page--loading">
-        <div className="cc-today-loading" aria-busy="true">
-          <span className="cc-spinner" />
-          <p className="cc-muted">Loading your day…</p>
+  const wowLayer =
+    wowOpen ? (
+      <div className="cc-wow-overlay" role="dialog" aria-modal="true" aria-labelledby="cc-wow-title">
+        <div className="cc-wow-modal cc-card">
+          <h2 id="cc-wow-title" className="cc-wow-modal-title">
+            Your first three insights
+          </h2>
+          <p className="cc-muted" style={{ marginTop: 0 }}>
+            Pulled from your workspace and personal OS — add data anytime to sharpen these.
+          </p>
+          {wowCaptain ? <p className="cc-wow-captain">{wowCaptain}</p> : null}
+          <ol className="cc-wow-list">
+            {wowInsights.map((row, i) => (
+              <li key={i} className="cc-wow-item">
+                <strong>{row.title || "Insight"}</strong>
+                {row.detail ? <p className="cc-muted cc-wow-detail">{row.detail}</p> : null}
+              </li>
+            ))}
+          </ol>
+          <div className="cc-wow-actions">
+            <button type="button" className="cc-btn cc-btn-primary" disabled={wowBusy} onClick={onDismissWow}>
+              {wowBusy ? "Saving…" : "Continue to Today"}
+            </button>
+          </div>
         </div>
       </div>
+    ) : null;
+
+  if (loading && !data) {
+    return (
+      <>
+        {wowLayer}
+        <div className="cc-today-page cc-today-page--loading">
+          <div className="cc-today-loading" aria-busy="true">
+            <span className="cc-spinner" />
+            <p className="cc-muted">Loading your day…</p>
+          </div>
+        </div>
+      </>
     );
   }
 
   if (error && !data) {
     return (
-      <div className="cc-today-page">
-        <p className="cc-error">{error}</p>
-        <button type="button" className="cc-btn cc-btn-primary" onClick={load}>
-          Retry
-        </button>
-      </div>
+      <>
+        {wowLayer}
+        <div className="cc-today-page">
+          <p className="cc-error">{error}</p>
+          <button type="button" className="cc-btn cc-btn-primary" onClick={load}>
+            Retry
+          </button>
+        </div>
+      </>
     );
   }
 
   return (
     <div className="cc-today-page">
+      {wowLayer}
       <header className="cc-today-hero">
         <div>
           <h1 className="cc-today-greeting">
@@ -213,6 +312,15 @@ export default function TodayPage() {
             ) : null}
           </p>
           <div className="cc-today-hero-actions">
+            <button
+              type="button"
+              className="cc-btn cc-btn-secondary cc-today-notif-btn"
+              disabled={shareBusy}
+              onClick={onShareThiramai}
+              title="Copies signup link with your referral code"
+            >
+              {shareBusy ? "Preparing link…" : "Share THIRAMAI"}
+            </button>
             <button type="button" className="cc-btn cc-btn-secondary cc-today-notif-btn" onClick={onEnableNotifs}>
               {notifOn ? "In-app reminders on" : "In-app reminders"}
             </button>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 
 import { createOrganization } from "../api/commandCenterApi.js";
 import { showToastDedup } from "../lib/toastDedup.js";
@@ -7,6 +7,8 @@ import { useCommandStore } from "../store/useCommandStore.js";
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteRef = (searchParams.get("ref") || "").trim();
   const token = useCommandStore((s) => s.token);
   const setToken = useCommandStore((s) => s.setToken);
   const [orgName, setOrgName] = useState("");
@@ -27,6 +29,7 @@ export default function SignupPage() {
         password,
         organization_name: orgName.trim(),
         plan,
+        invite_code: inviteRef || null,
       });
       if (out?.access_token) setToken(out.access_token);
       showToastDedup({ type: "success", message: "Workspace created" });
@@ -63,6 +66,12 @@ export default function SignupPage() {
         <p className="cc-muted" style={{ marginTop: -8, marginBottom: 16 }}>
           Creates your organization, owner account, and roles — same as product onboarding API{" "}
           <code style={{ fontSize: 11 }}>/org/create</code>.
+          {inviteRef ? (
+            <>
+              {" "}
+              Referral code <code>{inviteRef}</code> will be attached.
+            </>
+          ) : null}
         </p>
         <form onSubmit={onSubmit}>
           <div className="cc-field">
@@ -108,7 +117,8 @@ export default function SignupPage() {
             <select id="su-plan" className="cc-select" value={plan} onChange={(e) => setPlan(e.target.value)}>
               <option value="free">Free</option>
               <option value="pro">Pro</option>
-              <option value="enterprise">Enterprise</option>
+              <option value="business">Business</option>
+              <option value="enterprise">Enterprise (legacy)</option>
             </select>
           </div>
           {error && <p className="cc-error">{error}</p>}

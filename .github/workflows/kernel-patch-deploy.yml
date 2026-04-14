@@ -1,7 +1,7 @@
 # Triggered by repository_dispatch types `kernel-patch-approved` or `thiramai_sandbox_approved`
 # (see services/ci_cd_trigger.py). Server: THIRAMAI_GITHUB_TOKEN + THIRAMAI_GITHUB_REPO=owner/repo
 #
-# Reuses the same SSH deploy secrets as deploy.yml when you want parity with staging.
+# Reuses the same PRODUCTION_* SSH secrets as `.github/workflows/deploy.yml` when configured.
 
 name: Kernel patch CD
 

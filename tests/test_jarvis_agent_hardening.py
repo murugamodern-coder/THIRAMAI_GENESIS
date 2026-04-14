@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from services.jarvis_agent_service import TOOL_SPECS, _normalize_tool_call, _tool_call_id
-from services.jarvis_router import classify_query, merge_route_tool_specs, route_query
+from services.jarvis_router import classify_query, merge_route_tool_specs, route_jarvis_query, route_query
 
 
 def test_classify_stock_vs_business_inventory():
@@ -16,7 +16,7 @@ def test_classify_stock_vs_business_inventory():
 
 
 def test_merge_route_tool_specs_subsets_tools():
-    model, specs, cat = merge_route_tool_specs("Research PM-Kisan eligibility in Tamil Nadu", TOOL_SPECS)
+    model, specs, cat = route_jarvis_query("Research PM-Kisan eligibility in Tamil Nadu", TOOL_SPECS)
     assert cat == "research"
     names = {s["function"]["name"] for s in specs}
     assert "research_topic" in names

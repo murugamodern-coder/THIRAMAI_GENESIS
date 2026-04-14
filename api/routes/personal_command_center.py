@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.dependencies import CurrentUser, get_current_user
+from services.product_plans import organization_plan_sync, plan_allows
 from core.database import get_session_factory
 from core.db.models import PersonalMeeting, PersonalMission
 from services import life_os_service
@@ -161,6 +162,12 @@ async def expenses_scan_preview(
 ) -> dict[str, Any]:
     if int(user.id) <= 0:
         raise HTTPException(status_code=400, detail="Real user id required")
+    p = organization_plan_sync(int(user.organization_id))
+    if not plan_allows(p, "auto_accounting"):
+        raise HTTPException(
+            status_code=402,
+            detail="Receipt AI requires Pro or Business. Upgrade to unlock auto accounting.",
+        )
     raw = await file.read()
     from core.security.upload_validation import validate_upload_bytes
 

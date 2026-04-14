@@ -46,8 +46,10 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(tenancy_router)
 
     from api.routes.org import router as org_router
+    from api.routes.product_growth import router as product_growth_router
 
     app.include_router(org_router)
+    app.include_router(product_growth_router)
 
     from api.routes.ai_chat import router as ai_chat_router
     from api.routes.analytics import router as analytics_router

@@ -1748,3 +1748,58 @@ button {
     max-width: 960px;
   }
 }
+
+/* First-login wow + growth */
+.cc-wow-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cc-s2);
+  background: rgba(17, 24, 39, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.cc-wow-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: min(90vh, 640px);
+  overflow: auto;
+  padding: var(--cc-s3);
+  box-shadow: var(--cc-shadow-md);
+  border-radius: var(--cc-radius-card);
+  border: 1px solid var(--cc-border);
+}
+
+.cc-wow-modal-title {
+  margin: 0 0 var(--cc-s1);
+  font-size: 1.25rem;
+}
+
+.cc-wow-captain {
+  margin: var(--cc-s1) 0;
+  font-size: 13px;
+  color: var(--cc-text);
+}
+
+.cc-wow-list {
+  margin: var(--cc-s2) 0;
+  padding-left: 1.25rem;
+}
+
+.cc-wow-item {
+  margin-bottom: var(--cc-s2);
+}
+
+.cc-wow-detail {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.cc-wow-actions {
+  margin-top: var(--cc-s3);
+  display: flex;
+  justify-content: flex-end;
+}

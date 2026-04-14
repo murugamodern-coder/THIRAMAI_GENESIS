@@ -30,6 +30,22 @@ def build_ambient_sync(payload: dict[str, Any], guidance: dict[str, Any]) -> dic
         if title:
             out["background_reminders"].append(f"Soft note — coming up: {title[:120]}")
 
+    nudges = payload.get("meeting_nudges") if isinstance(payload.get("meeting_nudges"), list) else []
+    for mn in nudges[:3]:
+        if not isinstance(mn, dict):
+            continue
+        t = (mn.get("title") or "").strip()
+        if not t:
+            continue
+        mu = mn.get("minutes_until")
+        try:
+            mui = int(mu) if mu is not None else None
+        except (TypeError, ValueError):
+            mui = None
+        line = f"Meeting in {mui} min — {t[:100]}" if mui is not None else f"Meeting soon — {t[:100]}"
+        if len(out["background_reminders"]) < 4:
+            out["background_reminders"].append(line)
+
     if len(out["background_reminders"]) < 2 and payload.get("authenticated"):
         jm = payload.get("jarvis_memory") if isinstance(payload.get("jarvis_memory"), dict) else {}
         hint = jm.get("hint")

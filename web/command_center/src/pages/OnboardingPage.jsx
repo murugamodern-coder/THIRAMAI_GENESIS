@@ -1,26 +1,41 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
-import { fetchAuthMe, postUsageEvent } from "../api/commandCenterApi.js";
+import {
+  fetchAuthMe,
+  fetchProductBootstrap,
+  postProductDemoSeed,
+  postProductOnboarding,
+  postUsageEvent,
+} from "../api/commandCenterApi.js";
 import { isOnboardingDone, setOnboardingDone } from "../lib/onboarding.js";
+import { showToastDedup } from "../lib/toastDedup.js";
 import { useCommandStore } from "../store/useCommandStore.js";
 
 const STEPS = [
   {
-    title: "Welcome to your command center",
-    body: "You now have a dedicated workspace with roles and tenant isolation. Everything you see is scoped to your organization.",
+    key: "business",
+    title: "Your business workspace is live",
+    body: "We created your organization and owner role. You can rename details later in settings — you are already inside a secure, tenant-scoped workspace.",
+    cta: null,
   },
   {
-    title: "See the business in one screen",
-    body: "Open the dashboard for KPIs, financial charts, AI approval queue, and system health. That is your daily cockpit.",
+    key: "demo",
+    title: "Load demo data (optional)",
+    body: "Adds one sample expense and one sample mission so charts and Today feel alive instantly. Remove anytime by deleting those rows.",
+    cta: "demo",
   },
   {
-    title: "Ask THIRAMAI",
-    body: "Use the AI assistant panel for natural-language questions. Sensitive actions may require your approval in Mission Hub.",
+    key: "expense",
+    title: "Add a real expense",
+    body: "Track one real spend so personal finance and cross-domain insights have signal.",
+    cta: "expense",
   },
   {
-    title: "You are ready",
-    body: "Explore Inventory, Billing, and Production from the top navigation when your team is ready to go live.",
+    key: "insights",
+    title: "Open Today for AI insights",
+    body: "Your Today page shows weather, meetings, business snapshot, and System intelligence — powered by your data.",
+    cta: "today",
   },
 ];
 
@@ -30,7 +45,9 @@ export default function OnboardingPage() {
   const setMe = useCommandStore((s) => s.setMe);
   const [step, setStep] = useState(0);
   const [userId, setUserId] = useState(null);
+  const [orgName, setOrgName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [demoBusy, setDemoBusy] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -42,9 +59,14 @@ export default function OnboardingPage() {
         setMe(me);
         const uid = me.id;
         setUserId(uid);
+        setOrgName(me.organization?.name || "");
         if (uid > 0 && isOnboardingDone(uid)) {
           navigate("/today", { replace: true });
           return;
+        }
+        const boot = await fetchProductBootstrap().catch(() => null);
+        if (boot?.hints?.onboarding_complete) {
+          navigate("/today", { replace: true });
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -66,11 +88,13 @@ export default function OnboardingPage() {
 
   const last = step === STEPS.length - 1;
   const progress = Math.round(((step + 1) / STEPS.length) * 100);
+  const content = STEPS[step];
 
   async function finish() {
     if (userId != null && userId > 0) {
       setOnboardingDone(userId, true);
       try {
+        await postProductOnboarding({ insights_done: true, wow_ack: false });
         await postUsageEvent("onboarding_complete", { source: "command_center" });
       } catch {
         /* non-blocking */
@@ -79,49 +103,84 @@ export default function OnboardingPage() {
     navigate("/today", { replace: true });
   }
 
-  function next() {
-    if (last) {
-      finish();
-      return;
+  async function runDemo() {
+    setDemoBusy(true);
+    try {
+      const out = await postProductDemoSeed();
+      if (out?.ok) {
+        showToastDedup({ type: "success", message: out.note === "already_seeded" ? "Demo already loaded" : "Demo data loaded" });
+      } else {
+        showToastDedup({ type: "warning", message: out?.error || "Could not load demo" });
+      }
+    } catch {
+      showToastDedup({ type: "error", message: "Demo seed failed" });
+    } finally {
+      setDemoBusy(false);
     }
-    setStep((s) => s + 1);
   }
-
-  function back() {
-    setStep((s) => Math.max(0, s - 1));
-  }
-
-  const content = STEPS[step];
 
   return (
     <div className="cc-onboarding">
       <div className="cc-onboarding-card">
-        <div className="cc-onboarding-progress" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+        <div
+          className="cc-onboarding-progress"
+          role="progressbar"
+          aria-valuenow={progress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
           <div className="cc-onboarding-progress-bar" style={{ width: `${progress}%` }} />
         </div>
         <p className="cc-muted" style={{ fontSize: 12, marginBottom: 8 }}>
           Step {step + 1} of {STEPS.length}
         </p>
         <h1 className="cc-onboarding-title">{content.title}</h1>
-        <p className="cc-onboarding-body">{content.body}</p>
+        <p className="cc-onboarding-body">
+          {content.key === "business" && orgName ? (
+            <>
+              <strong>{orgName}</strong> — {content.body}
+            </>
+          ) : (
+            content.body
+          )}
+        </p>
+        {content.cta === "demo" && (
+          <div style={{ marginTop: 12 }}>
+            <button type="button" className="cc-btn cc-btn-primary" disabled={demoBusy} onClick={runDemo}>
+              {demoBusy ? "Loading…" : "Load sample data"}
+            </button>
+          </div>
+        )}
+        {content.cta === "expense" && (
+          <div style={{ marginTop: 12 }}>
+            <Link className="cc-btn cc-btn-primary" to="/personal/finance">
+              Log an expense
+            </Link>
+          </div>
+        )}
         <div className="cc-onboarding-actions">
           {step > 0 && (
-            <button type="button" className="cc-btn" onClick={back}>
+            <button type="button" className="cc-btn" onClick={() => setStep((s) => Math.max(0, s - 1))}>
               Back
             </button>
           )}
-          <button type="button" className="cc-btn cc-btn-primary" onClick={next}>
-            {last ? "Go to dashboard" : "Continue"}
+          <button
+            type="button"
+            className="cc-btn cc-btn-primary"
+            onClick={() => {
+              if (last) finish();
+              else setStep((s) => s + 1);
+            }}
+          >
+            {last ? "Go to Today" : "Continue"}
           </button>
         </div>
         <p style={{ marginTop: 20, fontSize: 13 }}>
-          <button
-            type="button"
-            className="cc-link-btn"
-            onClick={() => finish()}
-          >
+          <button type="button" className="cc-link-btn" onClick={() => navigate("/today", { replace: true })}>
             Skip for now
           </button>
+          {" · "}
+          <Link to="/pricing">Compare plans</Link>
         </p>
       </div>
     </div>

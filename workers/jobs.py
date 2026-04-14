@@ -179,3 +179,15 @@ def job_execute_brain_intent(
         resolved_by_user_id=resolved_by_user_id,
     )
     return res
+
+
+def job_execute_jarvis_proactive(*, kind: str) -> dict[str, Any]:
+    """DB job queue handler for Living Jarvis proactive scans (morning / realtime)."""
+    from services.jarvis_proactive_service import run_morning_job_all_users_sync, run_realtime_job_all_users_sync
+
+    k = (kind or "").strip().lower()
+    if k == "morning":
+        return run_morning_job_all_users_sync()
+    if k == "realtime":
+        return run_realtime_job_all_users_sync()
+    raise ValueError(f"unknown jarvis_proactive kind: {kind!r}")

@@ -1,0 +1,47 @@
+# Staging CD — push to `develop` (optional). Requires STAGING_* repository secrets.
+# Production deploy is `.github/workflows/deploy.yml`.
+
+name: Deploy staging
+
+on:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: deploy-staging-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: Deploy staging
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          envs: STAGING_DEPLOY_PATH
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            if [ -z "${STAGING_DEPLOY_PATH}" ]; then
+              echo "STAGING_DEPLOY_PATH secret is not set"
+              exit 1
+            fi
+            cd "$STAGING_DEPLOY_PATH"
+            git fetch origin develop
+            git checkout develop
+            git pull origin develop
+            docker compose pull || true
+            docker compose build --pull
+            docker compose up -d --remove-orphans
+            docker compose ps

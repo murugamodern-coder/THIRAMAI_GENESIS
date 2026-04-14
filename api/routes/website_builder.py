@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from api.dependencies import CurrentUser, get_current_user
+from api.dependencies import CurrentUser, ensure_org_membership, get_current_user
 from services.website_builder_service import (
     build_website_sync,
     read_site_iframe_preview_sync,
@@ -41,6 +41,7 @@ async def post_build(body: BuildBody, user: CurrentUser = Depends(get_current_us
     oid = int(body.organization_id or user.organization_id)
     if oid <= 0:
         raise HTTPException(status_code=400, detail="organization_id required")
+    ensure_org_membership(user, oid)
     out = build_website_sync(
         oid,
         body.template_type,

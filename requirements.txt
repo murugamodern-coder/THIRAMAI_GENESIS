@@ -8,6 +8,8 @@ sqlalchemy>=2.0.0
 alembic>=1.14.0
 sqlparse>=0.5.0
 psycopg2-binary>=2.9.9
+# Optional: pgvector + sqlalchemy pgvector for true vector recall on jarvis_episodes.embedding
+# pgvector>=0.3.0
 apscheduler>=3.10.0
 groq>=0.11.0
 google-generativeai>=0.8.0
@@ -29,6 +31,7 @@ numpy>=1.26.0
 # Research Hub: Indian equity fuzzy match + live quotes (optional Alpha Vantage via THIRAMAI_ALPHA_VANTAGE_API_KEY)
 rapidfuzz>=3.9.0
 yfinance>=0.2.40
+# Optional NSE quote fallback: pip install nsepython (see services/stock_market_data_service.py)
 pandas>=2.0.0
 ta>=0.11.0
 
