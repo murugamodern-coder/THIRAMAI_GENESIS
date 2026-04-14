@@ -46,6 +46,8 @@ EXTENDED_TOOL_NAMES: frozenset[str] = frozenset(
         "get_pending_payments",
         "research_topic",
         "research_market",
+        "deep_research",
+        "find_cheapest_machine",
         "find_govt_schemes",
         "generate_dpr",
         "analyze_competitors",
@@ -72,6 +74,8 @@ AUTO_EXECUTE_TOOL_NAMES: frozenset[str] = frozenset(
         "get_pending_payments",
         "research_topic",
         "research_market",
+        "deep_research",
+        "find_cheapest_machine",
         "find_govt_schemes",
         "generate_dpr",
         "analyze_competitors",
@@ -345,13 +349,45 @@ def extended_tool_specs() -> list[dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "deep_research",
+                "description": "Multi-source business intelligence (web, news, govt, marketplaces, optional social/academic). Saves to research_projects; returns summary, comparison table when relevant, and sources.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "depth": {
+                            "type": "string",
+                            "enum": ["quick", "standard", "deep"],
+                            "description": "quick=web only; standard=web+news+govt; deep=all sources",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "find_cheapest_machine",
+                "description": "Compare equipment/machine prices across IndiaMART, TradeIndia, and web snippets; returns comparison table and brief analysis.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"machine_name": {"type": "string"}},
+                    "required": ["machine_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "find_govt_schemes",
-                "description": "Search current government schemes for TN/India sector.",
+                "description": "Search current government schemes for TN/India sector (MSME, NABARD-style signals when business_type is set).",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "sector": {"type": "string"},
                         "state": {"type": "string"},
+                        "business_type": {"type": "string", "description": "Optional e.g. food processing unit, dairy"},
                     },
                     "required": ["sector"],
                 },
@@ -1144,6 +1180,33 @@ def execute_jarvis_extended_tool(
                 return {"ok": False, "message": "query required"}
             return research_market_sync(q, user_id=uid, organization_id=oid, persist=True)
 
+        if name == "deep_research":
+            from services.deep_research_engine import deep_research_sync
+
+            q = str(args.get("query") or "").strip()
+            dep = str(args.get("depth") or "standard").strip().lower()
+            if not q:
+                return {"ok": False, "message": "query required"}
+            return deep_research_sync(
+                q,
+                dep,
+                user_id=uid if uid > 0 else None,
+                organization_id=oid if oid > 0 else None,
+                persist=True,
+            )
+
+        if name == "find_cheapest_machine":
+            from services.deep_research_engine import find_cheapest_machine_sync
+
+            m = str(args.get("machine_name") or "").strip()
+            if not m:
+                return {"ok": False, "message": "machine_name required"}
+            return find_cheapest_machine_sync(
+                m,
+                user_id=uid if uid > 0 else None,
+                organization_id=oid if oid > 0 else None,
+            )
+
         if name == "generate_dpr":
             from services.dpr_generator_service import generate_dpr_sync
 
@@ -1219,10 +1282,21 @@ def execute_jarvis_extended_tool(
             return out
 
         if name == "find_govt_schemes":
-            from services.research_schemes_service import find_schemes_sync
-
             sector = str(args.get("sector") or "").strip()
             state = str(args.get("state") or "Tamil Nadu").strip()
+            bt = str(args.get("business_type") or "").strip()
+            if bt:
+                from services.deep_research_engine import find_govt_schemes_deep_sync
+
+                return find_govt_schemes_deep_sync(
+                    sector,
+                    state,
+                    bt,
+                    user_id=uid,
+                    organization_id=oid,
+                )
+            from services.research_schemes_service import find_schemes_sync
+
             return find_schemes_sync(
                 sector,
                 state,

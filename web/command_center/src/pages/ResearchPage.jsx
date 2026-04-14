@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import {
   getResearchDprQuery,
   postResearchCompetitors,
+  postResearchDeep,
   postResearchDpr,
   postResearchMarket,
   postResearchSchemes,
@@ -46,6 +47,9 @@ export default function ResearchPage() {
   const [compBiz, setCompBiz] = useState("organic grocery retail");
   const [compLoc, setCompLoc] = useState("Chennai");
   const [compOut, setCompOut] = useState(null);
+  const [deepQuery, setDeepQuery] = useState("compare cold press oil machine suppliers Coimbatore vs Chennai");
+  const [deepDepth, setDeepDepth] = useState("standard");
+  const [deepOut, setDeepOut] = useState(null);
 
   const runMarket = useCallback(async () => {
     const q = marketQuery.trim();
@@ -139,15 +143,167 @@ export default function ResearchPage() {
     }
   }, [compBiz, compLoc]);
 
+  const runDeep = useCallback(async () => {
+    const q = deepQuery.trim();
+    if (!q) return;
+    setLoading(true);
+    setDeepOut(null);
+    try {
+      const data = await postResearchDeep(q, deepDepth);
+      setDeepOut(data);
+      showToastDedup({
+        type: data?.ok ? "success" : "warning",
+        message: data?.ok ? "Deep research complete" : data?.error || "Check API keys / network",
+      });
+    } catch (e) {
+      showToastDedup({ type: "error", message: e?.message || "Failed" });
+    } finally {
+      setLoading(false);
+    }
+  }, [deepQuery, deepDepth]);
+
   const struct = marketOut?.structured;
+  const compTable = deepOut?.comparison_table;
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "16px 20px 48px" }}>
       <h1 style={{ fontSize: 26, marginBottom: 8 }}>Research engine</h1>
       <p className="cc-muted" style={{ marginBottom: 24 }}>
-        Market intelligence, government schemes, DPR drafts, and competitor scans. Results are saved to your workspace
-        (requires Tavily + Groq; Gemini optional via GOOGLE_API_KEY).
+        Market intelligence, government schemes, DPR drafts, competitor scans, and multi-source deep research. Results
+        are saved to your workspace (requires Tavily + Groq; Gemini optional via GOOGLE_API_KEY).
       </p>
+
+      <Card title="Deep research (multi-source)">
+        <textarea
+          className="cc-textarea"
+          rows={3}
+          value={deepQuery}
+          onChange={(e) => setDeepQuery(e.target.value)}
+          disabled={loading}
+        />
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <label className="cc-muted" style={{ fontSize: 14 }}>
+            Depth{" "}
+            <select
+              className="cc-textarea"
+              style={{ minHeight: 36, marginLeft: 6 }}
+              value={deepDepth}
+              onChange={(e) => setDeepDepth(e.target.value)}
+              disabled={loading}
+            >
+              <option value="quick">Quick (web)</option>
+              <option value="standard">Standard (web + news + govt)</option>
+              <option value="deep">Deep (all sources)</option>
+            </select>
+          </label>
+          <button type="button" className="cc-btn cc-btn-primary" disabled={loading} onClick={runDeep}>
+            {loading ? "Running…" : "Run deep research"}
+          </button>
+        </div>
+        {deepOut?.ok ? (
+          <div style={{ marginTop: 16, fontSize: 14 }}>
+            <p>
+              <strong>Confidence:</strong>{" "}
+              {typeof deepOut.confidence_score === "number" ? `${Math.round(deepOut.confidence_score * 100)}%` : "—"}
+            </p>
+            <p>
+              <strong>Summary:</strong> {deepOut.summary || "—"}
+            </p>
+            {Array.isArray(deepOut.key_insights) && deepOut.key_insights.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                <strong>Key insights</strong>
+                <ul style={{ marginTop: 4 }}>
+                  {deepOut.key_insights.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {Array.isArray(deepOut.risks) && deepOut.risks.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                <strong>Risks</strong>
+                <ul style={{ marginTop: 4 }}>
+                  {deepOut.risks.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {Array.isArray(deepOut.opportunities) && deepOut.opportunities.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                <strong>Opportunities</strong>
+                <ul style={{ marginTop: 4 }}>
+                  {deepOut.opportunities.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {compTable?.headers?.length && compTable?.rows?.length ? (
+              <div style={{ marginTop: 16, overflow: "auto" }}>
+                <strong>Comparison</strong>
+                <table className="cc-table" style={{ marginTop: 8, width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {compTable.headers.map((h, i) => (
+                        <th
+                          key={i}
+                          style={{
+                            textAlign: "left",
+                            borderBottom: "1px solid var(--cc-border, #333)",
+                            padding: "6px 8px",
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compTable.rows.map((row, ri) => (
+                      <tr key={ri}>
+                        {(row || []).map((cell, ci) => (
+                          <td
+                            key={ci}
+                            style={{ borderBottom: "1px solid var(--cc-border, #222)", padding: "6px 8px" }}
+                          >
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {deepOut.research_project_id ? (
+              <p className="cc-muted" style={{ fontSize: 12, marginTop: 12 }}>
+                Saved as research project #{deepOut.research_project_id}
+              </p>
+            ) : null}
+            {Array.isArray(deepOut.sources) && deepOut.sources.length > 0 ? (
+              <details style={{ marginTop: 12 }}>
+                <summary className="cc-muted" style={{ cursor: "pointer" }}>
+                  Sources ({deepOut.sources.length})
+                </summary>
+                <ul style={{ fontSize: 12, marginTop: 8 }}>
+                  {deepOut.sources.map((u, i) => (
+                    <li key={i}>
+                      <a href={u} target="_blank" rel="noreferrer">
+                        {u}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </div>
+        ) : deepOut && !deepOut.ok ? (
+          <p className="cc-muted" style={{ marginTop: 12 }}>
+            {deepOut.error || "Run failed"}
+          </p>
+        ) : null}
+      </Card>
 
       <Card title="Market research">
         <textarea

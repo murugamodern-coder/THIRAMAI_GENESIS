@@ -65,6 +65,15 @@ class ResearchMarketBody(BaseModel):
     query: str = Field(..., min_length=2, max_length=2000)
 
 
+class ResearchDeepBody(BaseModel):
+    query: str = Field(..., min_length=2, max_length=2000)
+    depth: str = Field(
+        "standard",
+        max_length=16,
+        description="quick | standard | deep",
+    )
+
+
 class ResearchSchemesBody(BaseModel):
     sector: str = Field(..., min_length=2, max_length=500)
     state: str = Field("TN", max_length=64)
@@ -299,6 +308,27 @@ async def research_engine_market(
     return await asyncio.to_thread(
         research_market_sync,
         body.query.strip(),
+        user_id=int(_user.id),
+        organization_id=int(_user.organization_id),
+        persist=True,
+    )
+
+
+@router_research.post("/engine/deep", summary="Upgrade 3: multi-source deep research + research_projects save")
+async def research_engine_deep(
+    body: ResearchDeepBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_real_user(_user)
+    from services.deep_research_engine import deep_research_sync
+
+    dep = (body.depth or "standard").strip().lower()
+    if dep not in ("quick", "standard", "deep"):
+        dep = "standard"
+    return await asyncio.to_thread(
+        deep_research_sync,
+        body.query.strip(),
+        dep,
         user_id=int(_user.id),
         organization_id=int(_user.organization_id),
         persist=True,

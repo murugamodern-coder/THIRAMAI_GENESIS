@@ -90,6 +90,12 @@ export async function postResearchMarket(query) {
   return data;
 }
 
+/** Multi-source deep research (web, news, govt, marketplaces, …). */
+export async function postResearchDeep(query, depth = "standard") {
+  const { data } = await api.post("/research/engine/deep", { query, depth });
+  return data;
+}
+
 export async function postResearchSchemes(sector, state = "TN") {
   const { data } = await api.post("/research/engine/schemes", { sector, state });
   return data;

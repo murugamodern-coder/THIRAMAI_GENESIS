@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
@@ -22,7 +23,7 @@ from zoneinfo import ZoneInfo
 from groq import Groq
 from sqlalchemy import func, select
 from core.database import get_session_factory
-from core.db.models import Inventory, InventoryItem, PersonalLoan, PersonalMeeting, UserOrganizationMembership
+from core.db.models import Inventory, InventoryItem, PersonalLoan, PersonalMeeting
 from core.jarvis_pending_redis import (
     pending_delete,
     pending_peek,
@@ -40,9 +41,10 @@ from services.jarvis_extended_tools import (
     execute_jarvis_extended_tool,
     extended_tool_specs,
 )
+from services.jarvis_memory_engine import get_default_engine
 from services.jarvis_memory_learn import learn_from_turn_sync
 from services.jarvis_memory_service import bump_memory_usage_sync, fetch_memory_entries_sync
-from services.jarvis_router import merge_route_tool_specs
+from services.jarvis_router import route_jarvis_query
 from services.inventory_phase2_service import list_low_stock_alerts_sync
 from services.jarvis_undo_service import meeting_undo_payload
 from services.personal_meetings_service import MEETING_TYPES, create_meeting, normalize_attendees
@@ -52,17 +54,8 @@ _log = logging.getLogger("thiramai.jarvis_agent")
 _PENDING_TTL_SEC = 600
 _IST = ZoneInfo("Asia/Kolkata")
 
-TAMIL_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "stock": ("stock", "சரக்கு", "பொருள்"),
-    "sale": ("sale", "விற்பனை"),
-    "expense": ("expense", "செலவு"),
-    "farmer": ("farmer", "விவசாயி"),
-    "meeting": ("meeting", "சந்திப்பு"),
-    "invoice": ("invoice", "bill", "பில்"),
-}
-
-
 def _looks_tamil(text: str) -> bool:
+    """Tamil Unicode block (basic); treat as Tamil user input for reply language."""
     return any("\u0b80" <= c <= "\u0bff" for c in (text or ""))
 
 
@@ -189,6 +182,15 @@ BASE_TOOL_SPECS: list[dict[str, Any]] = [
 TOOL_SPECS: list[dict[str, Any]] = BASE_TOOL_SPECS + extended_tool_specs()
 
 
+def _jarvis_trim_messages(messages: list[dict[str, Any]], *, max_non_system: int = 22) -> None:
+    """Keep the system prompt plus the most recent turns (Groq context window / cost control)."""
+    if len(messages) <= 1 + max_non_system:
+        return
+    head = messages[0]
+    tail = messages[-max_non_system:]
+    messages[:] = [head, *tail]
+
+
 def resolve_jarvis_organization_id(user: Any, requested: int | None) -> tuple[int, str | None]:
     """Active JWT org, or another org the user belongs to."""
     jwt_org = int(user.organization_id)
@@ -201,61 +203,11 @@ def resolve_jarvis_organization_id(user: Any, requested: int | None) -> tuple[in
     if factory is None:
         return jwt_org, "database unavailable"
     with factory() as session:
-        m = session.execute(
-            select(UserOrganizationMembership.id).where(
-                UserOrganizationMembership.user_id == int(user.id),
-                UserOrganizationMembership.organization_id == rid,
-                UserOrganizationMembership.is_active.is_(True),
-            ).limit(1)
-        ).scalar_one_or_none()
-    if m is None:
-        return jwt_org, "Select an organization you belong to, or switch workspace first."
+        from core.security.org_access import verify_org_membership
+
+        if not verify_org_membership(session, user_id=int(user.id), organization_id=rid):
+            return jwt_org, "Select an organization you belong to, or switch workspace first."
     return rid, None
-
-
-def _route_groq_model(message: str) -> str:
-    q = (message or "").lower()
-    fast = (os.getenv("GROQ_FAST_MODEL") or "llama-3.1-8b-instant").strip()
-    smart = (
-        os.getenv("GROQ_SMART_MODEL") or os.getenv("GROQ_AGENT_MODEL") or os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile"
-    ).strip()
-    for _cat, words in TAMIL_KEYWORDS.items():
-        if any(w in (message or "") for w in words if len(w) > 1):
-            q = f"{q} business"
-            break
-    stock_mkt = any(
-        k in q for k in ("nse", "bse", "sensex", "nifty", "share price", "intraday", "macd", "rsi", "breakout")
-    )
-    biz = any(
-        k in q
-        for k in (
-            "invoice",
-            "inventory",
-            "stock level",
-            "profit",
-            "expense",
-            "farmer",
-            "subsidy",
-            "sale",
-            "purchase",
-            "payment",
-            "gst",
-        )
-    )
-    research = any(
-        k in q for k in ("scheme", "govt", "government", "research", "market size", "how to", "what is", "find ")
-    )
-    if stock_mkt and not biz:
-        return smart
-    if research:
-        return smart
-    if biz:
-        return fast
-    return fast
-
-
-def _model() -> str:
-    return (os.getenv("GROQ_AGENT_MODEL") or os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile").strip()
 
 
 def execute_tool_safe(
@@ -313,6 +265,10 @@ def _summarize_tool(name: str, args: dict[str, Any]) -> str:
         return f"Mark {args.get('worker_name')} as {args.get('status')}"
     if name == "research_market":
         return f"Market research: {args.get('query', '')[:80]}"
+    if name == "deep_research":
+        return f"Deep research ({args.get('depth') or 'standard'}): {args.get('query', '')[:80]}"
+    if name == "find_cheapest_machine":
+        return f"Price scan for equipment: {args.get('machine_name', '')[:80]}"
     if name == "find_govt_schemes":
         return f"Find govt schemes — sector {args.get('sector', '')[:60]}"
     if name == "generate_dpr":
@@ -621,6 +577,29 @@ def _ctx_exec_from_stored(ctx_stored: int | None, context_organization_id: int |
     return context_organization_id
 
 
+def _living_memory_turn(
+    *,
+    user_id: int,
+    jarvis_session_id: str | None,
+    user_message: str,
+    assistant_message: str,
+    tool_results: list[dict[str, Any]] | None = None,
+) -> None:
+    """Persist episodic + session turns (Upgrade 1). Preference extraction stays in ``learn_from_turn_sync``."""
+    if user_id <= 0:
+        return
+    try:
+        get_default_engine().record_conversation_turn(
+            user_id=user_id,
+            session_id=jarvis_session_id,
+            user_message=(user_message or "").strip(),
+            assistant_message=(assistant_message or "").strip(),
+            tool_results=tool_results,
+        )
+    except Exception:
+        _log.debug("living memory turn skipped", exc_info=True)
+
+
 def run_agent(
     *,
     message: str,
@@ -630,6 +609,7 @@ def run_agent(
     context_organization_id: int | None = None,
     agent_confirm_tool_index: int | None = None,
     agent_reject_tool_index: int | None = None,
+    jarvis_session_id: str | None = None,
 ) -> dict[str, Any]:
     key = (os.getenv("GROQ_API_KEY") or "").strip()
     if not key:
@@ -720,6 +700,19 @@ def run_agent(
         if rest:
             lines.append(f"{len(rest)} action(s) still need confirmation.")
         narrative = "\n".join(lines)
+        learn_from_turn_sync(
+            user_id=uid,
+            user_message=message.strip(),
+            assistant_text=narrative,
+            tool_results=results,
+        )
+        _living_memory_turn(
+            user_id=uid,
+            jarvis_session_id=jarvis_session_id,
+            user_message=message.strip(),
+            assistant_message=narrative,
+            tool_results=results,
+        )
         return {
             "ok": bool(out.get("ok")),
             "narrative": narrative,
@@ -765,10 +758,24 @@ def run_agent(
         lines = [f"Executed {len(results)} action(s)."]
         for r in results:
             lines.append(f"- {r['tool']}: {json.dumps(r['result'], default=str)[:500]}")
+        narrative_batch = "\n".join(lines)
+        learn_from_turn_sync(
+            user_id=uid,
+            user_message=message.strip(),
+            assistant_text=narrative_batch,
+            tool_results=results,
+        )
+        _living_memory_turn(
+            user_id=uid,
+            jarvis_session_id=jarvis_session_id,
+            user_message=message.strip(),
+            assistant_message=narrative_batch,
+            tool_results=results,
+        )
         return {
             "ok": True,
-            "narrative": "\n".join(lines),
-            "response": "\n".join(lines),
+            "narrative": narrative_batch,
+            "response": narrative_batch,
             "agent_mode": True,
             "tool_results": results,
             "action_intent": {"kind": "jarvis_agent", "success": ok_all},
@@ -778,14 +785,29 @@ def run_agent(
     mem_lines = [e["line"] for e in mem_entries]
     mem_keys_used = [e["key"] for e in mem_entries]
     mem_block = "\n".join(mem_lines) if mem_lines else "(none yet)"
-    lang_note = "The user wrote in Tamil — reply in Tamil. " if _looks_tamil(message) else ""
-    routed_model, tools_subset, route_category = merge_route_tool_specs(message.strip(), TOOL_SPECS)
+    _tamil_force = (os.getenv("THIRAMAI_JARVIS_TAMIL_FORCE") or "").strip().lower() in ("1", "true", "yes", "on")
+    lang_note = (
+        "The user wrote in Tamil — reply in Tamil. "
+        if (_looks_tamil(message) or _tamil_force)
+        else ""
+    )
+    routed_model, tools_subset, route_category = route_jarvis_query(message.strip(), TOOL_SPECS)
+    living_block = ""
+    try:
+        living_block = get_default_engine().format_memory_context_block(
+            user_id=uid,
+            session_id=jarvis_session_id,
+            current_user_message=message.strip(),
+        )
+    except Exception:
+        _log.debug("living memory prompt block skipped", exc_info=True)
     system = (
         "You are Thiramai Jarvis, a business AI assistant for an Indian entrepreneur. "
         f"{lang_note}"
         "You understand Tamil and English; mirror the user's language. "
-        "Use Indian Rupees (₹) and local business context (lakhs/crores when natural).\n"
+        "Use Indian Rupees (₹) and Indian digit grouping (lakhs/crores or thousands separators) for amounts when natural.\n"
         f"User memory hints:\n{mem_block}\n\n"
+        f"{living_block}\n\n"
         f"Routing: focus area = {route_category}. Only the supplied tools are available.\n"
         "Read-only tools run immediately in the agent loop. "
         "Mutating tools require UI confirmation — still call them when appropriate. "
@@ -804,18 +826,32 @@ def run_agent(
     last_choice_content = ""
 
     for step in range(max_steps):
-        try:
-            completion = client.chat.completions.create(
-                model=routed_model,
-                messages=messages,
-                tools=tools_subset,
-                tool_choice="auto",
-                temperature=0.3,
-                max_tokens=1024,
-            )
-        except Exception as e:
-            _log.warning("jarvis groq step %s failed: %s", step, e)
-            return {"ok": False, "narrative": "", "error": str(e) or "groq error", "agent_mode": True}
+        completion = None
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                completion = client.chat.completions.create(
+                    model=routed_model,
+                    messages=messages,
+                    tools=tools_subset,
+                    tool_choice="auto",
+                    temperature=0.3,
+                    max_tokens=1024,
+                )
+                break
+            except Exception as e:
+                last_exc = e
+                sc = getattr(e, "status_code", None)
+                msg_l = str(e).lower()
+                retriable = sc in (429, 500, 502, 503) or "timeout" in msg_l or "connection" in msg_l
+                if attempt < 2 and retriable:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                _log.warning("jarvis groq step %s failed: %s", step, e)
+                return {"ok": False, "narrative": "", "error": str(e) or "groq error", "agent_mode": True}
+        if completion is None:
+            err = str(last_exc) if last_exc else "groq error"
+            return {"ok": False, "narrative": "", "error": err, "agent_mode": True}
 
         choice = completion.choices[0].message
         dumped = choice.model_dump(mode="json") if hasattr(choice, "model_dump") else {}
@@ -828,6 +864,13 @@ def run_agent(
                 user_id=uid,
                 user_message=message.strip(),
                 assistant_text=last_choice_content,
+                tool_results=all_auto_results,
+            )
+            _living_memory_turn(
+                user_id=uid,
+                jarvis_session_id=jarvis_session_id,
+                user_message=message.strip(),
+                assistant_message=last_choice_content or "Done.",
                 tool_results=all_auto_results,
             )
             return {
@@ -888,6 +931,13 @@ def run_agent(
                 assistant_text=intro,
                 tool_results=all_auto_results,
             )
+            _living_memory_turn(
+                user_id=uid,
+                jarvis_session_id=jarvis_session_id,
+                user_message=message.strip(),
+                assistant_message=intro,
+                tool_results=all_auto_results,
+            )
             return {
                 "ok": True,
                 "narrative": intro,
@@ -919,13 +969,19 @@ def run_agent(
             asst_content = None
         messages.append({"role": "assistant", "content": asst_content, "tool_calls": assistant_tool_calls})
         for c, tr in zip(auto_calls, step_tool_results):
+            raw_r = tr["result"]
+            rd = raw_r if isinstance(raw_r, dict) else {"ok": False, "message": str(raw_r)}
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": c["id"],
-                    "content": json.dumps(tr["result"], default=str),
+                    "content": json.dumps(
+                        {"ok": rd.get("ok", True), "tool": tr["tool"], "result": rd},
+                        default=str,
+                    ),
                 }
             )
+        _jarvis_trim_messages(messages)
 
     bump_memory_usage_sync(user_id=uid, memory_keys=mem_keys_used)
     learn_from_turn_sync(
@@ -939,6 +995,13 @@ def run_agent(
     for r in all_auto_results:
         lines.append(f"- {r['tool']}: {json.dumps(r['result'], default=str)[:400]}")
     narrative = "\n".join(lines)
+    _living_memory_turn(
+        user_id=uid,
+        jarvis_session_id=jarvis_session_id,
+        user_message=message.strip(),
+        assistant_message=narrative,
+        tool_results=all_auto_results,
+    )
     return {
         "ok": True,
         "narrative": narrative,

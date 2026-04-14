@@ -54,6 +54,8 @@ RESEARCH_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "research_topic",
         "research_market",
+        "deep_research",
+        "find_cheapest_machine",
         "find_govt_schemes",
         "generate_dpr",
         "analyze_competitors",
@@ -122,6 +124,14 @@ def classify_query(message: str) -> QueryCategory:
             "market size",
             "competitor",
             "dpr",
+            "deep research",
+            "business intelligence",
+            "market intelligence",
+            "price comparison",
+            "indiamart",
+            "tradeindia",
+            "cheapest machine",
+            "supplier comparison",
         )
     )
     if research:
@@ -130,6 +140,8 @@ def classify_query(message: str) -> QueryCategory:
     business = any(
         k in q
         for k in (
+            "record sale",
+            "retail sale",
             "invoice",
             "gst",
             "bill",
@@ -217,8 +229,20 @@ def route_query(message: str) -> dict[str, Any]:
     }
 
 
-def merge_route_tool_specs(message: str, master_tool_specs: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], QueryCategory]:
-    """Returns (model, specs_subset, category)."""
+def route_jarvis_query(
+    message: str, master_tool_specs: list[dict[str, Any]]
+) -> tuple[str, list[dict[str, Any]], QueryCategory]:
+    """
+    Single source of truth for Jarvis routing: Groq **model id**, filtered **tool specs**, and **category**.
+
+    All callers (agent loop, tests, future entrypoints) should use this instead of duplicating
+    keyword→model logic elsewhere.
+    """
     r = route_query(message)
     specs = filter_tool_specs(master_tool_specs, r["tool_names_set"])
     return r["model"], specs, r["category"]
+
+
+def merge_route_tool_specs(message: str, master_tool_specs: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], QueryCategory]:
+    """Deprecated alias for :func:`route_jarvis_query` (backward compatible)."""
+    return route_jarvis_query(message, master_tool_specs)
