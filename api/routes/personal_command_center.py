@@ -6,7 +6,6 @@ Uses ``X-Personal-Vault-Passphrase`` (optional) with ``life_os_service.unlock_fe
 
 from __future__ import annotations
 
-import os
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -75,10 +74,9 @@ async def today_brief(
     if int(user.id) <= 0:
         raise HTTPException(status_code=400, detail="Real user id required")
     fn = _fernet(int(user.id), x_personal_vault_passphrase)
-    try:
-        ttl = int((os.getenv("THIRAMAI_TODAY_BRIEF_CACHE_SEC") or "45").strip())
-    except ValueError:
-        ttl = 45
+    from cache.ttl import today_brief_ttl_seconds
+
+    ttl = today_brief_ttl_seconds()
     if ttl <= 0:
         return pcc.build_today_brief_sync(
             user_id=int(user.id),

@@ -6,7 +6,6 @@ Keys are prefixed ``thiramai:appcache:`` to avoid collisions with heartbeats and
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import threading
@@ -14,18 +13,14 @@ import time
 from collections.abc import Callable
 from typing import Any, TypeVar
 
+from cache.keys import build_stable_key, key_research_market, key_today_brief
+
 _log = logging.getLogger("thiramai.cache")
 
 _T = TypeVar("_T")
 
 _MEM: dict[str, tuple[float, str]] = {}
 _MEM_LOCK = threading.Lock()
-
-
-def _stable_key(*parts: str) -> str:
-    raw = ":".join(parts)
-    h = hashlib.sha256(raw.encode("utf-8", errors="replace")).hexdigest()[:40]
-    return f"thiramai:appcache:{h}"
 
 
 def get_or_set_cache(key: str, ttl_sec: int, compute_fn: Callable[[], _T]) -> _T:
@@ -78,9 +73,13 @@ def get_or_set_cache(key: str, ttl_sec: int, compute_fn: Callable[[], _T]) -> _T
 
 
 def cache_key_today_brief(user_id: int, organization_id: int, day_iso: str) -> str:
-    return _stable_key("today_brief", str(int(user_id)), str(int(organization_id)), day_iso)
+    return key_today_brief(user_id, organization_id, day_iso)
 
 
 def cache_key_research_market(user_id: int, organization_id: int, query: str) -> str:
-    q = (query or "").strip()[:4000]
-    return _stable_key("research_market", str(int(user_id)), str(int(organization_id)), q)
+    return key_research_market(user_id, organization_id, query)
+
+
+# Back-compat for callers that built ad-hoc keys
+def cache_key_stable(*parts: str) -> str:
+    return build_stable_key(*parts)

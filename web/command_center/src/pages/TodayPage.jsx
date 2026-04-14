@@ -56,6 +56,16 @@ function winStorageKey(isoDate) {
   return `thiramai_win_of_day_${isoDate || "today"}`;
 }
 
+function TodayPageSkeleton() {
+  return (
+    <div className="cc-today-page cc-today-page--skeleton" aria-busy="true" aria-label="Loading Today">
+      <div className="cc-today-skeleton-block cc-today-skeleton-hero" />
+      <div className="cc-today-skeleton-block cc-today-skeleton-card" />
+      <div className="cc-today-skeleton-block cc-today-skeleton-card cc-today-skeleton-card--short" />
+    </div>
+  );
+}
+
 export default function TodayPage() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -72,6 +82,16 @@ export default function TodayPage() {
   const [wowCaptain, setWowCaptain] = useState("");
   const [wowBusy, setWowBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia("(min-width: 900px)");
+    const apply = () => setScheduleOpen(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -258,12 +278,7 @@ export default function TodayPage() {
     return (
       <>
         {wowLayer}
-        <div className="cc-today-page cc-today-page--loading">
-          <div className="cc-today-loading" aria-busy="true">
-            <span className="cc-spinner" />
-            <p className="cc-muted">Loading your day…</p>
-          </div>
-        </div>
+        <TodayPageSkeleton />
       </>
     );
   }
@@ -311,7 +326,7 @@ export default function TodayPage() {
               </span>
             ) : null}
           </p>
-          <div className="cc-today-hero-actions">
+          <div className="cc-today-hero-actions cc-today-hero-actions--primary">
             <button
               type="button"
               className="cc-btn cc-btn-secondary cc-today-notif-btn"
@@ -319,27 +334,89 @@ export default function TodayPage() {
               onClick={onShareThiramai}
               title="Copies signup link with your referral code"
             >
-              {shareBusy ? "Preparing link…" : "Share THIRAMAI"}
+              {shareBusy ? "Preparing…" : "Invite someone"}
             </button>
-            <button type="button" className="cc-btn cc-btn-secondary cc-today-notif-btn" onClick={onEnableNotifs}>
-              {notifOn ? "In-app reminders on" : "In-app reminders"}
-            </button>
-            <button
-              type="button"
-              className="cc-btn cc-btn-primary cc-today-notif-btn"
-              disabled={!pushSupported || pushBusy}
-              onClick={onBackgroundPush}
-              title="Requires HTTPS (or localhost), VAPID keys on server, and production PWA build"
-            >
-              {pushBusy ? "Enabling push…" : "Background push (closed app)"}
+            <button type="button" className="cc-btn cc-btn-primary cc-today-notif-btn" onClick={load} disabled={loading}>
+              {loading ? "Refreshing…" : "Refresh"}
             </button>
           </div>
+          <details className="cc-today-inline-details">
+            <summary className="cc-today-inline-summary">Notifications &amp; push</summary>
+            <div className="cc-today-inline-details-body">
+              <button type="button" className="cc-btn cc-btn-secondary cc-today-notif-btn" onClick={onEnableNotifs}>
+                {notifOn ? "In-app reminders on" : "Turn on in-app reminders"}
+              </button>
+              <button
+                type="button"
+                className="cc-btn cc-btn-secondary cc-today-notif-btn"
+                disabled={!pushSupported || pushBusy}
+                onClick={onBackgroundPush}
+                title="HTTPS or localhost; VAPID on server"
+              >
+                {pushBusy ? "Enabling…" : "Background push when app is closed"}
+              </button>
+            </div>
+          </details>
         </div>
-        <button type="button" className="cc-btn" onClick={load} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
       </header>
 
+      {cross?.ok && (cross.captain_message || (cross.top_insights || []).length > 0) ? (
+        <section className="cc-card cc-today-priority" aria-label="Captain briefing and top insights">
+          <h2 className="cc-today-card-title">Briefing</h2>
+          {cross.captain_message ? (
+            <p className="cc-today-captain" role="status">
+              {cross.captain_message}
+            </p>
+          ) : null}
+          {(cross.top_insights || []).length > 0 ? (
+            <ol className="cc-today-top-insights">
+              {(cross.top_insights || []).slice(0, 3).map((x) => (
+                <li key={x.id || x.title}>
+                  <strong>{x.title}</strong>
+                  {x.detail ? <span className="cc-muted"> — {x.detail}</span> : null}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </section>
+      ) : null}
+
+      <section className="cc-card cc-today-actions-card" aria-label="Next actions">
+        <h2 className="cc-today-card-title">Next actions</h2>
+        {nextMeeting ? (
+          <div className="cc-today-action-row">
+            <span className="cc-muted">Next</span>
+            <strong className="cc-today-action-title">{nextMeeting.title}</strong>
+            <span className="cc-muted">
+              {nextMeeting.countdown_text ||
+                (nextMeeting.scheduled_at ? formatTime(new Date(nextMeeting.scheduled_at)) : "—")}
+            </span>
+          </div>
+        ) : (
+          <p className="cc-muted" style={{ marginTop: 0 }}>
+            No meeting coming up — use the schedule below when you need detail.
+          </p>
+        )}
+        {focus ? (
+          <div className="cc-today-action-row">
+            <Link className="cc-btn cc-btn-primary cc-today-link-btn" to="/personal/productivity">
+              Focus: {focus.title}
+            </Link>
+          </div>
+        ) : (
+          <Link className="cc-btn cc-btn-secondary cc-today-link-btn" to="/personal/productivity">
+            Add a focus mission
+          </Link>
+        )}
+      </section>
+
+      <details
+        className="cc-today-schedule-details"
+        open={scheduleOpen}
+        onToggle={(e) => setScheduleOpen(e.target.open)}
+      >
+        <summary className="cc-today-schedule-summary">Schedule, business &amp; personal data</summary>
+        <div className="cc-today-grid">
       {progressPct != null && (
         <section className="cc-card cc-today-progress" aria-label="Task progress today">
           <div className="cc-today-progress-head">
@@ -361,49 +438,9 @@ export default function TodayPage() {
         </section>
       )}
 
-      {nextMeeting && (
-        <section className="cc-card cc-today-next-up" aria-label="Next meeting">
-          <h2 className="cc-today-card-title">Next up</h2>
-          <p className="cc-today-next-title">{nextMeeting.title}</p>
-          <p className="cc-today-next-countdown">
-            {nextMeeting.countdown_text
-              ? nextMeeting.countdown_text
-              : nextMeeting.scheduled_at
-                ? formatTime(new Date(nextMeeting.scheduled_at))
-                : "—"}
-          </p>
-          <p className="cc-muted" style={{ fontSize: 13 }}>
-            {nextMeeting.scheduled_at
-              ? new Date(nextMeeting.scheduled_at).toLocaleString(undefined, {
-                  weekday: "short",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })
-              : ""}
-            {nextMeeting.location ? ` · ${nextMeeting.location}` : ""}
-          </p>
-        </section>
-      )}
-
-      <div className="cc-today-grid">
-        {cross?.ok && (cross.captain_message || (cross.top_insights || []).length > 0) ? (
-          <section className="cc-card cc-today-cross-domain" aria-label="System intelligence">
-            <h2 className="cc-today-card-title">System intelligence</h2>
-            {cross.captain_message ? (
-              <p className="cc-today-captain" role="status">
-                {cross.captain_message}
-              </p>
-            ) : null}
-            {(cross.top_insights || []).length > 0 ? (
-              <ul className="cc-today-cross-list">
-                {(cross.top_insights || []).map((x) => (
-                  <li key={x.id || x.title}>
-                    <strong>{x.title}</strong>
-                    {x.detail ? <span className="cc-muted"> — {x.detail}</span> : null}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+        {cross?.ok && ((cross.risk_alerts || []).length > 0 || (cross.recommendations || []).length > 0) ? (
+          <section className="cc-card cc-today-cross-domain cc-today-cross-domain--extra" aria-label="Risks and recommendations">
+            <h2 className="cc-today-card-title">More intelligence</h2>
             {(cross.risk_alerts || []).length > 0 ? (
               <div className="cc-today-cross-risks">
                 <p className="cc-today-cross-sub">Risk alerts</p>
@@ -427,30 +464,15 @@ export default function TodayPage() {
           </section>
         ) : null}
 
-        <section className="cc-card cc-today-focus">
-          <h2 className="cc-today-card-title">Your focus</h2>
-          {focus ? (
-            <>
-              <p className="cc-today-focus-priority">{focus.priority || "P2"}</p>
-              <p className="cc-today-focus-title">{focus.title}</p>
-              {dueField && (
-                <p className="cc-muted" style={{ fontSize: 13, marginTop: 8 }}>
-                  Due {new Date(dueField).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-                </p>
-              )}
-              <Link className="cc-btn cc-btn-primary cc-today-link-btn" to="/personal/productivity">
-                Open missions
-              </Link>
-            </>
-          ) : (
-            <>
-              <p className="cc-muted">No open mission right now. Add one to anchor your day.</p>
-              <Link className="cc-btn cc-btn-primary cc-today-link-btn" to="/personal/productivity">
-                Add mission
-              </Link>
-            </>
-          )}
-        </section>
+        {focus && dueField ? (
+          <section className="cc-card cc-today-focus-due" aria-label="Focus due date">
+            <h2 className="cc-today-card-title">Focus due</h2>
+            <p className="cc-muted" style={{ fontSize: 13, marginTop: 0 }}>
+              {focus.title} — due{" "}
+              {new Date(dueField).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+            </p>
+          </section>
+        ) : null}
 
         <section className="cc-card cc-today-meetings">
           <h2 className="cc-today-card-title">Today&apos;s meetings</h2>
@@ -634,7 +656,8 @@ export default function TodayPage() {
             onBlur={persistWin}
           />
         </section>
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

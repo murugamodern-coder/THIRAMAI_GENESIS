@@ -6,6 +6,9 @@ builder on a fixed interval for live UI updates.
 
 Auth: after connect, the client must send **one JSON text message** first:
 ``{"token": "<JWT access token>"}`` (optional ``"threshold": <int>``). JWTs must not appear in the URL.
+
+Hardening: server handles client ``{"type":"ping"}`` with ``{"type":"pong"}``; optional Redis pub/sub
+fan-out via ``THIRAMAI_WS_REDIS_FANOUT=1`` (see ``services.ws_redis_bridge``).
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -77,6 +81,16 @@ def _threshold_from_ws_query(raw: str | None) -> int:
         return default
 
 
+def _is_client_ping(raw: str | None) -> bool:
+    if not (raw or "").strip():
+        return False
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(data, dict) and str(data.get("type") or "").lower() == "ping"
+
+
 @router.websocket("/dashboard")
 async def websocket_dashboard(websocket: WebSocket) -> None:
     """
@@ -86,8 +100,8 @@ async def websocket_dashboard(websocket: WebSocket) -> None:
     ``{"token": "<JWT>"}`` (optional ``"threshold"``). Query ``?threshold=`` is still supported;
     do **not** pass ``token`` in the query string (rejected).
 
-    Each server message is JSON with ``type: dashboard_tick`` plus the same keys as the HTTP response
-    (``life_dashboard``, ``business_summary``, ``alerts``, ``next_best_move``, legacy fields, …).
+    Each server message is JSON with ``type: dashboard_tick`` plus the same keys as the HTTP response.
+    Clients may send ``{"type":"ping"}`` any time; server replies with ``{"type":"pong","ts":...}``.
     """
     await websocket.accept()
     if (websocket.query_params.get("token") or "").strip():
@@ -112,21 +126,49 @@ async def websocket_dashboard(websocket: WebSocket) -> None:
         return
 
     interval = _ws_push_interval_seconds()
+    uid = int(user.id)
+    oid = int(user.organization_id)
 
     def _build() -> dict[str, Any]:
         return build_command_center_sap_payload_sync(
-            int(user.id),
-            int(user.organization_id),
+            uid,
+            oid,
             low_stock_threshold=thr,
         )
 
+    async def _send_tick(seq: int) -> None:
+        payload = await asyncio.to_thread(_build)
+        payload["type"] = "dashboard_tick"
+        payload["channel"] = "ws/dashboard"
+        payload["seq"] = seq
+        payload["server_ts"] = time.time()
+        await websocket.send_json(jsonable_encoder(payload))
+        try:
+            from services.ws_redis_bridge import publish_user_channel
+
+            publish_user_channel(
+                "dashboard",
+                uid,
+                {"type": "dashboard_tick", "user_id": uid, "seq": seq, "server_ts": payload["server_ts"]},
+            )
+        except Exception:
+            pass
+
+    seq = 0
     try:
+        seq += 1
+        await _send_tick(seq)
         while True:
-            payload = await asyncio.to_thread(_build)
-            payload["type"] = "dashboard_tick"
-            payload["channel"] = "ws/dashboard"
-            await websocket.send_json(jsonable_encoder(payload))
-            await asyncio.sleep(interval)
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=interval)
+            except asyncio.TimeoutError:
+                raw = None
+            if raw is not None:
+                if _is_client_ping(raw):
+                    await websocket.send_json({"type": "pong", "ts": time.time()})
+                    continue
+            seq += 1
+            await _send_tick(seq)
     except WebSocketDisconnect:
         return
     except Exception as exc:

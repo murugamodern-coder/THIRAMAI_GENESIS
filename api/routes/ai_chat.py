@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from api.dependencies import CurrentUser, get_current_user, require_permission
 from brain import MAX_USER_MESSAGE_CHARS, QueryLengthExceeded, run_brain, run_decision_engine
+from core.ai_output_contract import apply_ai_safety_envelope, extract_url_citations
 from core.decision_schema import AIDecision, decision_is_safe
 from core.decision_rbac import can_execute_decision
 from core.rbac import Permission
@@ -178,6 +179,8 @@ async def _chat_response(
     }
     if empire_ux != "default":
         payload["empire_ux"] = empire_ux
+    sources = extract_url_citations(narrative)
+    apply_ai_safety_envelope(payload, narrative=narrative, sources=sources)
     return JSONResponse(content=payload)
 
 

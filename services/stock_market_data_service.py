@@ -8,6 +8,8 @@ import os
 import time
 from typing import Any
 
+from cache.keys import key_stock_quote
+
 _log = logging.getLogger("thiramai.stock_market_data")
 
 _CACHE_FALLBACK: dict[str, tuple[float, str]] = {}
@@ -82,7 +84,7 @@ def _cache_set(key: str, payload: dict[str, Any]) -> None:
 
 def get_live_price(symbol: str, *, exchange_suffix: str = "NS") -> dict[str, Any]:
     sym = _yf_symbol(symbol, exchange_suffix)
-    key = f"thiramai:stock:price:{sym}"
+    key = key_stock_quote(sym)
     hit = _cache_get(key)
     if hit:
         return {**hit, "cached": True}

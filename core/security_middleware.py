@@ -102,6 +102,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         response.headers.setdefault("X-XSS-Protection", "0")
+
+        # Production: drop framework / dev leakage headers (defense in depth behind reverse proxies).
+        env = (os.getenv("THIRAMAI_ENV") or os.getenv("ENV") or "").strip().lower()
+        if env in ("production", "prod", "staging"):
+            for h in ("server", "x-powered-by", "x-aspnet-version", "x-aspnetmvc-version"):
+                if h in response.headers:
+                    del response.headers[h]
+
         return response
 
 

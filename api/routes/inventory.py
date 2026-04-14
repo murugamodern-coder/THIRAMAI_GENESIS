@@ -51,9 +51,15 @@ def _parse_date(s: str | None) -> date | None:
 
 @router.get("/inventory")
 async def inventory_list_v2(
+    limit: int = Query(500, ge=1, le=500, description="Page size (max 500)"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
     _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
 ) -> JSONResponse:
-    out = list_inventory_items_sync(organization_id=_user.organization_id)
+    out = list_inventory_items_sync(
+        organization_id=_user.organization_id,
+        limit=limit,
+        offset=offset,
+    )
     if not out.get("ok"):
         raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
     return JSONResponse(content=out)

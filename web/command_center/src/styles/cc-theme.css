@@ -52,6 +52,8 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .cc-topbar {
@@ -102,6 +104,8 @@ body {
   max-width: 1440px;
   margin: 0 auto;
   width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .cc-card {
@@ -1802,4 +1806,125 @@ button {
   margin-top: var(--cc-s3);
   display: flex;
   justify-content: flex-end;
+}
+
+/* Today: skeleton + hierarchy + mobile */
+.cc-today-page--skeleton {
+  min-height: 40vh;
+}
+
+.cc-today-skeleton-block {
+  border-radius: var(--cc-radius-card);
+  background: linear-gradient(90deg, var(--cc-border) 25%, #eceff1 50%, var(--cc-border) 75%);
+  background-size: 200% 100%;
+  animation: cc-shimmer 1.2s ease-in-out infinite;
+  margin-bottom: var(--cc-s2);
+}
+
+@keyframes cc-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.cc-today-skeleton-hero {
+  height: 120px;
+}
+
+.cc-today-skeleton-card {
+  height: 180px;
+}
+
+.cc-today-skeleton-card--short {
+  height: 100px;
+}
+
+.cc-today-hero-actions--primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cc-s1);
+  margin-top: var(--cc-s2);
+}
+
+.cc-today-inline-details {
+  margin-top: var(--cc-s1);
+  font-size: 13px;
+}
+
+.cc-today-inline-summary {
+  cursor: pointer;
+  color: var(--cc-primary);
+  font-weight: 600;
+}
+
+.cc-today-inline-details-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cc-s1);
+  margin-top: var(--cc-s1);
+}
+
+.cc-today-priority {
+  border: 1px solid rgba(10, 110, 209, 0.2);
+  background: linear-gradient(180deg, rgba(10, 110, 209, 0.07), var(--cc-surface));
+}
+
+.cc-today-top-insights {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.5;
+}
+
+.cc-today-top-insights li {
+  margin-bottom: 10px;
+}
+
+.cc-today-actions-card .cc-today-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--cc-s1);
+}
+
+.cc-today-action-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.cc-today-schedule-details {
+  margin-top: var(--cc-s2);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-card);
+  padding: var(--cc-s2);
+  background: var(--cc-surface);
+}
+
+.cc-today-schedule-summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 15px;
+  list-style-position: outside;
+}
+
+.cc-today-schedule-details[open] .cc-today-schedule-summary {
+  margin-bottom: var(--cc-s2);
+}
+
+@media (max-width: 640px) {
+  .cc-today-greeting {
+    font-size: 1.35rem;
+  }
+
+  .cc-today-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cc-btn,
+  .cc-today-notif-btn {
+    min-height: 44px;
+  }
 }

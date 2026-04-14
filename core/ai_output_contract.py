@@ -6,6 +6,8 @@ import os
 import re
 from typing import Any
 
+_URL_RE = re.compile(r"https?://[^\s>\)\"']+", re.I)
+
 
 def _min_confidence_threshold() -> float:
     raw = (os.getenv("THIRAMAI_AI_MIN_CONFIDENCE") or "0").strip()
@@ -23,6 +25,22 @@ def estimate_confidence(*, narrative: str, sources: list[str]) -> float:
     if low:
         base -= 0.18
     return max(0.05, min(0.95, base))
+
+
+def extract_url_citations(text: str, *, max_n: int = 24) -> list[str]:
+    """Pull http(s) URLs from model text for ``sources`` metadata (best-effort)."""
+    if not (text or "").strip():
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in _URL_RE.finditer(text):
+        u = (m.group(0) or "").strip().rstrip(").,;]")
+        if u and u not in seen:
+            seen.add(u)
+            out.append(u)
+            if len(out) >= max_n:
+                break
+    return out
 
 
 def apply_ai_safety_envelope(payload: dict[str, Any], *, narrative: str, sources: list[str]) -> dict[str, Any]:

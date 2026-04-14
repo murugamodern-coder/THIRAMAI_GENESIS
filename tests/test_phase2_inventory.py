@@ -96,6 +96,8 @@ def test_create_list_movement_and_legacy_mirror(sqlite_inv2, monkeypatch: pytest
     lst = inv2.list_inventory_items_sync(organization_id=oid)
     assert lst["ok"] is True
     assert len(lst["items"]) == 1
+    assert lst.get("total") == 1
+    assert lst.get("limit", 500) >= 1
 
 
 def test_low_stock_alert(sqlite_inv2, monkeypatch: pytest.MonkeyPatch):
@@ -193,3 +195,7 @@ def test_get_inventory_200_worker(sqlite_inv2):
     body = r.json()
     assert body.get("ok") is True
     assert "items" in body
+    assert "total" in body
+    r2 = client.get("/inventory?limit=10&offset=0", headers={"Authorization": f"Bearer {token}"})
+    assert r2.status_code == 200
+    assert r2.json().get("limit") == 10

@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -108,22 +108,41 @@ def _recalc_value(item: InventoryItem) -> None:
         item.total_value = (item.quantity * item.unit_price).quantize(Decimal("0.01"))
 
 
-def list_inventory_items_sync(*, organization_id: int) -> dict[str, Any]:
+def list_inventory_items_sync(
+    *,
+    organization_id: int,
+    limit: int = 500,
+    offset: int = 0,
+) -> dict[str, Any]:
     oid = int(organization_id)
     if oid <= 0:
         return {"ok": False, "error": "organization_id required"}
+    lim = max(1, min(int(limit), 500))
+    off = max(0, int(offset))
     factory = get_session_factory()
     if factory is None:
         return {"ok": False, "error": "DATABASE_URL is not configured"}
     with factory() as session:
+        total = int(
+            session.scalar(select(func.count()).select_from(InventoryItem).where(InventoryItem.organization_id == oid))
+            or 0
+        )
         rows = list(
             session.scalars(
                 select(InventoryItem)
                 .where(InventoryItem.organization_id == oid)
                 .order_by(InventoryItem.sku_name, InventoryItem.location)
+                .limit(lim)
+                .offset(off)
             ).all()
         )
-    return {"ok": True, "items": [_serialize_item(r) for r in rows]}
+    return {
+        "ok": True,
+        "items": [_serialize_item(r) for r in rows],
+        "total": total,
+        "limit": lim,
+        "offset": off,
+    }
 
 
 def create_inventory_item_sync(
