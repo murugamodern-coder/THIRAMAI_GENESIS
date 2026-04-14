@@ -7,6 +7,7 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from core.db.models import (
     GovtScheme,
     Invoice,
     JarvisProactiveAlert,
+    JarvisProactiveFeedback,
     Organization,
     Payment,
     PersonalLoan,
@@ -30,6 +32,37 @@ from services.inventory_phase2_service import list_low_stock_alerts_sync
 from services.stock_market_jarvis import morning_market_brief_sync
 
 _log = logging.getLogger("thiramai.jarvis_proactive")
+_IST = ZoneInfo("Asia/Kolkata")
+
+
+def _ist_weekday_business_hours(*, start_h: int = 9, end_h: int = 18) -> bool:
+    """Weekdays 09:00–18:00 Asia/Kolkata (Upgrade 2 realtime window)."""
+    now = datetime.now(_IST)
+    if now.weekday() >= 5:
+        return False
+    return start_h <= now.hour < end_h
+
+
+def _ist_equity_market_hours() -> bool:
+    """NSE cash session approximation Mon–Fri 09:15–15:30 IST."""
+    now = datetime.now(_IST)
+    if now.weekday() >= 5:
+        return False
+    m = now.hour * 60 + now.minute
+    return (9 * 60 + 15) <= m <= (15 * 60 + 30)
+
+
+def _signal_confidence_heuristic(sig: dict[str, Any]) -> float:
+    if not sig.get("ok") or sig.get("risk_blocked"):
+        return 0.0
+    if str(sig.get("action") or "").upper() == "HOLD":
+        return 0.0
+    ind = sig.get("indicators") if isinstance(sig.get("indicators"), dict) else {}
+    rsi = ind.get("rsi")
+    base = 72.0
+    if rsi is not None and (float(rsi) < 30.0 or float(rsi) > 70.0):
+        base = 86.0
+    return base
 
 
 def _priority_score(p: str) -> int:
@@ -131,7 +164,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                         dedupe_key=dk,
                         payload={"sku": sku},
                     )
-                    alerts_in_memory.append({"type": "reorder", "priority": "urgent", "message": msg})
+                    alerts_in_memory.append(
+                        {
+                            "type": "reorder",
+                            "priority": "urgent",
+                            "message": msg,
+                            "action": "Create purchase order / call supplier",
+                            "organization_id": oid,
+                            "dedupe_key": dk,
+                            "payload": {"sku": sku, "quantity": qty},
+                        }
+                    )
 
                 for r in rows:
                     days = (today - r.created_at.date()).days if r.created_at else 0
@@ -148,7 +191,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                         dedupe_key=dk,
                         payload={"farmer_id": int(r.id), "scheme": r.scheme_name},
                     )
-                    alerts_in_memory.append({"type": "follow_up", "priority": "high", "message": msg})
+                    alerts_in_memory.append(
+                        {
+                            "type": "follow_up",
+                            "priority": "high",
+                            "message": msg,
+                            "action": "Call district agriculture helpdesk / visit office",
+                            "organization_id": oid,
+                            "dedupe_key": dk,
+                            "payload": {"farmer_id": int(r.id), "scheme": r.scheme_name},
+                        }
+                    )
 
                 # Idle assets (no production log in 7d)
                 assets = session.scalars(select(Asset).where(Asset.organization_id == oid).limit(200)).all()
@@ -175,7 +228,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                             dedupe_key=dk,
                             payload={"asset_id": int(a.id)},
                         )
-                        alerts_in_memory.append({"type": "production", "priority": "medium", "message": msg})
+                        alerts_in_memory.append(
+                            {
+                                "type": "production",
+                                "priority": "medium",
+                                "message": msg,
+                                "action": "Create production task / log output in Business OS",
+                                "organization_id": oid,
+                                "dedupe_key": dk,
+                                "payload": {"asset_id": int(a.id)},
+                            }
+                        )
 
                 # Overdue unpaid invoices (by invoice_date)
                 invs = session.scalars(
@@ -210,7 +273,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                         dedupe_key=dk,
                         payload={"invoice_id": int(inv.id)},
                     )
-                    alerts_in_memory.append({"type": "collection", "priority": "high", "message": msg})
+                    alerts_in_memory.append(
+                        {
+                            "type": "collection",
+                            "priority": "high",
+                            "message": msg,
+                            "action": "Call customer / send payment reminder",
+                            "organization_id": oid,
+                            "dedupe_key": dk,
+                            "payload": {"invoice_id": int(inv.id)},
+                        }
+                    )
 
                 # Part C: recent govt schemes & market research matching org profile
                 org_row = session.get(Organization, oid)
@@ -242,7 +315,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                             dedupe_key=dk,
                             payload={"govt_scheme_id": int(gs.id), "sector": gs.sector},
                         )
-                        alerts_in_memory.append({"type": "govt_scheme", "priority": "medium", "message": msg})
+                        alerts_in_memory.append(
+                            {
+                                "type": "govt_scheme",
+                                "priority": "medium",
+                                "message": msg,
+                                "action": "Open Research → Govt schemes",
+                                "organization_id": oid,
+                                "dedupe_key": dk,
+                                "payload": {"govt_scheme_id": int(gs.id), "sector": gs.sector},
+                            }
+                        )
                     for rd in session.scalars(
                         select(ResearchDocument)
                         .where(ResearchDocument.created_at >= cutoff_rs)
@@ -272,10 +355,20 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                             dedupe_key=dk,
                             payload={"research_document_id": int(rd.id)},
                         )
-                        alerts_in_memory.append({"type": "market_opportunity", "priority": "low", "message": msg})
+                        alerts_in_memory.append(
+                            {
+                                "type": "market_opportunity",
+                                "priority": "low",
+                                "message": msg,
+                                "action": "Open Research → Market",
+                                "organization_id": oid,
+                                "dedupe_key": dk,
+                                "payload": {"research_document_id": int(rd.id)},
+                            }
+                        )
 
-            # EMIs due within 3 days (personal loans — user scoped)
-            horizon = today + timedelta(days=3)
+            # EMIs due within 5 days (personal loans — user scoped)
+            horizon = today + timedelta(days=5)
             loans = session.scalars(
                 select(PersonalLoan).where(PersonalLoan.user_id == uid, PersonalLoan.is_closed.is_(False)).limit(50)
             ).all()
@@ -299,7 +392,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                     dedupe_key=dk,
                     payload={"loan_id": int(ln.id)},
                 )
-                alerts_in_memory.append({"type": "payment", "priority": "urgent", "message": msg})
+                alerts_in_memory.append(
+                    {
+                        "type": "payment",
+                        "priority": "urgent",
+                        "message": msg,
+                        "action": "Transfer funds before due date",
+                        "organization_id": None,
+                        "dedupe_key": dk,
+                        "payload": {"loan_id": int(ln.id)},
+                    }
+                )
 
             # Part D: equity daily loss cap, watchlist moves, simple breakout-style tags
             try:
@@ -324,7 +427,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                         dedupe_key=dk,
                         payload={"daily_realized_pnl_inr": str(pnl_day), "limit_inr": str(lim)},
                     )
-                    alerts_in_memory.append({"type": "equity_risk", "priority": "high", "message": msg})
+                    alerts_in_memory.append(
+                        {
+                            "type": "equity_risk",
+                            "priority": "high",
+                            "message": msg,
+                            "action": "Open Stocks dashboard / review sells",
+                            "organization_id": oids[0] if oids else None,
+                            "dedupe_key": dk,
+                            "payload": {"daily_realized_pnl_inr": str(pnl_day), "limit_inr": str(lim)},
+                        }
+                    )
             except Exception as exc:
                 _log.debug("equity risk proactive: %s", exc)
 
@@ -360,7 +473,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                                     dedupe_key=dk[:256],
                                     payload={"symbol": sym, "pct": round(pct, 3)},
                                 )
-                                alerts_in_memory.append({"type": "watchlist_move", "priority": "medium", "message": msg})
+                                alerts_in_memory.append(
+                                    {
+                                        "type": "watchlist_move",
+                                        "priority": "medium",
+                                        "message": msg,
+                                        "action": "Review quote and signal in Stocks",
+                                        "organization_id": primary_oid,
+                                        "dedupe_key": dk[:256],
+                                        "payload": {"symbol": sym, "pct": round(pct, 3)},
+                                    }
+                                )
                     ind = analyze_indicators(sym, interval="5m", exchange_suffix=ex)
                     bb = ind.get("bollinger") if isinstance(ind.get("bollinger"), dict) else {}
                     pos = str(bb.get("position") or "")
@@ -378,7 +501,17 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                             dedupe_key=dk[:256],
                             payload={"symbol": sym, "bollinger_position": pos},
                         )
-                        alerts_in_memory.append({"type": "breakout", "priority": "low", "message": msg})
+                        alerts_in_memory.append(
+                            {
+                                "type": "breakout",
+                                "priority": "low",
+                                "message": msg,
+                                "action": "Check intraday signal in Stocks",
+                                "organization_id": primary_oid,
+                                "dedupe_key": dk[:256],
+                                "payload": {"symbol": sym, "bollinger_position": pos},
+                            }
+                        )
             except Exception as exc:
                 _log.debug("watchlist/breakout proactive: %s", exc)
 
@@ -426,6 +559,245 @@ def list_recent_proactive_for_brief_sync(*, user_id: int, limit: int = 12) -> li
         if len(out) >= lim:
             break
     return out
+
+
+def list_recent_proactive_full_sync(*, user_id: int, limit: int = 20, days: int = 7) -> list[dict[str, Any]]:
+    """Recent persisted alerts with payload + dedupe_key for agentic insight pipeline."""
+    uid = int(user_id)
+    if uid <= 0:
+        return []
+    factory = get_session_factory()
+    if factory is None:
+        return []
+    lim = max(1, min(int(limit), 80))
+    since = datetime.now(timezone.utc) - timedelta(days=max(1, min(int(days), 30)))
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(JarvisProactiveAlert)
+                .where(JarvisProactiveAlert.user_id == uid, JarvisProactiveAlert.created_at >= since)
+                .order_by(JarvisProactiveAlert.created_at.desc())
+                .limit(lim)
+            ).all()
+        )
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        pl = r.payload if isinstance(r.payload, dict) else {}
+        out.append(
+            {
+                "id": int(r.id),
+                "alert_type": r.alert_type,
+                "priority": r.priority,
+                "message": r.message,
+                "action_text": r.action_text,
+                "payload": pl,
+                "dedupe_key": r.dedupe_key,
+                "organization_id": int(r.organization_id) if r.organization_id else None,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
+    return out
+
+
+def record_proactive_feedback_sync(
+    *,
+    user_id: int,
+    alert_dedupe_key: str,
+    alert_type: str,
+    outcome: str,
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Learning loop: record acted / ignored / dismissed for an alert class."""
+    uid = int(user_id)
+    if uid <= 0:
+        return {"ok": False, "error": "user_id required"}
+    dk = (alert_dedupe_key or "").strip()[:256]
+    if not dk:
+        return {"ok": False, "error": "alert_dedupe_key required"}
+    oc = (outcome or "").strip().lower()[:32]
+    if oc not in ("acted", "ignored", "dismissed"):
+        return {"ok": False, "error": "outcome must be acted, ignored, or dismissed"}
+    at = (alert_type or "").strip()[:64] or "general"
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "database not configured"}
+    with factory() as session:
+        with session.begin():
+            session.add(
+                JarvisProactiveFeedback(
+                    user_id=uid,
+                    alert_dedupe_key=dk,
+                    alert_type=at,
+                    outcome=oc,
+                    meta=meta if isinstance(meta, dict) else None,
+                )
+            )
+    return {"ok": True}
+
+
+def run_realtime_intelligence_sync(*, user_id: int, organization_ids: list[int]) -> dict[str, Any]:
+    """
+    Upgrade 2 — short-horizon checks: meetings within ~30 minutes, strong watchlist signals during market hours.
+
+    Persists deduped rows into ``jarvis_proactive_alerts`` (same store as morning intelligence).
+    """
+    uid = int(user_id)
+    oids = [int(x) for x in organization_ids if int(x) > 0]
+    if uid <= 0 or not oids:
+        return {"ok": False, "error": "user_id and organization_ids required"}
+    if not _ist_weekday_business_hours():
+        return {"ok": True, "skipped": "outside_business_hours_ist", "alerts_count": 0}
+
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "database not configured"}
+
+    from services.personal_meeting_intelligence import list_meetings_starting_within_session
+    from services.stock_signal_service import generate_intraday_signal
+
+    created = 0
+    today = datetime.now(timezone.utc).date()
+    preview: list[dict[str, Any]] = []
+
+    with factory() as session:
+        with session.begin():
+            for oid in oids[:8]:
+                try:
+                    upcoming = list_meetings_starting_within_session(
+                        session, user_id=uid, organization_id=oid, horizon_minutes=40
+                    )
+                except Exception as exc:
+                    _log.debug("realtime meetings uid=%s oid=%s: %s", uid, oid, exc)
+                    continue
+                for d in upcoming:
+                    if not isinstance(d, dict):
+                        continue
+                    try:
+                        mins = int(d.get("minutes_until") or 999)
+                    except (TypeError, ValueError):
+                        mins = 999
+                    if mins > 30:
+                        continue
+                    title = str(d.get("title") or "Meeting").strip()[:200]
+                    mid = int(d.get("id") or 0)
+                    msg = f"Meeting in ~{mins} min: {title}"
+                    dk = f"rt_meeting:{uid}:{mid}:{today.isoformat()}"
+                    _upsert_alert(
+                        session,
+                        user_id=uid,
+                        organization_id=oid,
+                        alert_type="meeting_soon",
+                        priority="high" if mins <= 15 else "medium",
+                        message=msg[:8000],
+                        action_text="Open calendar / join link",
+                        dedupe_key=dk[:256],
+                        payload={"meeting_id": mid, "minutes_until": mins},
+                    )
+                    preview.append(
+                        {
+                            "type": "meeting_soon",
+                            "priority": "high" if mins <= 15 else "medium",
+                            "message": msg,
+                            "action": "Open calendar / join link",
+                            "organization_id": oid,
+                            "dedupe_key": dk[:256],
+                            "payload": {"meeting_id": mid, "minutes_until": mins},
+                        }
+                    )
+                    created += 1
+
+            if _ist_equity_market_hours():
+                wrows = session.scalars(
+                    select(StockWatchlistEntry).where(StockWatchlistEntry.user_id == uid).limit(16)
+                ).all()
+                primary_oid = oids[0]
+                for w in wrows:
+                    sym = str(w.symbol or "").strip().upper()
+                    if not sym:
+                        continue
+                    ex = str(w.exchange_suffix or "NS").strip().upper() or "NS"
+                    try:
+                        sig = generate_intraday_signal(sym, user_id=uid, exchange_suffix=ex)
+                    except Exception as exc:
+                        _log.debug("realtime signal %s: %s", sym, exc)
+                        continue
+                    conf = _signal_confidence_heuristic(sig)
+                    if conf < 80.0:
+                        continue
+                    action = str(sig.get("action") or "HOLD").upper()
+                    last = sig.get("entry_price")
+                    tgt = sig.get("target_price")
+                    sl = sig.get("stop_loss")
+                    msg = (
+                        f"Stock signal: {sym} — {action} @ ₹{last} "
+                        f"(target ₹{tgt}, stop ₹{sl}). Not investment advice."
+                    )
+                    dk = f"rt_stock_sig:{uid}:{sym}:{today.isoformat()}:{int(conf)}"
+                    _upsert_alert(
+                        session,
+                        user_id=uid,
+                        organization_id=primary_oid,
+                        alert_type="stock_signal",
+                        priority="medium",
+                        message=msg[:8000],
+                        action_text="Review in Stocks assistant",
+                        dedupe_key=dk[:256],
+                        payload={"symbol": sym, "confidence": conf, "signal": sig},
+                    )
+                    preview.append(
+                        {
+                            "type": "stock_signal",
+                            "priority": "medium",
+                            "message": msg,
+                            "action": "Review in Stocks assistant",
+                            "organization_id": primary_oid,
+                            "dedupe_key": dk[:256],
+                            "payload": {"symbol": sym, "confidence": conf, "signal": sig},
+                        }
+                    )
+                    created += 1
+
+    return {"ok": True, "alerts_count": created, "alerts": preview}
+
+
+def run_realtime_job_all_users_sync() -> dict[str, Any]:
+    """Scheduler / worker entry: realtime checks for every active member user."""
+    if not _ist_weekday_business_hours():
+        return {"ok": True, "skipped": "outside_business_hours_ist", "users_processed": 0}
+    factory = get_session_factory()
+    if factory is None:
+        return {"ok": False, "error": "no database"}
+    processed = 0
+    with factory() as session:
+        user_ids = list(
+            session.scalars(
+                select(UserOrganizationMembership.user_id)
+                .where(UserOrganizationMembership.is_active.is_(True))
+                .distinct()
+            ).all()
+        )
+    for uid in user_ids:
+        uid = int(uid)
+        if uid <= 0:
+            continue
+        with factory() as s2:
+            oids = [
+                int(x)
+                for x in s2.scalars(
+                    select(UserOrganizationMembership.organization_id).where(
+                        UserOrganizationMembership.user_id == uid,
+                        UserOrganizationMembership.is_active.is_(True),
+                    )
+                ).all()
+            ]
+        if not oids:
+            continue
+        try:
+            run_realtime_intelligence_sync(user_id=uid, organization_ids=oids[:5])
+            processed += 1
+        except Exception as exc:
+            _log.warning("jarvis realtime user=%s failed: %s", uid, exc)
+    return {"ok": True, "users_processed": processed}
 
 
 def run_morning_job_all_users_sync() -> dict[str, Any]:

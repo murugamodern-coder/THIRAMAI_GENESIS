@@ -36,6 +36,7 @@ from services.personal_jarvis_sync import (
 )
 from services.personal_ambient_sync import build_ambient_sync
 from services.personal_os_aggregate import build_personal_today_sync
+from services.jarvis_memory_engine import fetch_living_memory_brief_sync
 from services.personal_quick_intent_sync import parse_quick_phrase
 
 router = APIRouter(prefix="/personal", tags=["Personal OS"])
@@ -113,6 +114,7 @@ def _build_personal_today_payload_sync(
             "ignored_actions": memory.get("ignored_actions"),
             "hint": memory.get("preferred_summary"),
             "stats": memory.get("stats"),
+            "living": fetch_living_memory_brief_sync(uid),
         }
     else:
         payload["jarvis_memory"] = {}
@@ -133,6 +135,7 @@ def _snapshot_for_engine(payload: dict[str, Any], *, authenticated: bool) -> dic
         "streak_days": int(payload.get("streak_days") or 0),
         "habits_completed_today": int(payload.get("habits_completed_today") or 0),
         "tasks_completed_today": int(payload.get("tasks_completed_today") or 0),
+        "meeting_nudges": payload.get("meeting_nudges") or [],
     }
 
 
@@ -150,6 +153,19 @@ class PersonalActionBody(BaseModel):
 class PersonalFeedbackBody(BaseModel):
     suggestion: str = Field(..., min_length=1, max_length=4000)
     helpful: bool = False
+
+
+class JarvisProactiveFeedbackBody(BaseModel):
+    """Learning loop for persisted proactive alerts (Upgrade 2.1)."""
+
+    alert_dedupe_key: str = Field(..., min_length=1, max_length=256)
+    alert_type: str = Field("", max_length=64)
+    outcome: Literal["acted", "ignored", "dismissed"]
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class JarvisProactiveExecuteBody(BaseModel):
+    dedupe_key: str = Field(..., min_length=1, max_length=256)
 
 
 class QuickIntentBody(BaseModel):
@@ -445,4 +461,73 @@ async def personal_feedback(
     out = await asyncio.to_thread(_run)
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("error") or "feedback failed")
+    return JSONResponse(content=out)
+
+
+@router.post("/jarvis-proactive/feedback")
+async def jarvis_proactive_feedback(
+    body: JarvisProactiveFeedbackBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> JSONResponse:
+    """Record acted / ignored / dismissed for a proactive alert (dedupe_key from Today / agentic API)."""
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_proactive_service import record_proactive_feedback_sync
+
+        return record_proactive_feedback_sync(
+            user_id=int(user.id),
+            alert_dedupe_key=body.alert_dedupe_key,
+            alert_type=body.alert_type,
+            outcome=body.outcome,
+            meta=body.meta,
+        )
+
+    out = await asyncio.to_thread(_run)
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "record failed")
+    return JSONResponse(content=out)
+
+
+@router.get("/jarvis-proactive/agentic-insights")
+async def jarvis_proactive_agentic_insights(
+    user: CurrentUser = Depends(get_current_user),
+    limit: int = Query(12, ge=1, le=40),
+) -> JSONResponse:
+    """Re-scored proactive insights with dependency reasoning and ``action_ready_payload``."""
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_proactive_action_engine import user_execution_mode
+        from services.jarvis_proactive_engine import JarvisProactiveEngine
+
+        insights = JarvisProactiveEngine.build_intelligent_insights_from_recent(int(user.id), limit=limit)
+        return {
+            "ok": True,
+            "execution_mode": user_execution_mode(),
+            "insights": [i.to_agentic_output() for i in insights],
+        }
+
+    return JSONResponse(content=await asyncio.to_thread(_run))
+
+
+@router.post("/jarvis-proactive/execute")
+async def jarvis_proactive_execute(
+    body: JarvisProactiveExecuteBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> JSONResponse:
+    """Run safe auto-actions for a persisted alert when global mode is ``confirm`` or ``auto``."""
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_proactive_engine import execute_proactive_insight_action_sync
+
+        return execute_proactive_insight_action_sync(user_id=int(user.id), dedupe_key=body.dedupe_key)
+
+    out = await asyncio.to_thread(_run)
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "execute failed")
     return JSONResponse(content=out)

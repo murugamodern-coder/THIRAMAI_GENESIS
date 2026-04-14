@@ -293,7 +293,19 @@ class User(Base):
     jarvis_memory_rows: Mapped[list["JarvisMemory"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    jarvis_episode_rows: Mapped[list["JarvisEpisode"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    jarvis_fact_rows: Mapped[list["JarvisFact"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    jarvis_session_rows: Mapped[list["JarvisSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     jarvis_proactive_alert_rows: Mapped[list["JarvisProactiveAlert"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    jarvis_proactive_feedback_rows: Mapped[list["JarvisProactiveFeedback"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     stock_watchlist_rows: Mapped[list["StockWatchlistEntry"]] = relationship(
@@ -2553,6 +2565,113 @@ class PersonalMeeting(Base):
     organization: Mapped["Organization"] = relationship(back_populates="personal_meetings")
 
 
+class JarvisEpisode(Base):
+    """Episodic Jarvis memory — conversations, ideas, milestones (Living Jarvis Upgrade 1)."""
+
+    __tablename__ = "jarvis_episodes"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    episode_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    importance: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=5)
+    embedding: Mapped[Optional[list[Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_episode_rows")
+
+
+class JarvisFact(Base):
+    """Semantic Jarvis memory — structured preferences and business facts."""
+
+    __tablename__ = "jarvis_facts"
+    __table_args__ = (UniqueConstraint("user_id", "fact_type", "key", name="uq_jarvis_facts_user_type_key"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    fact_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    key: Mapped[str] = mapped_column(String(256), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("0.7"))
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="jarvis")
+    last_verified: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_fact_rows")
+
+
+class JarvisSession(Base):
+    """Working-memory session metadata (client-supplied session id string)."""
+
+    __tablename__ = "jarvis_sessions"
+    __table_args__ = (UniqueConstraint("user_id", "session_id", name="uq_jarvis_sessions_user_session"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    session_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_active: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_session_rows")
+    turns: Mapped[list["JarvisSessionTurn"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
+
+
+class JarvisSessionTurn(Base):
+    """One message in a Jarvis working-memory session."""
+
+    __tablename__ = "jarvis_session_turns"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    session_row_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("jarvis_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    session: Mapped["JarvisSession"] = relationship(back_populates="turns")
+
+
 class JarvisMemory(Base):
     """User-specific Jarvis preferences / learned facts (Phase 2 agent)."""
 
@@ -2612,6 +2731,32 @@ class JarvisProactiveAlert(Base):
 
     user: Mapped["User"] = relationship(back_populates="jarvis_proactive_alert_rows")
     organization: Mapped[Optional["Organization"]] = relationship()
+
+
+class JarvisProactiveFeedback(Base):
+    """User feedback on proactive alerts — learning loop (Upgrade 2.1)."""
+
+    __tablename__ = "jarvis_proactive_feedback"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    alert_dedupe_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    meta: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_proactive_feedback_rows")
 
 
 class StockWatchlistEntry(Base):
