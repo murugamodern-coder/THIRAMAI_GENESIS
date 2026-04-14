@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
@@ -22,6 +23,7 @@ from core.db.models import (
     PersonalLoan,
     ProductionLog,
     ResearchDocument,
+    StockWatchlistEntry,
     UserOrganizationMembership,
 )
 from services.inventory_phase2_service import list_low_stock_alerts_sync
@@ -298,6 +300,87 @@ def generate_morning_intelligence_sync(*, user_id: int, organization_ids: list[i
                     payload={"loan_id": int(ln.id)},
                 )
                 alerts_in_memory.append({"type": "payment", "priority": "urgent", "message": msg})
+
+            # Part D: equity daily loss cap, watchlist moves, simple breakout-style tags
+            try:
+                from services.portfolio_service import daily_equity_pnl_inr_sync, is_equity_risk_blocked_sync
+
+                lim = Decimal(str((os.getenv("THIRAMAI_MAX_DAILY_LOSS_INR") or "2000").strip()))
+                pnl_day = daily_equity_pnl_inr_sync(uid)
+                if is_equity_risk_blocked_sync(uid) or pnl_day <= -lim:
+                    dk = f"equity_risk:{uid}:{today.isoformat()}"
+                    msg = (
+                        f"Equity (paper) realized P&L today is ₹{pnl_day} vs max loss -₹{lim}. "
+                        "Intraday signals are disabled until the next session."
+                    )
+                    _upsert_alert(
+                        session,
+                        user_id=uid,
+                        organization_id=oids[0] if oids else None,
+                        alert_type="equity_risk",
+                        priority="high",
+                        message=msg,
+                        action_text="Open Stocks dashboard / review sells",
+                        dedupe_key=dk,
+                        payload={"daily_realized_pnl_inr": str(pnl_day), "limit_inr": str(lim)},
+                    )
+                    alerts_in_memory.append({"type": "equity_risk", "priority": "high", "message": msg})
+            except Exception as exc:
+                _log.debug("equity risk proactive: %s", exc)
+
+            try:
+                from services.stock_indicator_service import analyze_indicators
+                from services.stock_market_data_service import get_ohlc
+
+                wrows = session.scalars(select(StockWatchlistEntry).where(StockWatchlistEntry.user_id == uid).limit(12)).all()
+                primary_oid = oids[0] if oids else None
+                for w in wrows:
+                    sym = str(w.symbol or "").strip().upper()
+                    if not sym:
+                        continue
+                    ex = str(w.exchange_suffix or "NS").strip().upper() or "NS"
+                    ohlc = get_ohlc(sym, interval="1d", exchange_suffix=ex)
+                    bars = ohlc.get("bars") if isinstance(ohlc, dict) else None
+                    if isinstance(bars, list) and len(bars) >= 2:
+                        prev = float(bars[-2].get("close") or 0)
+                        last = float(bars[-1].get("close") or 0)
+                        if prev > 0:
+                            pct = (last - prev) / prev * 100.0
+                            if abs(pct) >= 2.0:
+                                dk = f"watchlist_move:{uid}:{sym}:{today}"
+                                msg = f"{sym} moved ~{pct:+.2f}% vs prior close — on your watchlist."
+                                _upsert_alert(
+                                    session,
+                                    user_id=uid,
+                                    organization_id=primary_oid,
+                                    alert_type="watchlist_move",
+                                    priority="medium",
+                                    message=msg,
+                                    action_text="Review quote and signal in Stocks",
+                                    dedupe_key=dk[:256],
+                                    payload={"symbol": sym, "pct": round(pct, 3)},
+                                )
+                                alerts_in_memory.append({"type": "watchlist_move", "priority": "medium", "message": msg})
+                    ind = analyze_indicators(sym, interval="5m", exchange_suffix=ex)
+                    bb = ind.get("bollinger") if isinstance(ind.get("bollinger"), dict) else {}
+                    pos = str(bb.get("position") or "")
+                    if pos in ("above_upper", "below_lower") and ind.get("ok"):
+                        dk = f"breakout_bb:{uid}:{sym}:{today}"
+                        msg = f"{sym}: price near Bollinger band edge ({pos.replace('_', ' ')}) — volatility / breakout context."
+                        _upsert_alert(
+                            session,
+                            user_id=uid,
+                            organization_id=primary_oid,
+                            alert_type="breakout",
+                            priority="low",
+                            message=msg,
+                            action_text="Check intraday signal in Stocks",
+                            dedupe_key=dk[:256],
+                            payload={"symbol": sym, "bollinger_position": pos},
+                        )
+                        alerts_in_memory.append({"type": "breakout", "priority": "low", "message": msg})
+            except Exception as exc:
+                _log.debug("watchlist/breakout proactive: %s", exc)
 
     alerts_in_memory.sort(key=lambda a: _priority_score(str(a.get("priority"))))
     return {"ok": True, "alerts_count": len(alerts_in_memory), "alerts": alerts_in_memory[:50]}

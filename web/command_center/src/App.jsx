@@ -29,6 +29,7 @@ import WeeklyReviewPage from "./pages/personal/WeeklyReviewPage.jsx";
 import TodayPage from "./pages/TodayPage.jsx";
 import CopilotPage from "./pages/CopilotPage.jsx";
 import ResearchPage from "./pages/ResearchPage.jsx";
+import StockPage from "./pages/StockPage.jsx";
 
 function Protected({ children }) {
   const token = useCommandStore((s) => s.token);
@@ -69,6 +70,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="stocks" element={<StockPage />} />
         <Route path="research" element={<ResearchPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="billing" element={<BillingPage />} />

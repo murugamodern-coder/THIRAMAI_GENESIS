@@ -50,6 +50,11 @@ EXTENDED_TOOL_NAMES: frozenset[str] = frozenset(
         "generate_dpr",
         "analyze_competitors",
         "analyze_stock_opportunity",
+        "get_stock_price",
+        "analyze_stock",
+        "generate_intraday_signal",
+        "get_portfolio_summary",
+        "add_to_watchlist",
         "generate_poster_content",
         "draft_business_email",
     }
@@ -70,6 +75,11 @@ AUTO_EXECUTE_TOOL_NAMES: frozenset[str] = frozenset(
         "generate_dpr",
         "analyze_competitors",
         "analyze_stock_opportunity",
+        "get_stock_price",
+        "analyze_stock",
+        "generate_intraday_signal",
+        "get_portfolio_summary",
+        "add_to_watchlist",
         "generate_poster_content",
         "draft_business_email",
     }
@@ -373,6 +383,73 @@ def extended_tool_specs() -> list[dict[str, Any]]:
                         "location": {"type": "string"},
                     },
                     "required": ["business_type"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_stock_price",
+                "description": "Live last price for an NSE/BSE ticker (yfinance; short cache).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {"type": "string"},
+                        "exchange_suffix": {"type": "string", "description": "NS or BO"},
+                    },
+                    "required": ["symbol"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "analyze_stock",
+                "description": "RSI, MACD, EMA9/21, Bollinger position, trend label for a symbol.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {"type": "string"},
+                        "interval": {"type": "string", "description": "e.g. 5m, 1d"},
+                    },
+                    "required": ["symbol"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "generate_intraday_signal",
+                "description": "Rule-based BUY/SELL/HOLD with levels (respects daily loss cap).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {"type": "string"},
+                    },
+                    "required": ["symbol"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_portfolio_summary",
+                "description": "User paper equity portfolio: value, per-line P&L, totals.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_to_watchlist",
+                "description": "Add an NSE-style symbol to the user's market watchlist.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {"type": "string"},
+                        "exchange_suffix": {"type": "string"},
+                    },
+                    "required": ["symbol"],
                 },
             },
         },
@@ -1134,6 +1211,50 @@ def execute_jarvis_extended_tool(
             if not sym:
                 return {"ok": False, "message": "symbol required"}
             return analyze_symbol_sync(symbol=sym, timeframe=tf)
+
+        if name == "get_stock_price":
+            sym = str(args.get("symbol") or "").strip().upper()
+            ex = str(args.get("exchange_suffix") or "NS").strip().upper() or "NS"
+            if not sym:
+                return {"ok": False, "message": "symbol required"}
+            from services.stock_market_data_service import get_live_price
+
+            return get_live_price(sym, exchange_suffix=ex)
+
+        if name == "analyze_stock":
+            sym = str(args.get("symbol") or "").strip().upper()
+            iv = str(args.get("interval") or "5m").strip().lower()
+            if not sym:
+                return {"ok": False, "message": "symbol required"}
+            from services.stock_indicator_service import analyze_indicators
+
+            return analyze_indicators(sym, interval=iv or "5m", exchange_suffix="NS")
+
+        if name == "generate_intraday_signal":
+            sym = str(args.get("symbol") or "").strip().upper()
+            if not sym:
+                return {"ok": False, "message": "symbol required"}
+            from services.stock_signal_service import generate_intraday_signal
+
+            return generate_intraday_signal(sym, user_id=uid if uid > 0 else None, exchange_suffix="NS")
+
+        if name == "get_portfolio_summary":
+            from services.portfolio_service import get_portfolio_summary_sync
+
+            if uid <= 0:
+                return {"ok": False, "message": "user id required"}
+            return get_portfolio_summary_sync(uid)
+
+        if name == "add_to_watchlist":
+            sym = str(args.get("symbol") or "").strip().upper()
+            ex = str(args.get("exchange_suffix") or "NS").strip().upper() or "NS"
+            if not sym:
+                return {"ok": False, "message": "symbol required"}
+            from services.portfolio_service import add_to_watchlist_sync
+
+            if uid <= 0:
+                return {"ok": False, "message": "user id required"}
+            return add_to_watchlist_sync(uid, sym, exchange_suffix=ex)
 
         if name == "generate_poster_content":
             bn = str(args.get("business_name") or "Our Business").strip()

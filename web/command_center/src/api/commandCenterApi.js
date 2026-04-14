@@ -430,3 +430,37 @@ export async function createInventorySupplier(payload) {
   const { data } = await api.post("/inventory/supplier", payload);
   return data;
 }
+
+/** Part D — Stock assistant (JWT). */
+export async function fetchStockWatchlist() {
+  const { data } = await api.get("/stocks/assistant/watchlist");
+  return data;
+}
+
+export async function postStockWatchlist(symbol, exchangeSuffix = "NS") {
+  const { data } = await api.post("/stocks/assistant/watchlist", {
+    symbol,
+    exchange_suffix: exchangeSuffix,
+  });
+  return data;
+}
+
+export async function fetchStockQuote(symbol) {
+  const { data } = await api.get(`/stocks/assistant/quote/${encodeURIComponent(symbol)}`);
+  return data;
+}
+
+export async function fetchStockSignal(symbol) {
+  const { data } = await api.get(`/stocks/assistant/signal/${encodeURIComponent(symbol)}`);
+  return data;
+}
+
+export async function fetchStockPortfolio() {
+  const { data } = await api.get("/stocks/assistant/portfolio");
+  return data;
+}
+
+export async function fetchStockMorningBrief() {
+  const { data } = await api.get("/stocks/assistant/morning-brief");
+  return data;
+}

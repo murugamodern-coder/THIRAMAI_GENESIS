@@ -63,6 +63,11 @@ RESEARCH_TOOL_NAMES: frozenset[str] = frozenset(
 STOCK_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "analyze_stock_opportunity",
+        "get_stock_price",
+        "analyze_stock",
+        "generate_intraday_signal",
+        "get_portfolio_summary",
+        "add_to_watchlist",
         "get_today_brief",
     }
 )

@@ -265,6 +265,12 @@ class User(Base):
     stock_watchlist_rows: Mapped[list["StockWatchlistEntry"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    equity_portfolio_positions: Mapped[list["EquityPortfolioPosition"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    equity_portfolio_transactions: Mapped[list["EquityPortfolioTransaction"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     research_document_rows: Mapped[list["ResearchDocument"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -2595,6 +2601,63 @@ class StockWatchlistEntry(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="stock_watchlist_rows")
+
+
+class EquityPortfolioPosition(Base):
+    """User equity paper portfolio (symbol lot + average cost)."""
+
+    __tablename__ = "equity_portfolio_positions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "symbol", "exchange_suffix", name="uq_equity_position_user_sym_ex"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    exchange_suffix: Mapped[str] = mapped_column(String(8), nullable=False, default="NS")
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0"))
+    avg_buy_price_inr: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="equity_portfolio_positions")
+
+
+class EquityPortfolioTransaction(Base):
+    """Buy/sell ledger for equity paper portfolio."""
+
+    __tablename__ = "equity_portfolio_transactions"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    exchange_suffix: Mapped[str] = mapped_column(String(8), nullable=False, default="NS")
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    price_inr: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    fees_inr: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
+    realized_pnl_inr: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="equity_portfolio_transactions")
 
 
 class ResearchDocument(Base):
