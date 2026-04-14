@@ -185,7 +185,7 @@ export default function WebsiteBuilderPage() {
         ) : (
           <iframe
             title="site-preview"
-            sandbox=""
+            sandbox="allow-scripts"
             style={{ width: "100%", minHeight: 520, border: "1px solid #334155", borderRadius: 8, background: "#fff" }}
             srcDoc={previewHtml}
           />
