@@ -683,6 +683,16 @@ def build_today_brief_sync(
         attach_market_brief_to_payload(payload, user_id=uid)
     except Exception:
         pass
+    try:
+        from services.cross_domain_analyzer import analyze_cross_domain
+
+        payload["cross_domain_insights"] = analyze_cross_domain(
+            uid,
+            organization_id=oid,
+            financial_snapshot=fin,
+        )
+    except Exception:
+        payload["cross_domain_insights"] = {"ok": False, "error": "cross_domain_unavailable"}
     return payload
 
 

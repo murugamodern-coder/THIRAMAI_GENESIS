@@ -114,7 +114,7 @@ BASE_TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_today_brief",
-            "description": "Fetch unified Today hero payload (focus task, meetings, alerts, business snapshot).",
+            "description": "Fetch unified Today hero payload (focus task, meetings, alerts, business snapshot). Includes cross_domain_insights (Captain line, top 3 ranked insights, risks, recommendations across personal + all orgs + equity).",
             "parameters": {"type": "object", "properties": {}},
         },
     },

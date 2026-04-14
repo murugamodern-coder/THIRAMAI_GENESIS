@@ -1192,6 +1192,43 @@ table.cc-table {
   gap: var(--cc-s2);
 }
 
+.cc-today-cross-domain {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(10, 110, 209, 0.22);
+  background: linear-gradient(135deg, rgba(10, 110, 209, 0.06), transparent);
+}
+
+.cc-today-captain {
+  margin: 0 0 var(--cc-s2);
+  font-size: 1.05rem;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.cc-today-cross-sub {
+  margin: var(--cc-s2) 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-muted);
+}
+
+.cc-today-cross-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cc-today-cross-list li {
+  margin-bottom: 8px;
+}
+
+.cc-today-cross-list--risks li {
+  color: var(--cc-danger);
+}
+
 .cc-today-card-title {
   margin: 0 0 var(--cc-s2);
   font-size: 13px;

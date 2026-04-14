@@ -117,6 +117,7 @@ export default function TodayPage() {
   const streak = data?.habit_streak_days;
   const lowStock = data?.low_stock_count;
   const upcomingEmi = data?.upcoming_emis;
+  const cross = data?.cross_domain_insights;
 
   const progressPct = useMemo(() => {
     const done = Number(tp?.completed_today) || 0;
@@ -277,6 +278,47 @@ export default function TodayPage() {
       )}
 
       <div className="cc-today-grid">
+        {cross?.ok && (cross.captain_message || (cross.top_insights || []).length > 0) ? (
+          <section className="cc-card cc-today-cross-domain" aria-label="System intelligence">
+            <h2 className="cc-today-card-title">System intelligence</h2>
+            {cross.captain_message ? (
+              <p className="cc-today-captain" role="status">
+                {cross.captain_message}
+              </p>
+            ) : null}
+            {(cross.top_insights || []).length > 0 ? (
+              <ul className="cc-today-cross-list">
+                {(cross.top_insights || []).map((x) => (
+                  <li key={x.id || x.title}>
+                    <strong>{x.title}</strong>
+                    {x.detail ? <span className="cc-muted"> — {x.detail}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {(cross.risk_alerts || []).length > 0 ? (
+              <div className="cc-today-cross-risks">
+                <p className="cc-today-cross-sub">Risk alerts</p>
+                <ul className="cc-today-cross-list cc-today-cross-list--risks">
+                  {(cross.risk_alerts || []).map((line, i) => (
+                    <li key={`r-${i}`}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {(cross.recommendations || []).length > 0 ? (
+              <div className="cc-today-cross-recs">
+                <p className="cc-today-cross-sub">Recommendations</p>
+                <ul className="cc-today-cross-list">
+                  {(cross.recommendations || []).map((line, i) => (
+                    <li key={`c-${i}`}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         <section className="cc-card cc-today-focus">
           <h2 className="cc-today-card-title">Your focus</h2>
           {focus ? (
