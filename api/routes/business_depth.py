@@ -9,7 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from api.dependencies import CurrentUser, get_current_user
@@ -247,6 +247,48 @@ async def business_pl_daily(_user: CurrentUser = Depends(get_current_user)) -> d
     return out
 
 
+@router.get("/liquidity", summary="Cash + bank balance (manual ledger)")
+async def business_liquidity_get(_user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    out = business_os_service.get_liquidity_sync(organization_id=_user.organization_id)
+    if not out.get("ok"):
+        raise HTTPException(status_code=503, detail=out.get("error") or "read failed")
+    return out
+
+
+class LiquidityPutBody(BaseModel):
+    cash_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
+    bank_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
+
+
+@router.put("/liquidity", summary="Update cash + bank balance for active org")
+async def business_liquidity_put(
+    body: LiquidityPutBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, str]:
+    out = business_os_service.upsert_liquidity_sync(
+        organization_id=_user.organization_id,
+        cash_inr=body.cash_inr,
+        bank_inr=body.bank_inr,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "update failed")
+    return {"status": "ok"}
+
+
+@router.get("/expenses/monthly-report", summary="Operational expenses aggregated by category for a month")
+async def business_expenses_monthly(
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    out = business_os_service.monthly_expense_report_sync(
+        organization_id=_user.organization_id, year=year, month=month
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "report failed")
+    return out
+
+
 @router.get("/subsidy", summary="List agro subsidy cases")
 async def subsidy_list(
     limit: int = Query(200, ge=1, le=500),
@@ -262,10 +304,15 @@ class SubsidyCreateBody(BaseModel):
     farmer_name: str = Field(..., min_length=1)
     village: str = ""
     survey_number: str = ""
+    farmer_phone: str | None = None
+    land_acres: Decimal | None = None
     scheme_name: str = Field(..., min_length=1)
     application_status: str = "draft"
+    subsidy_applied_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
+    subsidy_approved_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
     subsidy_pending_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
     subsidy_received_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
+    commission_earned_inr: Decimal = Field(default_factory=lambda: Decimal("0"))
     follow_up_date: date | None = None
     notes: str | None = None
 
@@ -281,10 +328,15 @@ async def subsidy_create(
         farmer_name=body.farmer_name,
         village=body.village,
         survey_number=body.survey_number,
+        farmer_phone=body.farmer_phone,
+        land_acres=body.land_acres,
         scheme_name=body.scheme_name,
         application_status=body.application_status,
+        subsidy_applied_inr=body.subsidy_applied_inr,
+        subsidy_approved_inr=body.subsidy_approved_inr,
         subsidy_pending_inr=body.subsidy_pending_inr,
         subsidy_received_inr=body.subsidy_received_inr,
+        commission_earned_inr=body.commission_earned_inr,
         follow_up_date=body.follow_up_date,
         notes=body.notes,
     )
@@ -305,10 +357,15 @@ class SubsidyPatchBody(BaseModel):
     farmer_name: str | None = None
     village: str | None = None
     survey_number: str | None = None
+    farmer_phone: str | None = None
+    land_acres: Decimal | None = None
     scheme_name: str | None = None
     application_status: str | None = None
+    subsidy_applied_inr: Decimal | None = None
+    subsidy_approved_inr: Decimal | None = None
     subsidy_pending_inr: Decimal | None = None
     subsidy_received_inr: Decimal | None = None
+    commission_earned_inr: Decimal | None = None
     follow_up_date: date | None = None
     notes: str | None = None
 
@@ -420,3 +477,70 @@ async def business_tasks_patch(
         extra={"task_id": task_id},
     )
     return {"status": "ok"}
+
+
+@router.get("/gst-suggest", summary="Upgrade 5: suggest GST % from HSN / description (India)")
+async def business_gst_suggest(
+    hsn: str = Query("", max_length=16),
+    description: str = Query("", max_length=2000),
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    from services.auto_accounting_service import gst_rate_from_hsn_sync
+
+    _ = _user
+    return {"ok": True, "suggestion": gst_rate_from_hsn_sync(hsn or None, description)}
+
+
+@router.post("/import-bank-statement", summary="Upgrade 5: CSV or PDF bank statement → operational expenses")
+async def business_import_bank_statement(
+    request: Request,
+    file: UploadFile = File(...),
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    from services.auto_accounting_service import (
+        extract_bank_transactions_from_text_sync,
+        import_bank_statement_sync,
+        parse_bank_statement_csv_sync,
+        parse_bank_statement_pdf_sync,
+    )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="empty file")
+    name = (file.filename or "").lower()
+    ct = (file.content_type or "").lower()
+    txs: list[dict[str, Any]] = []
+    if name.endswith(".csv") or "csv" in ct or "text/plain" in ct:
+        parsed = parse_bank_statement_csv_sync(raw)
+        if not parsed.get("ok"):
+            raise HTTPException(status_code=400, detail=parsed.get("error") or "csv_parse_failed")
+        txs = list(parsed.get("transactions") or [])
+    elif name.endswith(".pdf") or "pdf" in ct:
+        pdf = parse_bank_statement_pdf_sync(raw)
+        if not pdf.get("ok"):
+            raise HTTPException(status_code=400, detail=pdf.get("error") or "pdf_read_failed")
+        extracted = extract_bank_transactions_from_text_sync(pdf.get("text") or "")
+        if not extracted.get("ok"):
+            raise HTTPException(status_code=400, detail=extracted.get("error") or "pdf_extract_failed")
+        txs = list(extracted.get("transactions") or [])
+    else:
+        parsed = parse_bank_statement_csv_sync(raw)
+        txs = list(parsed.get("transactions") or []) if parsed.get("ok") else []
+
+    if not txs:
+        raise HTTPException(status_code=400, detail="no transactions parsed")
+
+    out = import_bank_statement_sync(
+        organization_id=int(_user.organization_id),
+        transactions=txs,
+        user_id=int(_user.id),
+    )
+    audit_service.log_business_depth_mutation(
+        correlation_id=_correlation_id(request),
+        action_name="bank_statement_import",
+        user_id=_user.id,
+        organization_id=_user.organization_id,
+        resource_type="operational_expense",
+        extra={"rows": len(txs), "created": len(out.get("created") or [])},
+    )
+    return out

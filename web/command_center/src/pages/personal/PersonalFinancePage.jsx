@@ -4,13 +4,24 @@ import {
   createPersonalBudget,
   createPersonalExpense,
   createPersonalLoan,
+  fetchBusinessGstSuggest,
   fetchPersonalBudgets,
   fetchPersonalExpenses,
   fetchPersonalLoans,
+  postBusinessBankStatementImport,
+  postPersonalExpenseScanConfirm,
+  postPersonalExpenseScanPreview,
 } from "../../api/commandCenterApi.js";
 import { safeAsync } from "../../lib/safeAsync.js";
 
 const EXPENSE_CATEGORIES = [
+  { value: "food", label: "Food" },
+  { value: "transport", label: "Transport" },
+  { value: "materials", label: "Materials" },
+  { value: "utilities", label: "Utilities" },
+  { value: "health", label: "Health" },
+  { value: "education", label: "Education" },
+  { value: "housing", label: "Housing" },
   { value: "loans", label: "Loans" },
   { value: "vehicle", label: "Vehicle" },
   { value: "digital_bills", label: "Digital bills" },
@@ -63,6 +74,16 @@ export default function PersonalFinancePage() {
   const [budAmt, setBudAmt] = useState("");
   const [budStart, setBudStart] = useState(firstOfMonthISO());
   const [budEnd, setBudEnd] = useState(endOfMonthISO());
+
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanToken, setScanToken] = useState(null);
+  const [scanPreview, setScanPreview] = useState(null);
+  const [scanEditAmount, setScanEditAmount] = useState("");
+  const [scanEditCategory, setScanEditCategory] = useState("food");
+  const [scanEditVendor, setScanEditVendor] = useState("");
+  const [bankImportMsg, setBankImportMsg] = useState(null);
+  const [gstProbe, setGstProbe] = useState({ hsn: "", desc: "" });
+  const [gstOut, setGstOut] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,6 +164,91 @@ export default function PersonalFinancePage() {
     }
   };
 
+  const onReceiptSelected = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setMessage(null);
+    setScanLoading(true);
+    setScanToken(null);
+    setScanPreview(null);
+    try {
+      const data = await postPersonalExpenseScanPreview(f);
+      setScanToken(data.preview_token || null);
+      const prev = data.preview || data.scan || null;
+      setScanPreview(prev);
+      if (prev?.amount != null) setScanEditAmount(String(prev.amount));
+      if (prev?.category) setScanEditCategory(prev.category);
+      if (prev?.vendor_name) setScanEditVendor(prev.vendor_name);
+      setMessage(data.ok ? "Receipt scanned — review and confirm." : "Scan uncertain — edit fields before confirm.");
+    } catch (err) {
+      setMessage(err?.response?.data?.detail || err?.message || "Scan failed.");
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  const onConfirmScan = async () => {
+    if (!scanToken) {
+      setMessage("Scan a receipt first.");
+      return;
+    }
+    const amount = Number(scanEditAmount);
+    if (!amount || amount <= 0) {
+      setMessage("Valid amount required.");
+      return;
+    }
+    setScanLoading(true);
+    setMessage(null);
+    try {
+      await postPersonalExpenseScanConfirm(
+        {
+          preview_token: scanToken,
+          amount,
+          category: scanEditCategory,
+          vendor_name: scanEditVendor || undefined,
+        },
+        vaultPass || undefined,
+      );
+      setScanToken(null);
+      setScanPreview(null);
+      await load();
+      setMessage("Expense saved from receipt (source: auto_scan).");
+    } catch (err) {
+      setMessage(err?.response?.data?.detail || err?.message || "Confirm failed.");
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  const onBankImport = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setBankImportMsg(null);
+    setScanLoading(true);
+    try {
+      const out = await postBusinessBankStatementImport(f);
+      const n = (out.created || []).length;
+      const rev = (out.needs_review || []).length;
+      setBankImportMsg(`Imported ${n} expense rows. ${rev ? `${rev} need review.` : ""}`);
+    } catch (err) {
+      setBankImportMsg(err?.response?.data?.detail || err?.message || "Import failed.");
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  const onGstProbe = async () => {
+    setGstOut(null);
+    try {
+      const d = await fetchBusinessGstSuggest({ hsn: gstProbe.hsn, description: gstProbe.desc });
+      setGstOut(d?.suggestion || null);
+    } catch (err) {
+      setGstOut({ error: err?.response?.data?.detail || err?.message });
+    }
+  };
+
   const onAddBudget = async (e) => {
     e.preventDefault();
     setMessage(null);
@@ -202,6 +308,85 @@ export default function PersonalFinancePage() {
       </label>
 
       {message && <div className="personal-os-banner">{message}</div>}
+
+      <section className="personal-os-card" style={{ marginBottom: 20 }}>
+        <h2 className="personal-os-card-title">Auto accounting (Upgrade 5)</h2>
+        <p className="personal-os-sub" style={{ marginTop: 0 }}>
+          Receipt scan uses Groq Vision or Gemini (API keys). Confirm before saving. Bank import posts to your active
+          organization&apos;s operational expenses.
+        </p>
+        <div className="personal-os-form-grid">
+          <label className="personal-os-label personal-os-label--full">
+            Receipt image
+            <input type="file" accept="image/*" className="cc-input" disabled={scanLoading} onChange={onReceiptSelected} />
+          </label>
+          {scanPreview ? (
+            <>
+              <div className="personal-os-label personal-os-label--full" style={{ fontSize: 14 }}>
+                {scanPreview.needs_review ? (
+                  <strong style={{ color: "#b45309" }}>Needs review — verify amounts.</strong>
+                ) : (
+                  <span className="cc-muted">Model confidence: {scanPreview.confidence ?? "—"}</span>
+                )}
+                {scanPreview.raw_summary ? (
+                  <div className="cc-muted" style={{ marginTop: 6 }}>
+                    {String(scanPreview.raw_summary).slice(0, 240)}
+                  </div>
+                ) : null}
+              </div>
+              <label className="personal-os-label">
+                Amount (INR)
+                <input className="cc-input" type="number" step="0.01" value={scanEditAmount} onChange={(e) => setScanEditAmount(e.target.value)} />
+              </label>
+              <label className="personal-os-label">
+                Category
+                <select className="cc-select" value={scanEditCategory} onChange={(e) => setScanEditCategory(e.target.value)}>
+                  {EXPENSE_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="personal-os-label personal-os-label--full">
+                Vendor
+                <input className="cc-input" value={scanEditVendor} onChange={(e) => setScanEditVendor(e.target.value)} />
+              </label>
+              <button type="button" className="cc-btn cc-btn-primary" disabled={scanLoading} onClick={onConfirmScan}>
+                Confirm &amp; save expense
+              </button>
+            </>
+          ) : null}
+        </div>
+        <hr style={{ margin: "16px 0", opacity: 0.2 }} />
+        <h3 className="personal-os-card-title" style={{ fontSize: 16 }}>
+          Business — bank statement (CSV / PDF)
+        </h3>
+        <input type="file" accept=".csv,.pdf,text/csv,application/pdf" className="cc-input" disabled={scanLoading} onChange={onBankImport} />
+        {bankImportMsg ? <div style={{ marginTop: 8 }}>{bankImportMsg}</div> : null}
+        <hr style={{ margin: "16px 0", opacity: 0.2 }} />
+        <h3 className="personal-os-card-title" style={{ fontSize: 16 }}>
+          GST hint (HSN + description)
+        </h3>
+        <div className="personal-os-form-grid">
+          <label className="personal-os-label">
+            HSN
+            <input className="cc-input" value={gstProbe.hsn} onChange={(e) => setGstProbe((p) => ({ ...p, hsn: e.target.value }))} placeholder="8517" />
+          </label>
+          <label className="personal-os-label personal-os-label--full">
+            Description
+            <input className="cc-input" value={gstProbe.desc} onChange={(e) => setGstProbe((p) => ({ ...p, desc: e.target.value }))} />
+          </label>
+          <button type="button" className="cc-btn" onClick={onGstProbe}>
+            Suggest rate
+          </button>
+        </div>
+        {gstOut && !gstOut.error ? (
+          <pre style={{ marginTop: 8, fontSize: 12, overflow: "auto" }}>{JSON.stringify(gstOut, null, 2)}</pre>
+        ) : gstOut?.error ? (
+          <div className="cc-muted">{gstOut.error}</div>
+        ) : null}
+      </section>
 
       <div className="personal-os-finance-grid">
         <form className="personal-os-card" onSubmit={onAddExpense}>

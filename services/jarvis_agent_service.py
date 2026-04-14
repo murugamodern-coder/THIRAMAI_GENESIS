@@ -271,6 +271,12 @@ def _summarize_tool(name: str, args: dict[str, Any]) -> str:
         return f"Price scan for equipment: {args.get('machine_name', '')[:80]}"
     if name == "find_govt_schemes":
         return f"Find govt schemes — sector {args.get('sector', '')[:60]}"
+    if name == "suggest_personal_expense_from_receipt":
+        return f"Expense hint: {args.get('vendor_name', '')[:40]} ₹{args.get('amount_inr', '')}"
+    if name == "match_unpaid_invoices":
+        return f"Match invoices for amount ₹{args.get('amount_inr', '')}"
+    if name == "apply_invoice_payment_match":
+        return f"Apply payment to invoice #{args.get('invoice_id')}"
     if name == "generate_dpr":
         return f"Generate DPR for {args.get('business_type', '')[:60]}"
     if name == "analyze_competitors":

@@ -25,6 +25,7 @@ PERSONAL_TOOL_NAMES: frozenset[str] = frozenset(
         "set_health_log",
         "get_upcoming_emis",
         "create_habit",
+        "suggest_personal_expense_from_receipt",
     }
 )
 
@@ -47,6 +48,8 @@ BUSINESS_TOOL_NAMES: frozenset[str] = frozenset(
         "draft_business_email",
         "create_website",
         "get_today_brief",
+        "match_unpaid_invoices",
+        "apply_invoice_payment_match",
     }
 )
 
@@ -167,6 +170,11 @@ def classify_query(message: str) -> QueryCategory:
             "landing page",
             "deploy site",
             "nginx",
+            "bank statement",
+            "receipt scan",
+            "match invoice",
+            "record payment",
+            "gst rate",
         )
     ) or biz_inventory
     if business:

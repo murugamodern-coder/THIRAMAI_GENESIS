@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -130,6 +130,57 @@ async def create_expense(
         spent_at=spent,
         title=body.title,
         notes_plain=body.notes,
+        fernet=fn,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"status": "ok", "id": eid}
+
+
+@router.post("/expenses/scan-preview", summary="Upgrade 5: receipt image → structured preview + token")
+async def expenses_scan_preview(
+    file: UploadFile = File(...),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    raw = await file.read()
+    if not raw or len(raw) > 12_000_000:
+        raise HTTPException(status_code=400, detail="invalid file size")
+    ct = (file.content_type or "image/jpeg").split(";")[0].strip()
+    from services.auto_accounting_service import create_receipt_preview_sync
+
+    return create_receipt_preview_sync(raw, content_type=ct)
+
+
+class ExpenseScanConfirmBody(BaseModel):
+    preview_token: str = Field(..., min_length=8, max_length=200)
+    amount: Decimal | None = None
+    category: str | None = Field(None, max_length=64)
+    title: str | None = Field(None, max_length=2000)
+    vendor_name: str | None = Field(None, max_length=500)
+    spent_at: datetime | None = None
+
+
+@router.post("/expenses/scan-confirm", summary="Upgrade 5: confirm preview → personal expense (source=auto_scan)")
+async def expenses_scan_confirm(
+    body: ExpenseScanConfirmBody,
+    user: CurrentUser = Depends(get_current_user),
+    x_personal_vault_passphrase: str | None = Header(default=None, alias="X-Personal-Vault-Passphrase"),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    fn = _fernet(int(user.id), x_personal_vault_passphrase)
+    from services.auto_accounting_service import confirm_receipt_expense_sync
+
+    ok, msg, eid = confirm_receipt_expense_sync(
+        user_id=int(user.id),
+        preview_token=body.preview_token.strip(),
+        amount=body.amount,
+        category=body.category,
+        title=body.title,
+        vendor_name=body.vendor_name,
+        spent_at=body.spent_at,
         fernet=fn,
     )
     if not ok:

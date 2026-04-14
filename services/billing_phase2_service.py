@@ -124,9 +124,17 @@ def create_structured_invoice_sync(
     no = (invoice_no or "").strip() or f"INV-{date.today().isoformat()}"
     idate = invoice_date or date.today()
 
+    lines_enriched: list[dict[str, Any]] = list(lines)
+    try:
+        from services.auto_accounting_service import enrich_invoice_lines_with_gst_sync
+
+        lines_enriched = enrich_invoice_lines_with_gst_sync(lines_enriched, supply_intra_state=True)
+    except Exception:
+        lines_enriched = list(lines)
+
     parsed: list[tuple[int, str, Decimal, Decimal, Decimal, Decimal, str | None]] = []
     grand = Decimal("0")
-    for idx, ln in enumerate(lines, start=1):
+    for idx, ln in enumerate(lines_enriched, start=1):
         desc = (ln.get("description") or "Line").strip()[:2000]
         qty = _dec(ln.get("quantity", 1))
         if qty <= 0:

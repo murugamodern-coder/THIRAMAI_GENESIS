@@ -248,6 +248,34 @@ export async function fetchPersonalExpenses(limit = 100) {
   return data;
 }
 
+/** Upgrade 5 — receipt vision → preview token (multipart). */
+export async function postPersonalExpenseScanPreview(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post("/personal/os/expenses/scan-preview", form);
+  return data;
+}
+
+export async function postPersonalExpenseScanConfirm(payload, vaultPassphrase) {
+  const headers = {};
+  if (vaultPassphrase) headers["X-Personal-Vault-Passphrase"] = vaultPassphrase;
+  const { data } = await api.post("/personal/os/expenses/scan-confirm", payload, { headers });
+  return data;
+}
+
+/** Business org — bank CSV/PDF → operational expenses. */
+export async function postBusinessBankStatementImport(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post("/business/import-bank-statement", form);
+  return data;
+}
+
+export async function fetchBusinessGstSuggest(params = {}) {
+  const { data } = await api.get("/business/gst-suggest", { params });
+  return data;
+}
+
 export async function createPersonalExpense(payload, vaultPassphrase) {
   const { data } = await api.post("/personal/os/expenses", payload, { headers: _vaultHeaders(vaultPassphrase) });
   return data;

@@ -60,6 +60,9 @@ EXTENDED_TOOL_NAMES: frozenset[str] = frozenset(
         "generate_poster_content",
         "draft_business_email",
         "create_website",
+        "match_unpaid_invoices",
+        "apply_invoice_payment_match",
+        "suggest_personal_expense_from_receipt",
     }
 )
 
@@ -88,6 +91,7 @@ AUTO_EXECUTE_TOOL_NAMES: frozenset[str] = frozenset(
         "generate_poster_content",
         "draft_business_email",
         "create_website",
+        "suggest_personal_expense_from_receipt",
     }
 )
 
@@ -488,6 +492,53 @@ def extended_tool_specs() -> list[dict[str, Any]]:
                         "exchange_suffix": {"type": "string"},
                     },
                     "required": ["symbol"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "match_unpaid_invoices",
+                "description": "Find unpaid/partial invoices whose balance matches a bank credit amount (Upgrade 5).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "amount_inr": {"type": "number"},
+                        "tolerance_inr": {"type": "number", "description": "Optional; default ~1 INR"},
+                    },
+                    "required": ["amount_inr"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "apply_invoice_payment_match",
+                "description": "Record a payment against a specific invoice id (marks paid when balance cleared).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "invoice_id": {"type": "integer"},
+                        "amount_inr": {"type": "number"},
+                        "reference": {"type": "string"},
+                    },
+                    "required": ["invoice_id", "amount_inr"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "suggest_personal_expense_from_receipt",
+                "description": "Build a short confirmation line for a detected personal expense (e.g. Swiggy food).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "vendor_name": {"type": "string"},
+                        "amount_inr": {"type": "number"},
+                        "category": {"type": "string"},
+                    },
+                    "required": ["vendor_name", "amount_inr"],
                 },
             },
         },
@@ -1356,6 +1407,63 @@ def execute_jarvis_extended_tool(
             if uid <= 0:
                 return {"ok": False, "message": "user id required"}
             return add_to_watchlist_sync(uid, sym, exchange_suffix=ex)
+
+        if name == "match_unpaid_invoices":
+            from decimal import Decimal
+
+            from services.auto_accounting_service import match_unpaid_invoices_sync
+
+            raw = args.get("amount_inr")
+            if raw is None:
+                return {"ok": False, "message": "amount_inr required"}
+            tol = args.get("tolerance_inr")
+            try:
+                tdec = Decimal(str(tol)) if tol is not None else Decimal("1.00")
+            except Exception:
+                tdec = Decimal("1.00")
+            return match_unpaid_invoices_sync(
+                organization_id=oid,
+                amount_inr=Decimal(str(raw)),
+                tolerance_inr=tdec,
+            )
+
+        if name == "apply_invoice_payment_match":
+            from decimal import Decimal
+
+            from services.auto_accounting_service import apply_invoice_payment_match_sync
+
+            try:
+                iid = int(args.get("invoice_id") or 0)
+            except (TypeError, ValueError):
+                iid = 0
+            raw_amt = args.get("amount_inr")
+            if iid <= 0 or raw_amt is None:
+                return {"ok": False, "message": "invoice_id and amount_inr required"}
+            ref = str(args.get("reference") or "").strip() or None
+            return apply_invoice_payment_match_sync(
+                organization_id=oid,
+                invoice_id=iid,
+                amount_inr=Decimal(str(raw_amt)),
+                reference=ref,
+                user_id=uid if uid > 0 else None,
+            )
+
+        if name == "suggest_personal_expense_from_receipt":
+            from services.auto_accounting_service import jarvis_expense_detection_message
+
+            scan = {
+                "ok": True,
+                "amount": float(args.get("amount_inr") or 0),
+                "vendor_name": str(args.get("vendor_name") or "").strip(),
+                "category": str(args.get("category") or "other").strip(),
+            }
+            if not scan["vendor_name"] or not scan["amount"]:
+                return {"ok": False, "message": "vendor_name and amount_inr required"}
+            return {
+                "ok": True,
+                "message": jarvis_expense_detection_message(scan),
+                "hint": "User can confirm in Personal Finance → receipt scan.",
+            }
 
         if name == "create_website":
             from services.website_builder_service import build_website_sync, user_can_access_org_sync
