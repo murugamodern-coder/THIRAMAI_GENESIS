@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import select
 
 from core.database import get_session_factory
-from core.db.models import InventoryItem, Supplier
+from core.db.models import InventoryItem, JarvisFact, Supplier
 
 _log = logging.getLogger("thiramai.jarvis_proactive_action_engine")
 
@@ -22,10 +22,36 @@ def user_execution_mode() -> str:
     """
     Global execution posture: ``suggest`` | ``confirm`` | ``auto``.
 
-    Per-user override can be added later (e.g. ``jarvis_facts`` key ``proactive_execution_mode``).
+    Per-user override: ``JarvisFact`` ``fact_type=jarvis_settings``, ``key=proactive_execution_mode``.
     """
     raw = (os.getenv("THIRAMAI_PROACTIVE_EXECUTION_MODE") or "suggest").strip().lower()
     return raw if raw in ("suggest", "confirm", "auto") else "suggest"
+
+
+def user_execution_mode_for_user(user_id: int) -> str:
+    """Resolve execution mode for a user (fact override → env default)."""
+    uid = int(user_id)
+    if uid <= 0:
+        return user_execution_mode()
+    factory = get_session_factory()
+    if factory is None:
+        return user_execution_mode()
+    try:
+        with factory() as session:
+            row = session.execute(
+                select(JarvisFact).where(
+                    JarvisFact.user_id == uid,
+                    JarvisFact.fact_type == "jarvis_settings",
+                    JarvisFact.key == "proactive_execution_mode",
+                ).limit(1)
+            ).scalar_one_or_none()
+        if row:
+            v = (row.value or "").strip().lower()
+            if v in ("suggest", "confirm", "auto"):
+                return v
+    except Exception as exc:
+        _log.debug("user_execution_mode_for_user: %s", exc)
+    return user_execution_mode()
 
 
 def auto_po_draft_enabled() -> bool:
@@ -38,6 +64,7 @@ def build_reorder_po_draft_payload_sync(
     sku: str,
     user_id: int,
     quantity_hint: Any = None,
+    supplier_index: int = 0,
 ) -> dict[str, Any]:
     """
     Build ``action_ready_payload`` for a draft purchase order (supplier + line).
@@ -52,9 +79,14 @@ def build_reorder_po_draft_payload_sync(
     factory = get_session_factory()
     if factory is None:
         return {"ok": False, "error": "database not configured", "handler": "create_purchase_order_draft"}
+    idx = max(0, int(supplier_index))
     with factory() as session:
         sup = session.execute(
-            select(Supplier).where(Supplier.organization_id == oid).order_by(Supplier.name.asc()).limit(1)
+            select(Supplier)
+            .where(Supplier.organization_id == oid)
+            .order_by(Supplier.name.asc())
+            .offset(idx)
+            .limit(1)
         ).scalar_one_or_none()
         if sup is None:
             return {
@@ -98,6 +130,7 @@ def build_reorder_po_draft_payload_sync(
         "lines": lines,
         "notes": "Auto-draft from Jarvis proactive (review before sending to supplier).",
         "user_id": uid,
+        "supplier_index": idx,
     }
 
 
@@ -107,7 +140,7 @@ def try_execute_create_po_draft(*, user_id: int, payload: dict[str, Any]) -> dic
 
     Returns execution result dict, or ``None`` when skipped.
     """
-    if user_execution_mode() != "auto" or not auto_po_draft_enabled():
+    if user_execution_mode_for_user(int(user_id)) != "auto" or not auto_po_draft_enabled():
         return None
     if (payload.get("handler") or "") != "create_purchase_order_draft":
         return None

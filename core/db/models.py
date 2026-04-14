@@ -308,6 +308,15 @@ class User(Base):
     jarvis_proactive_feedback_rows: Mapped[list["JarvisProactiveFeedback"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    jarvis_goal_rows: Mapped[list["JarvisGoal"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    jarvis_daily_agent_plan_rows: Mapped[list["JarvisDailyAgentPlan"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    jarvis_agent_action_log_rows: Mapped[list["JarvisAgentActionLog"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     stock_watchlist_rows: Mapped[list["StockWatchlistEntry"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -2757,6 +2766,130 @@ class JarvisProactiveFeedback(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="jarvis_proactive_feedback_rows")
+
+
+class JarvisGoal(Base):
+    """Upgrade 2.2 — user-defined goals the autonomous agent tracks over time."""
+
+    __tablename__ = "jarvis_goals"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    goal_type: Mapped[str] = mapped_column(String(64), nullable=False, default="custom")
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    target_value: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    deadline: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    progress: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    meta: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_goal_rows")
+    organization: Mapped[Optional["Organization"]] = relationship()
+    subtasks: Mapped[list["JarvisGoalSubtask"]] = relationship(
+        back_populates="goal", cascade="all, delete-orphan"
+    )
+
+
+class JarvisGoalSubtask(Base):
+    """Steps derived from ``break_into_subtasks`` for a ``JarvisGoal``."""
+
+    __tablename__ = "jarvis_goal_subtasks"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    goal_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("jarvis_goals.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    goal: Mapped["JarvisGoal"] = relationship(back_populates="subtasks")
+
+
+class JarvisDailyAgentPlan(Base):
+    """Persisted 'Today's Plan' (business + personal + risks) for the autonomous loop."""
+
+    __tablename__ = "jarvis_daily_agent_plans"
+    __table_args__ = (UniqueConstraint("user_id", "plan_date", name="uq_jarvis_daily_agent_plan_user_date"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    plan_date: Mapped[date] = mapped_column(Date, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_daily_agent_plan_rows")
+
+
+class JarvisAgentActionLog(Base):
+    """Outcomes of autonomous steps (success / partial / failed) for learning and retries."""
+
+    __tablename__ = "jarvis_agent_action_log"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    action_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    detail: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="jarvis_agent_action_log_rows")
 
 
 class StockWatchlistEntry(Base):

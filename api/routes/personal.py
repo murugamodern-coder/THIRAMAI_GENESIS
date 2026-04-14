@@ -168,6 +168,14 @@ class JarvisProactiveExecuteBody(BaseModel):
     dedupe_key: str = Field(..., min_length=1, max_length=256)
 
 
+class JarvisGoalCreateBody(BaseModel):
+    """Upgrade 2.2 — persisted Jarvis goal (e.g. profit target)."""
+
+    description: str = Field(..., min_length=1, max_length=8000)
+    organization_id: int | None = Field(None, ge=1)
+    goal_type: str | None = Field(None, max_length=64)
+
+
 class QuickIntentBody(BaseModel):
     phrase: str = Field(..., min_length=1, max_length=2000)
 
@@ -500,13 +508,14 @@ async def jarvis_proactive_agentic_insights(
         raise HTTPException(status_code=400, detail="Real user id required")
 
     def _run() -> dict[str, Any]:
-        from services.jarvis_proactive_action_engine import user_execution_mode
+        from services.jarvis_proactive_action_engine import user_execution_mode_for_user
         from services.jarvis_proactive_engine import JarvisProactiveEngine
 
-        insights = JarvisProactiveEngine.build_intelligent_insights_from_recent(int(user.id), limit=limit)
+        uid = int(user.id)
+        insights = JarvisProactiveEngine.build_intelligent_insights_from_recent(uid, limit=limit)
         return {
             "ok": True,
-            "execution_mode": user_execution_mode(),
+            "execution_mode": user_execution_mode_for_user(uid),
             "insights": [i.to_agentic_output() for i in insights],
         }
 
@@ -531,3 +540,80 @@ async def jarvis_proactive_execute(
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("error") or "execute failed")
     return JSONResponse(content=out)
+
+
+@router.post("/jarvis-agent/goals")
+async def jarvis_agent_create_goal(
+    body: JarvisGoalCreateBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> JSONResponse:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_goal_engine import create_goal_sync
+
+        return create_goal_sync(
+            user_id=int(user.id),
+            description=body.description,
+            goal_type=body.goal_type,
+            organization_id=body.organization_id,
+        )
+
+    out = await asyncio.to_thread(_run)
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "create failed")
+    return JSONResponse(content=out)
+
+
+@router.get("/jarvis-agent/goals")
+async def jarvis_agent_list_goals(
+    user: CurrentUser = Depends(get_current_user),
+    limit: int = Query(20, ge=1, le=50),
+) -> JSONResponse:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_goal_engine import get_active_goals_sync
+
+        return {"ok": True, "goals": get_active_goals_sync(user_id=int(user.id), limit=limit)}
+
+    return JSONResponse(content=await asyncio.to_thread(_run))
+
+
+@router.post("/jarvis-agent/goals/{goal_id}/subtasks")
+async def jarvis_agent_break_subtasks(
+    goal_id: int,
+    user: CurrentUser = Depends(get_current_user),
+) -> JSONResponse:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_goal_engine import break_into_subtasks_sync
+
+        return break_into_subtasks_sync(goal_id=int(goal_id), user_id=int(user.id))
+
+    out = await asyncio.to_thread(_run)
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "subtasks failed")
+    return JSONResponse(content=out)
+
+
+@router.post("/jarvis-agent/cycle")
+async def jarvis_agent_run_cycle(user: CurrentUser = Depends(get_current_user)) -> JSONResponse:
+    """Run one autonomous agent tick (rate-limited; safe actions only)."""
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    oid = int(user.organization_id)
+
+    def _run() -> dict[str, Any]:
+        from services.jarvis_autonomous_agent import run_agent_cycle_sync
+        from services.jarvis_proactive_engine import _org_ids_for_user
+
+        u = int(user.id)
+        oids = _org_ids_for_user(u) if oid <= 0 else [oid] + [x for x in _org_ids_for_user(u) if x != oid]
+        return run_agent_cycle_sync(user_id=u, organization_ids=oids[:5])
+
+    return JSONResponse(content=await asyncio.to_thread(_run))

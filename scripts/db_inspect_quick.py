@@ -34,7 +34,10 @@ def main() -> None:
             """
             SELECT table_name FROM information_schema.tables
             WHERE table_schema = 'public' AND table_name IN (
-              'inventory_items', 'jarvis_memory', 'jarvis_proactive_alerts',
+              'inventory_items', 'jarvis_memory', 'jarvis_episodes', 'jarvis_facts',
+              'jarvis_sessions', 'jarvis_session_turns', 'jarvis_proactive_alerts',
+              'jarvis_proactive_feedback', 'jarvis_goals', 'jarvis_goal_subtasks',
+              'jarvis_daily_agent_plans', 'jarvis_agent_action_log',
               'personal_meetings', 'notifications', 'meetings', 'stock_movements', 'suppliers'
             )
             ORDER BY 1

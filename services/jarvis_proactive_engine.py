@@ -158,7 +158,7 @@ def _finalize_insight(
     dedupe_key: str,
     payload: dict[str, Any],
 ) -> Insight:
-    from services.jarvis_proactive_action_engine import user_execution_mode
+    from services.jarvis_proactive_action_engine import user_execution_mode_for_user
     from services.jarvis_proactive_intelligence import (
         analyze_dependencies,
         apply_memory_to_scores,
@@ -201,7 +201,7 @@ def _finalize_insight(
 
     reasoning = _build_reasoning(deps=deps, mem_note=mem_note, alert_type=at)
     tool = _tool_for_alert_type(at)
-    mode = user_execution_mode()
+    mode = user_execution_mode_for_user(uid)
 
     action_ready: dict[str, Any] = {}
     rec_payload: dict[str, Any] = {"handler": tool, "alert_type": at, "dedupe_key": dedupe_key}
@@ -511,9 +511,9 @@ def execute_proactive_insight_action_sync(*, user_id: int, dedupe_key: str) -> d
     ins = _row_dict_to_insight(uid, rdict)
     if ins is None:
         return {"ok": False, "error": "could not build insight"}
-    from services.jarvis_proactive_action_engine import try_execute_create_po_draft, user_execution_mode
+    from services.jarvis_proactive_action_engine import try_execute_create_po_draft, user_execution_mode_for_user
 
-    mode = user_execution_mode()
+    mode = user_execution_mode_for_user(uid)
     if mode == "suggest":
         return {"ok": True, "skipped": "execution_mode_suggest", "insight": ins.to_agentic_output()}
     if ins.category == "reorder" and ins.action_ready_payload.get("handler") == "create_purchase_order_draft":

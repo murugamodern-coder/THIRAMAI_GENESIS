@@ -191,13 +191,60 @@ def run_jarvis_proactive_morning() -> None:
     """7:00 Asia/Kolkata — subsidy / EMI / overdue / idle machine alerts into ``jarvis_proactive_alerts``."""
     rid = new_request_id()
     try:
-        from services.jarvis_proactive_service import run_morning_job_all_users_sync
+        from workers.morning_intelligence_worker import run_morning_intelligence_once
 
-        out = run_morning_job_all_users_sync()
+        out = run_morning_intelligence_once()
         log_event(rid, "jarvis.proactive_morning", ok=True, extra=out)
     except Exception as exc:
         _log.exception("jarvis.proactive_morning_failed")
         log_event(rid, "jarvis.proactive_morning", ok=False, error=str(exc))
+
+
+def jarvis_realtime_scheduler_enabled() -> bool:
+    return (os.getenv("THIRAMAI_JARVIS_REALTIME_SCHEDULER") or "1").strip().lower() in ("1", "true", "yes", "on")
+
+
+def run_jarvis_proactive_realtime() -> None:
+    """Every 15m — meetings soon + strong watchlist signals (IST business + market hours)."""
+    rid = new_request_id()
+    try:
+        from workers.realtime_check_worker import run_realtime_checks_once
+
+        out = run_realtime_checks_once()
+        log_event(rid, "jarvis.proactive_realtime", ok=True, extra=out)
+    except Exception as exc:
+        _log.exception("jarvis.proactive_realtime_failed")
+        log_event(rid, "jarvis.proactive_realtime", ok=False, error=str(exc))
+
+
+def jarvis_autonomous_scheduler_enabled() -> bool:
+    """Upgrade 2.2 — periodic goal/plan execution ticks (safe, rate-limited per user)."""
+    return _truthy("THIRAMAI_JARVIS_AUTONOMOUS_SCHEDULER")
+
+
+def run_jarvis_autonomous_tick() -> None:
+    rid = new_request_id()
+    try:
+        from services.jarvis_autonomous_agent import run_autonomous_cycle_all_users_sync
+
+        out = run_autonomous_cycle_all_users_sync()
+        log_event(rid, "jarvis.autonomous_tick", ok=True, extra=out)
+    except Exception as exc:
+        _log.exception("jarvis.autonomous_tick_failed")
+        log_event(rid, "jarvis.autonomous_tick", ok=False, error=str(exc))
+
+
+def run_jarvis_autonomous_morning_bundle() -> None:
+    """07:10 Asia/Kolkata — persist Today's Plan + one autonomous cycle per active user."""
+    rid = new_request_id()
+    try:
+        from services.jarvis_autonomous_agent import run_jarvis_autonomous_morning_bundle_sync
+
+        out = run_jarvis_autonomous_morning_bundle_sync()
+        log_event(rid, "jarvis.autonomous_morning", ok=True, extra=out)
+    except Exception as exc:
+        _log.exception("jarvis.autonomous_morning_failed")
+        log_event(rid, "jarvis.autonomous_morning", ok=False, error=str(exc))
 
 
 def start_sovereign_scheduler() -> BackgroundScheduler | None:
@@ -278,6 +325,32 @@ def start_sovereign_scheduler() -> BackgroundScheduler | None:
         max_instances=1,
         coalesce=True,
     )
+    if jarvis_realtime_scheduler_enabled():
+        sched.add_job(
+            run_jarvis_proactive_realtime,
+            IntervalTrigger(minutes=15),
+            id="thiramai_jarvis_proactive_realtime",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+    sched.add_job(
+        run_jarvis_autonomous_morning_bundle,
+        CronTrigger(hour=7, minute=10, timezone="Asia/Kolkata"),
+        id="thiramai_jarvis_autonomous_morning",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    if jarvis_autonomous_scheduler_enabled():
+        sched.add_job(
+            run_jarvis_autonomous_tick,
+            IntervalTrigger(minutes=30),
+            id="thiramai_jarvis_autonomous_tick",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
     sched.start()
     _scheduler = sched
     log_event(
