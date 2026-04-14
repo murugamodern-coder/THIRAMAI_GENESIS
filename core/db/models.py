@@ -284,6 +284,7 @@ class User(Base):
     personal_meetings: Mapped[list["PersonalMeeting"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    financial_audit_logs: Mapped[list["FinancialAuditLog"]] = relationship(back_populates="user")
     user_integrations_rows: Mapped[list["UserIntegration"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -3097,6 +3098,43 @@ class GovtScheme(Base):
 
     user: Mapped[Optional["User"]] = relationship(back_populates="govt_scheme_rows")
     organization: Mapped[Optional["Organization"]] = relationship(back_populates="govt_schemes")
+
+
+class FinancialAuditLog(Base):
+    """
+    Immutable append-only financial audit trail.
+
+    Rows must never be deleted by application code (compliance / forensic replay).
+    """
+
+    __tablename__ = "financial_audit_logs"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    entity_id: Mapped[Optional[int]] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), nullable=True)
+    before_state: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict
+    )
+    after_state: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict
+    )
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[Optional["User"]] = relationship(back_populates="financial_audit_logs")
 
 
 # Back-compat alias (deprecated)

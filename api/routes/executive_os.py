@@ -164,6 +164,21 @@ async def executive_vault_upload(
 ) -> dict[str, Any]:
     _require_real_user(_user)
     raw = await file.read()
+    from core.security.upload_validation import validate_upload_bytes
+
+    fn = (file.filename or "upload").lower()
+    ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
+    allowed = ("pdf", "png", "jpg", "jpeg")
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail=f"allowed types: {', '.join(allowed)}")
+    vchk = validate_upload_bytes(
+        raw,
+        filename=file.filename or "upload",
+        content_type=file.content_type,
+        allowed_ext=tuple(x for x in allowed if x == ext),
+    )
+    if not vchk.get("ok"):
+        raise HTTPException(status_code=400, detail=vchk.get("error") or "invalid upload")
     ct = (file.content_type or "application/octet-stream").strip()
     out = await asyncio.to_thread(
         save_executive_vault_upload_sync,

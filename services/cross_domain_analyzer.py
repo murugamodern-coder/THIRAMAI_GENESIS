@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_session_factory
 from core.db.models import Organization, PersonalLoan, ResearchDocument, UserOrganizationMembership
+from core.financial_mode import get_financial_mode
 from services.economics_service import get_business_margin
 from services.membership_service import list_memberships_for_user
 from services.portfolio_service import daily_equity_pnl_inr_sync, get_portfolio_summary_sync
@@ -348,6 +349,7 @@ def analyze_cross_domain(
         "risk_alerts": risk_alerts[:6],
         "recommendations": recommendations[:8],
         "metrics": {
+            "financial_mode": get_financial_mode(),
             "total_emi_inr": str(total_emi),
             "total_business_expense_inr": str(total_business_opex),
             "stock_loss_inr": str(stock_loss),

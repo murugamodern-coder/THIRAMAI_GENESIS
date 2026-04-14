@@ -61,6 +61,11 @@ class ChatQueryBody(BaseModel):
         ge=0,
         description="Remove a single pending mutating tool by index without executing it.",
     )
+    jarvis_session_id: str | None = Field(
+        None,
+        max_length=128,
+        description="Client-owned Jarvis session key for working + episodic memory continuity.",
+    )
 
     @model_validator(mode="after")
     def _message_required_unless_undo(self) -> ChatQueryBody:
@@ -104,6 +109,9 @@ async def _chat_response(
     vault_passphrase: str | None = None,
     correlation_id: str | None = None,
 ) -> JSONResponse:
+    from core.ai_input_sanitize import sanitize_user_text
+
+    query = sanitize_user_text(query)
     if parsed_sell_intent_from_message(query) and not role_may_execute_retail_sale(_user.role_name):
         raise HTTPException(
             status_code=403,
@@ -480,6 +488,11 @@ async def chat_query(
         payload = await asyncio.to_thread(lambda: jarvis.undo_last_action(user=_user))
         return JSONResponse(content=payload)
     if body.agent_mode:
+        from core.ai_usage_limits import consume_llm_units
+
+        allowed, umsg = consume_llm_units(int(_user.id))
+        if not allowed:
+            raise HTTPException(status_code=429, detail=umsg or "LLM budget exceeded")
         from services import jarvis_agent_service as jarvis
 
         payload = await asyncio.to_thread(
@@ -491,6 +504,7 @@ async def chat_query(
                 context_organization_id=body.jarvis_context_org_id,
                 agent_confirm_tool_index=body.agent_confirm_tool_index,
                 agent_reject_tool_index=body.agent_reject_tool_index,
+                jarvis_session_id=body.jarvis_session_id,
             ),
         )
         return JSONResponse(content=payload)

@@ -127,11 +127,17 @@ class StockRealtimeMonitor:
                             try:
                                 q.get_nowait()
                             except Exception:
-                                pass
+                                _log.debug("stock ws queue drain failed", exc_info=True)
                             try:
                                 q.put_nowait(payload)
                             except Exception:
-                                pass
+                                _log.debug("stock ws queue re-push failed", exc_info=True)
+                    try:
+                        from services.ws_redis_bridge import publish_user_channel
+
+                        publish_user_channel("stock", uid, payload)
+                    except Exception:
+                        _log.debug("stock ws redis fanout skipped", exc_info=True)
                 await asyncio.sleep(self.poll_interval_sec())
         except asyncio.CancelledError:
             return

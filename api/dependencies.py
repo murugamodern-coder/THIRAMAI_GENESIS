@@ -399,14 +399,57 @@ def require_permission(*permissions: Permission) -> Callable[..., CurrentUser]:
     return _dep
 
 
+def ensure_org_membership(user: CurrentUser, organization_id: int) -> None:
+    """
+    Raise 403 unless the user has an active membership on ``organization_id``.
+
+    When ``organization_id`` equals the JWT active org, skips a DB lookup.
+    """
+    oid = int(organization_id)
+    if oid <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid organization_id")
+    if oid == int(user.organization_id):
+        return
+    factory = get_session_factory()
+    if factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database is not configured (DATABASE_URL).",
+        )
+    from core.security.org_access import verify_org_membership
+
+    with factory() as session:
+        if not verify_org_membership(session, user_id=int(user.id), organization_id=oid):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of this organization",
+            )
+
+
 async def get_current_user_optional_org_match(
     user: Annotated[CurrentUser, Depends(get_current_user)],
     organization_id: int | None = None,
 ) -> CurrentUser:
-    """
-    Optional helper: ensure JWT org matches a path/query organization_id when you add multi-tenant routes.
-    Currently unused; kept for future row-level scoping.
-    """
-    if organization_id is not None and user.organization_id != organization_id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Organization scope mismatch")
+    """Ensure the user may act in ``organization_id`` when provided (membership, not JWT string match only)."""
+    if organization_id is not None:
+        ensure_org_membership(user, int(organization_id))
     return user
+
+
+def validate_user_access(user_id: int, organization_id: int) -> bool:
+    """
+    Guard-layer membership check without a route ``CurrentUser`` (service jobs, scripts, tests).
+
+    Opens a short-lived DB session. Routes should prefer ``ensure_org_membership`` for 403 semantics.
+    """
+    uid = int(user_id)
+    oid = int(organization_id)
+    if uid <= 0 or oid <= 0:
+        return False
+    factory = get_session_factory()
+    if factory is None:
+        return False
+    from core.security.org_access import validate_user_access as validate_user_access_in_session
+
+    with factory() as session:
+        return validate_user_access_in_session(session, uid, oid)

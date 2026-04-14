@@ -41,6 +41,9 @@ from services.jarvis_extended_tools import (
     execute_jarvis_extended_tool,
     extended_tool_specs,
 )
+from core.ai_input_sanitize import sanitize_user_text
+from core.ai_output_contract import apply_ai_safety_envelope
+from core.ai_tool_arg_policy import sanitize_tool_arguments
 from services.jarvis_memory_engine import get_default_engine
 from services.jarvis_memory_learn import learn_from_turn_sync
 from services.jarvis_memory_service import bump_memory_usage_sync, fetch_memory_entries_sync
@@ -210,6 +213,23 @@ def resolve_jarvis_organization_id(user: Any, requested: int | None) -> tuple[in
     return rid, None
 
 
+def _envelope_agent_safety(payload: dict[str, Any]) -> dict[str, Any]:
+    """Attach confidence + threshold metadata to successful agent replies."""
+    if not payload.get("ok"):
+        return payload
+    nar = str(payload.get("narrative") or payload.get("response") or "")
+    src: list[str] = []
+    for tr in payload.get("tool_results") or []:
+        if not isinstance(tr, dict):
+            continue
+        res = tr.get("result")
+        if isinstance(res, dict):
+            for u in res.get("sources") or res.get("citations") or []:
+                if isinstance(u, str) and u.startswith("http"):
+                    src.append(u[:500])
+    return apply_ai_safety_envelope(dict(payload), narrative=nar, sources=src)
+
+
 def execute_tool_safe(
     *,
     name: str,
@@ -218,6 +238,7 @@ def execute_tool_safe(
     context_organization_id: int | None = None,
 ) -> dict[str, Any]:
     try:
+        args = sanitize_tool_arguments(name, args)
         return execute_tool(
             name=name,
             args=args,
@@ -291,6 +312,7 @@ def execute_tool(
     user: Any,
     context_organization_id: int | None = None,
 ) -> dict[str, Any]:
+    args = sanitize_tool_arguments(name, args)
     uid = int(user.id)
     eff, err = resolve_jarvis_organization_id(user, context_organization_id)
     if err:
@@ -621,6 +643,7 @@ def run_agent(
     if not key:
         return {"ok": False, "narrative": "", "error": "GROQ_API_KEY not set"}
 
+    message = sanitize_user_text(message or "")
     uid = int(user.id)
 
     if not agent_confirm and context_organization_id is not None and int(context_organization_id) > 0:
@@ -879,16 +902,19 @@ def run_agent(
                 assistant_message=last_choice_content or "Done.",
                 tool_results=all_auto_results,
             )
-            return {
-                "ok": True,
-                "narrative": last_choice_content or "Done.",
-                "response": last_choice_content or "Done.",
-                "agent_mode": True,
-                "action_intent": {"kind": "jarvis_chat", "success": True},
-                "groq_model": routed_model,
-                "route_category": route_category,
-                "route_tool_count": len(tools_subset),
-            }
+            return _envelope_agent_safety(
+                {
+                    "ok": True,
+                    "narrative": last_choice_content or "Done.",
+                    "response": last_choice_content or "Done.",
+                    "agent_mode": True,
+                    "action_intent": {"kind": "jarvis_chat", "success": True},
+                    "groq_model": routed_model,
+                    "route_category": route_category,
+                    "route_tool_count": len(tools_subset),
+                    "tool_results": all_auto_results,
+                }
+            )
 
         serialized_step: list[dict[str, Any]] = []
         for i, tc in enumerate(tool_calls):
@@ -944,20 +970,22 @@ def run_agent(
                 assistant_message=intro,
                 tool_results=all_auto_results,
             )
-            return {
-                "ok": True,
-                "narrative": intro,
-                "response": intro,
-                "agent_mode": True,
-                "needs_confirmation": True,
-                "agent_pending_id": pending_id,
-                "proposals": proposals,
-                "tool_results": all_auto_results,
-                "action_intent": {"kind": "jarvis_pending", "success": True},
-                "groq_model": routed_model,
-                "route_category": route_category,
-                "route_tool_count": len(tools_subset),
-            }
+            return _envelope_agent_safety(
+                {
+                    "ok": True,
+                    "narrative": intro,
+                    "response": intro,
+                    "agent_mode": True,
+                    "needs_confirmation": True,
+                    "agent_pending_id": pending_id,
+                    "proposals": proposals,
+                    "tool_results": all_auto_results,
+                    "action_intent": {"kind": "jarvis_pending", "success": True},
+                    "groq_model": routed_model,
+                    "route_category": route_category,
+                    "route_tool_count": len(tools_subset),
+                }
+            )
 
         assistant_tool_calls = [
             {
@@ -1008,15 +1036,17 @@ def run_agent(
         assistant_message=narrative,
         tool_results=all_auto_results,
     )
-    return {
-        "ok": True,
-        "narrative": narrative,
-        "response": narrative,
-        "agent_mode": True,
-        "tool_results": all_auto_results,
-        "action_intent": {"kind": "jarvis_agent", "success": True},
-        "groq_model": routed_model,
-        "route_category": route_category,
-        "route_tool_count": len(tools_subset),
-        "agent_loop_exhausted": True,
-    }
+    return _envelope_agent_safety(
+        {
+            "ok": True,
+            "narrative": narrative,
+            "response": narrative,
+            "agent_mode": True,
+            "tool_results": all_auto_results,
+            "action_intent": {"kind": "jarvis_agent", "success": True},
+            "groq_model": routed_model,
+            "route_category": route_category,
+            "route_tool_count": len(tools_subset),
+            "agent_loop_exhausted": True,
+        }
+    )

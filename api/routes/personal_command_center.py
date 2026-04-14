@@ -6,6 +6,7 @@ Uses ``X-Personal-Vault-Passphrase`` (optional) with ``life_os_service.unlock_fe
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -73,11 +74,27 @@ async def today_brief(
     if int(user.id) <= 0:
         raise HTTPException(status_code=400, detail="Real user id required")
     fn = _fernet(int(user.id), x_personal_vault_passphrase)
-    return pcc.build_today_brief_sync(
-        user_id=int(user.id),
-        organization_id=int(user.organization_id),
-        fernet=fn,
-    )
+    try:
+        ttl = int((os.getenv("THIRAMAI_TODAY_BRIEF_CACHE_SEC") or "45").strip())
+    except ValueError:
+        ttl = 45
+    if ttl <= 0:
+        return pcc.build_today_brief_sync(
+            user_id=int(user.id),
+            organization_id=int(user.organization_id),
+            fernet=fn,
+        )
+    from services.cache_layer import cache_key_today_brief, get_or_set_cache
+
+    day = datetime.now(timezone.utc).date().isoformat()
+    key = cache_key_today_brief(int(user.id), int(user.organization_id), day) + (":e1" if fn else ":e0")
+    uid = int(user.id)
+    oid = int(user.organization_id)
+
+    def _compute() -> dict[str, Any]:
+        return pcc.build_today_brief_sync(user_id=uid, organization_id=oid, fernet=fn)
+
+    return get_or_set_cache(key, ttl, _compute)
 
 
 @router.get("/weekly-review", summary="Last 7 days — tasks, spend, health, meetings, suggested priorities")
@@ -145,8 +162,20 @@ async def expenses_scan_preview(
     if int(user.id) <= 0:
         raise HTTPException(status_code=400, detail="Real user id required")
     raw = await file.read()
-    if not raw or len(raw) > 12_000_000:
-        raise HTTPException(status_code=400, detail="invalid file size")
+    from core.security.upload_validation import validate_upload_bytes
+
+    fn = (file.filename or "receipt.jpg").lower()
+    ext = fn.rsplit(".", 1)[-1] if "." in fn else "jpg"
+    if ext not in ("jpg", "jpeg", "png", "webp", "pdf"):
+        ext = "jpg"
+    vchk = validate_upload_bytes(
+        raw,
+        filename=file.filename or f"receipt.{ext}",
+        content_type=file.content_type,
+        allowed_ext=("jpg", "jpeg", "png", "webp", "pdf"),
+    )
+    if not vchk.get("ok"):
+        raise HTTPException(status_code=400, detail=vchk.get("error") or "invalid upload")
     ct = (file.content_type or "image/jpeg").split(";")[0].strip()
     from services.auto_accounting_service import create_receipt_preview_sync
 

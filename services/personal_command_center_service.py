@@ -691,7 +691,10 @@ def build_today_brief_sync(
             organization_id=oid,
             financial_snapshot=fin,
         )
-    except Exception:
+    except Exception as exc:
+        from core.operation_errors import log_subsystem_failure
+
+        log_subsystem_failure("cross_domain_insights", exc, user_id=uid, organization_id=oid)
         payload["cross_domain_insights"] = {"ok": False, "error": "cross_domain_unavailable"}
     return payload
 

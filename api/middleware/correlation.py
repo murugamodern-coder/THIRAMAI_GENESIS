@@ -8,9 +8,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+import logging
+
+from core.http_metrics import record_request
 from core.observability import clear_log_context, set_log_context
 
 HEADER_NAME = "X-Correlation-ID"
+_log = logging.getLogger("thiramai.middleware.correlation")
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
@@ -35,7 +39,17 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         set_log_context(trace_id=cid)
         try:
             response = await call_next(request)
+        except BaseException:
+            try:
+                record_request(status_code=500)
+            except Exception as exc:
+                _log.warning("record_request failed: %s", exc)
+            raise
         finally:
             clear_log_context()
+        try:
+            record_request(status_code=int(response.status_code))
+        except Exception as exc:
+            _log.warning("record_request failed: %s", exc)
         response.headers[HEADER_NAME] = cid
         return response

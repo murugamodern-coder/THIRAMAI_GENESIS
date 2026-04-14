@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from core.database import get_session_factory
 from core.db.models import Bill, Equipment, Inventory, MaintenanceLog, OperationalExpense, Organization, StaffProfile
 from core.db.provisioning import ensure_tenant_defaults, sync_organizations_id_sequence
+from core.financial_mode import get_financial_mode, is_accounting_strict
 from services.dashboard_ops_state import get_operational_infra_budget_inr_override
 
 _identity_lock = threading.Lock()
@@ -218,6 +219,8 @@ def get_business_margin(
             "ok": False,
             "error": "DATABASE_URL is not configured",
             "organization_id": oid,
+            "financial_mode": get_financial_mode(),
+            "financial_reliability": "ai_insight",
         }
 
     now = _as_of if _as_of is not None else _utc_now()
@@ -247,9 +250,18 @@ def get_business_margin(
         else:
             gross_margin_pct = None
 
+    mode = get_financial_mode()
+    tax_basis_note = (
+        "strict_accounting_requires_line_level_gst_basis"
+        if is_accounting_strict()
+        else "management_kpi_mixed_tax_basis"
+    )
     return {
         "ok": True,
         "organization_id": oid,
+        "financial_mode": mode,
+        "financial_reliability": "accounting_truth" if is_accounting_strict() else "ai_insight",
+        "tax_basis": tax_basis_note,
         "period_utc": {"start": m0.isoformat(), "end_inclusive": now.isoformat()},
         "revenue_inr": str(revenue),
         "cogs_inr": str(cogs),

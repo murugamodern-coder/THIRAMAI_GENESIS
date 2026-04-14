@@ -505,8 +505,16 @@ async def business_import_bank_statement(
     )
 
     raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="empty file")
+    from core.security.upload_validation import validate_upload_bytes
+
+    vchk = validate_upload_bytes(
+        raw,
+        filename=file.filename or "statement",
+        content_type=file.content_type,
+        allowed_ext=("csv", "pdf"),
+    )
+    if not vchk.get("ok"):
+        raise HTTPException(status_code=400, detail=vchk.get("error") or "invalid upload")
     name = (file.filename or "").lower()
     ct = (file.content_type or "").lower()
     txs: list[dict[str, Any]] = []
@@ -535,6 +543,28 @@ async def business_import_bank_statement(
         transactions=txs,
         user_id=int(_user.id),
     )
+    try:
+        from services.financial_audit_log_service import append_financial_audit_log_sync
+
+        append_financial_audit_log_sync(
+            action="bank_statement_import",
+            user_id=int(_user.id),
+            organization_id=int(_user.organization_id),
+            entity_type="operational_expense_batch",
+            before_state={"rows_in_file": len(txs)},
+            after_state={"created": len(out.get("created") or []), "ok": out.get("ok")},
+            correlation_id=_correlation_id(request),
+        )
+    except Exception as exc:
+        from core.operation_errors import log_subsystem_failure
+
+        log_subsystem_failure(
+            "financial_audit_log",
+            exc,
+            user_id=int(_user.id),
+            organization_id=int(_user.organization_id),
+            extra={"action": "bank_statement_import"},
+        )
     audit_service.log_business_depth_mutation(
         correlation_id=_correlation_id(request),
         action_name="bank_statement_import",

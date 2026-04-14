@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
-
-from sqlalchemy import select
 
 from core.database import get_session_factory
 from core.db.models import ResearchDocument
@@ -23,7 +22,7 @@ _MARKET_SYSTEM = """You are a business analyst for Indian SMEs. From the web sni
 Use empty string or [] if unknown. No markdown, JSON only."""
 
 
-def research_market_sync(
+def _research_market_uncached(
     query: str,
     *,
     user_id: int,
@@ -85,3 +84,29 @@ def research_market_sync(
             except Exception as exc:
                 _log.warning("persist research_document: %s", exc)
     return out
+
+
+def research_market_sync(
+    query: str,
+    *,
+    user_id: int,
+    organization_id: int | None = None,
+    persist: bool = True,
+) -> dict[str, Any]:
+    try:
+        ttl = int((os.getenv("THIRAMAI_RESEARCH_CACHE_TTL_SEC") or "180").strip())
+    except ValueError:
+        ttl = 180
+    if ttl <= 0:
+        return _research_market_uncached(query, user_id=user_id, organization_id=organization_id, persist=persist)
+    from services.cache_layer import cache_key_research_market, get_or_set_cache
+
+    q = (query or "").strip()
+    uid = int(user_id)
+    oidk = int(organization_id or 0)
+    key = cache_key_research_market(uid, oidk, q) + f":p{1 if persist else 0}"
+    return get_or_set_cache(
+        key,
+        ttl,
+        lambda: _research_market_uncached(query, user_id=user_id, organization_id=organization_id, persist=persist),
+    )
