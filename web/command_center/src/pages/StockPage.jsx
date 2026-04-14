@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  deleteStockAlert,
+  fetchAuthMe,
+  fetchStockAlerts,
   fetchStockMorningBrief,
   fetchStockPortfolio,
   fetchStockQuote,
+  fetchStockRealtimeStatus,
   fetchStockSignal,
   fetchStockWatchlist,
+  postStockAlert,
   postStockWatchlist,
+  subscribeStockRealtime,
 } from "../api/commandCenterApi.js";
 import { showToastDedup } from "../lib/toastDedup.js";
 
@@ -20,6 +26,7 @@ function Card({ title, children }) {
 }
 
 export default function StockPage() {
+  const [myUserId, setMyUserId] = useState(null);
   const [watchlist, setWatchlist] = useState([]);
   const [quotes, setQuotes] = useState({});
   const [signals, setSignals] = useState({});
@@ -27,6 +34,15 @@ export default function StockPage() {
   const [brief, setBrief] = useState(null);
   const [loading, setLoading] = useState(false);
   const [newSym, setNewSym] = useState("");
+  const [rtMode, setRtMode] = useState(null);
+  const [liveTick, setLiveTick] = useState(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [savedAlerts, setSavedAlerts] = useState([]);
+  const [alertSymbol, setAlertSymbol] = useState("");
+  const [alertCondition, setAlertCondition] = useState("above");
+  const [alertPrice, setAlertPrice] = useState("");
+  const [alertPct, setAlertPct] = useState("");
+  const [alertAction, setAlertAction] = useState("notify");
 
   const refreshWatchlist = useCallback(async () => {
     try {
@@ -55,11 +71,61 @@ export default function StockPage() {
     }
   }, []);
 
+  const loadAlerts = useCallback(async () => {
+    try {
+      const r = await fetchStockAlerts();
+      setSavedAlerts(Array.isArray(r?.items) ? r.items : []);
+    } catch {
+      setSavedAlerts([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const me = await fetchAuthMe();
+        if (me?.id != null && Number(me.id) > 0) setMyUserId(Number(me.id));
+      } catch {
+        setMyUserId(null);
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     refreshWatchlist();
     loadPortfolio();
     loadBrief();
   }, [refreshWatchlist, loadPortfolio, loadBrief]);
+
+  useEffect(() => {
+    if (!myUserId) return;
+    (async () => {
+      try {
+        const s = await fetchStockRealtimeStatus();
+        setRtMode(s?.mode || null);
+      } catch {
+        setRtMode(null);
+      }
+      loadAlerts();
+    })();
+  }, [myUserId, loadAlerts]);
+
+  useEffect(() => {
+    if (!myUserId) return undefined;
+    setWsConnected(false);
+    const disconnect = subscribeStockRealtime(myUserId, {
+      onReady: () => setWsConnected(true),
+      onTick: (msg) => {
+        setLiveTick(msg);
+        if (msg?.portfolio?.ok) setPortfolio(msg.portfolio);
+      },
+      onError: () => setWsConnected(false),
+    });
+    return () => {
+      disconnect();
+      setWsConnected(false);
+    };
+  }, [myUserId]);
 
   const refreshQuotesAndSignals = useCallback(async (syms) => {
     const list = Array.isArray(syms) ? syms : [];
@@ -113,18 +179,161 @@ export default function StockPage() {
     }
   }, [newSym, refreshWatchlist]);
 
+  const submitAlert = useCallback(async () => {
+    const sym = alertSymbol.trim().toUpperCase();
+    if (!sym) {
+      showToastDedup({ type: "error", message: "Symbol required" });
+      return;
+    }
+    const body = {
+      symbol: sym,
+      condition: alertCondition,
+      action: alertAction,
+      exchange_suffix: "NS",
+    };
+    if (alertCondition === "percent_change") {
+      const p = parseFloat(alertPct);
+      if (!Number.isFinite(p) || p <= 0) {
+        showToastDedup({ type: "error", message: "Percent threshold required" });
+        return;
+      }
+      body.percent_threshold = p;
+    } else {
+      const px = parseFloat(alertPrice);
+      if (!Number.isFinite(px) || px <= 0) {
+        showToastDedup({ type: "error", message: "Price threshold required" });
+        return;
+      }
+      body.price = px;
+    }
+    setLoading(true);
+    try {
+      await postStockAlert(body);
+      setAlertSymbol("");
+      setAlertPrice("");
+      setAlertPct("");
+      await loadAlerts();
+      showToastDedup({ type: "success", message: "Alert saved" });
+    } catch (e) {
+      showToastDedup({ type: "error", message: e?.response?.data?.detail || e?.message || "Failed" });
+    } finally {
+      setLoading(false);
+    }
+  }, [alertSymbol, alertCondition, alertPrice, alertPct, alertAction, loadAlerts]);
+
+  const removeAlert = useCallback(
+    async (id) => {
+      setLoading(true);
+      try {
+        await deleteStockAlert(id);
+        await loadAlerts();
+        showToastDedup({ type: "success", message: "Alert removed" });
+      } catch (e) {
+        showToastDedup({ type: "error", message: e?.message || "Failed" });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadAlerts],
+  );
+
   const actionStyle = (action) => {
     if (action === "BUY") return { borderLeft: "4px solid #22c55e" };
     if (action === "SELL") return { borderLeft: "4px solid #ef4444" };
     return { borderLeft: "4px solid #94a3b8" };
   };
 
+  const displayPrices = useMemo(() => {
+    const p = liveTick?.prices || {};
+    const merged = { ...quotes };
+    Object.keys(p).forEach((k) => {
+      merged[k] = { ok: true, last: p[k]?.last, cached: !!p[k]?.cached };
+    });
+    return merged;
+  }, [liveTick, quotes]);
+
   return (
     <div className="cc-dashboard" style={{ maxWidth: 1100, margin: "0 auto", padding: "16px 20px 40px" }}>
       <h1 style={{ marginBottom: 8 }}>Stocks</h1>
       <p className="cc-muted" style={{ marginBottom: 20 }}>
-        Watchlist, live quotes, rule-based signals, and paper portfolio. Not investment advice.
+        Live WebSocket stream, watchlist, price alerts, rule-based signals, and paper portfolio. Not investment advice.
       </p>
+
+      <Card title="Live stream">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 8 }}>
+          <span className={wsConnected ? "cc-pill" : "cc-muted"} style={{ fontSize: 13 }}>
+            {wsConnected ? "WebSocket connected" : "Connecting…"}
+          </span>
+          {rtMode ? (
+            <span className="cc-muted" style={{ fontSize: 12 }}>
+              Backend: {rtMode}
+            </span>
+          ) : null}
+          {liveTick?.as_of_utc ? (
+            <span className="cc-muted" style={{ fontSize: 12 }}>
+              Last tick {liveTick.as_of_utc}
+            </span>
+          ) : null}
+        </div>
+        {watchlist.length ? (
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              overflowX: "auto",
+              padding: "8px 0",
+              borderTop: "1px solid var(--cc-border, #333)",
+              borderBottom: "1px solid var(--cc-border, #333)",
+            }}
+          >
+            {watchlist.map((sym) => {
+              const q = displayPrices[sym] || {};
+              const last = q.last;
+              return (
+                <div key={sym} style={{ flex: "0 0 auto", minWidth: 100 }}>
+                  <div style={{ fontWeight: 700 }}>{sym}</div>
+                  <div style={{ fontSize: "1.25rem" }}>{q.ok && last != null ? `₹${last}` : "—"}</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="cc-muted">Add symbols to populate the live ticker.</p>
+        )}
+        {liveTick?.risk ? (
+          <div style={{ marginTop: 12, padding: 10, background: "rgba(239,68,68,0.12)", borderRadius: 8 }}>
+            <strong>{liveTick.risk.title}</strong>
+            <div style={{ fontSize: 14 }}>{liveTick.risk.message}</div>
+          </div>
+        ) : null}
+        {Array.isArray(liveTick?.alerts) && liveTick.alerts.length > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <strong>Price alerts (this session)</strong>
+            <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+              {liveTick.alerts.map((a, i) => (
+                <li key={i} style={{ fontSize: 14 }}>
+                  {a.message} <span className="cc-muted">({a.action})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {Array.isArray(liveTick?.signals) && liveTick.signals.length > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <strong>Live signals</strong>
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              {liveTick.signals.map((s, i) => (
+                <div key={i} className="cc-card" style={{ padding: 10, margin: 0 }}>
+                  <div style={{ fontWeight: 700 }}>{s.kind}</div>
+                  <div className="cc-muted" style={{ fontSize: 13 }}>
+                    {s.symbol} — {s.message}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </Card>
 
       <Card title="Morning brief">
         {brief?.ok === false ? (
@@ -176,7 +385,64 @@ export default function StockPage() {
         </div>
       </Card>
 
-      <Card title="Live price cards">
+      <Card title="Price alerts">
+        <div style={{ display: "grid", gap: 8, maxWidth: 480 }}>
+          <input
+            className="cc-input"
+            placeholder="Symbol"
+            value={alertSymbol}
+            onChange={(e) => setAlertSymbol(e.target.value)}
+          />
+          <select className="cc-input" value={alertCondition} onChange={(e) => setAlertCondition(e.target.value)}>
+            <option value="above">Above price</option>
+            <option value="below">Below price</option>
+            <option value="percent_change">Percent move from reference (uses live ref)</option>
+          </select>
+          {alertCondition === "percent_change" ? (
+            <input
+              className="cc-input"
+              placeholder="Threshold % (e.g. 2)"
+              value={alertPct}
+              onChange={(e) => setAlertPct(e.target.value)}
+            />
+          ) : (
+            <input
+              className="cc-input"
+              placeholder="Price ₹"
+              value={alertPrice}
+              onChange={(e) => setAlertPrice(e.target.value)}
+            />
+          )}
+          <select className="cc-input" value={alertAction} onChange={(e) => setAlertAction(e.target.value)}>
+            <option value="notify">Notify</option>
+            <option value="suggest">Suggest</option>
+            <option value="confirm_sell">Confirm sell</option>
+          </select>
+          <button type="button" className="cc-btn cc-btn-primary" disabled={loading} onClick={submitAlert}>
+            Save alert
+          </button>
+        </div>
+        {savedAlerts.length ? (
+          <ul style={{ marginTop: 16, paddingLeft: 18 }}>
+            {savedAlerts.map((a) => (
+              <li key={a.id} style={{ marginBottom: 8, fontSize: 14 }}>
+                <strong>{a.symbol}</strong> — {a.condition}{" "}
+                {a.price_threshold != null ? `₹${a.price_threshold}` : ""}
+                {a.percent_threshold != null ? `${a.percent_threshold}% vs ref` : ""}{" "}
+                <button type="button" className="cc-btn cc-btn-secondary" disabled={loading} onClick={() => removeAlert(a.id)}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="cc-muted" style={{ marginTop: 12 }}>
+            No saved alerts.
+          </p>
+        )}
+      </Card>
+
+      <Card title="Live price cards (HTTP fallback)">
         {loading && watchlist.length > 0 ? <p className="cc-muted">Loading quotes…</p> : null}
         <div
           style={{
@@ -186,13 +452,13 @@ export default function StockPage() {
           }}
         >
           {watchlist.map((sym) => {
-            const q = quotes[sym] || {};
+            const q = displayPrices[sym] || {};
             const last = q.last;
             return (
               <div key={sym} className="cc-card" style={{ padding: 12, margin: 0 }}>
                 <div style={{ fontWeight: 700 }}>{sym}</div>
                 <div style={{ fontSize: "1.4rem", marginTop: 4 }}>
-                  {q.ok ? `₹${last}` : <span className="cc-muted">—</span>}
+                  {q.ok && last != null ? `₹${last}` : <span className="cc-muted">—</span>}
                 </div>
                 {q.cached ? <div className="cc-muted" style={{ fontSize: 12 }}>cached quote</div> : null}
               </div>

@@ -893,6 +893,46 @@ def upsert_research_scheme_alert_sync(
             )
 
 
+def upsert_equity_stop_trading_alert_sync(
+    *,
+    user_id: int,
+    organization_id: int,
+    daily_pnl_inr: Decimal,
+    limit_inr: Decimal,
+) -> None:
+    """Realtime monitor: persist one high-priority equity risk row (deduped per user per day)."""
+    uid = int(user_id)
+    oid = int(organization_id)
+    if uid <= 0 or oid <= 0:
+        return
+    factory = get_session_factory()
+    if factory is None:
+        return
+    today = datetime.now(_IST).date().isoformat()
+    dk = f"equity_stop_rt:{uid}:{today}"
+    msg = (
+        f"STOP TRADING: paper equity realized P&L today is ₹{daily_pnl_inr} "
+        f"(limit -₹{limit_inr}). Review before further sells."
+    )
+    with factory() as session:
+        with session.begin():
+            _upsert_alert(
+                session,
+                user_id=uid,
+                organization_id=oid,
+                alert_type="equity_risk",
+                priority="high",
+                message=msg[:8000],
+                action_text="Open Stocks — review risk",
+                dedupe_key=dk[:256],
+                payload={
+                    "daily_realized_pnl_inr": str(daily_pnl_inr),
+                    "limit_inr": str(limit_inr),
+                    "source": "realtime_monitor",
+                },
+            )
+
+
 def upsert_market_opportunity_alert_sync(
     *,
     user_id: int,

@@ -326,6 +326,9 @@ class User(Base):
     equity_portfolio_transactions: Mapped[list["EquityPortfolioTransaction"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    stock_price_alert_rows: Mapped[list["StockPriceAlert"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     research_document_rows: Mapped[list["ResearchDocument"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -3002,6 +3005,34 @@ class EquityPortfolioTransaction(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="equity_portfolio_transactions")
+
+
+class StockPriceAlert(Base):
+    """User-defined price / percent-change alerts for real-time stock monitor."""
+
+    __tablename__ = "stock_price_alerts"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    exchange_suffix: Mapped[str] = mapped_column(String(8), nullable=False, default="NS")
+    condition_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    price_threshold: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    reference_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    percent_threshold: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4), nullable=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False, default="notify")
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="stock_price_alert_rows")
 
 
 class ResearchDocument(Base):

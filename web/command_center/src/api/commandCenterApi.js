@@ -1,4 +1,4 @@
-import api from "./client.js";
+import api, { getToken } from "./client.js";
 
 /** Open GST invoice HTML in a new tab (uses JWT from axios). */
 export async function openStructuredInvoicePrint(invoiceId, supplyMode = "intra") {
@@ -469,6 +469,67 @@ export async function fetchStockPortfolio() {
 export async function fetchStockMorningBrief() {
   const { data } = await api.get("/stocks/assistant/morning-brief");
   return data;
+}
+
+export async function fetchStockRealtimeStatus() {
+  const { data } = await api.get("/stocks/assistant/realtime/status");
+  return data;
+}
+
+export async function fetchStockAlerts() {
+  const { data } = await api.get("/stocks/assistant/alerts");
+  return data;
+}
+
+export async function postStockAlert(payload) {
+  const { data } = await api.post("/stocks/assistant/alerts", payload);
+  return data;
+}
+
+export async function deleteStockAlert(alertId) {
+  const { data } = await api.delete(`/stocks/assistant/alerts/${alertId}`);
+  return data;
+}
+
+/**
+ * WebSocket `/ws/stocks/{userId}` — first message must be `{ token }` (JWT).
+ * @returns {() => void} disconnect
+ */
+export function subscribeStockRealtime(userId, handlers = {}) {
+  const { onTick, onReady, onError } = handlers;
+  const id = Number(userId);
+  if (!Number.isFinite(id) || id <= 0) {
+    return () => {};
+  }
+  const proto = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
+  const host = typeof window !== "undefined" ? window.location.host : "";
+  let ws;
+  try {
+    ws = new WebSocket(`${proto}://${host}/ws/stocks/${id}`);
+  } catch (e) {
+    onError?.(e);
+    return () => {};
+  }
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ token: getToken() || "" }));
+  };
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "stock_ws_ready") onReady?.(msg);
+      if (msg.type === "stock_tick") onTick?.(msg);
+    } catch (e) {
+      onError?.(e);
+    }
+  };
+  ws.onerror = (e) => onError?.(e);
+  return () => {
+    try {
+      ws.close();
+    } catch {
+      // ignore
+    }
+  };
 }
 
 /** Part E — Website builder (JWT). */
