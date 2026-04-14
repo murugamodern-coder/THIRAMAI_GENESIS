@@ -464,3 +464,24 @@ export async function fetchStockMorningBrief() {
   const { data } = await api.get("/stocks/assistant/morning-brief");
   return data;
 }
+
+/** Part E — Website builder (JWT). */
+export async function postWebsiteBuild(payload) {
+  const { data } = await api.post("/website-builder/build", payload);
+  return data;
+}
+
+export async function postWebsiteDeploy(payload = {}) {
+  const { data } = await api.post("/website-builder/deploy", payload);
+  return data;
+}
+
+export async function fetchWebsitePreviewHtml(organizationId) {
+  const { data } = await api.get(`/website-builder/preview/${organizationId}`);
+  return data;
+}
+
+export async function fetchWebsiteMeta(organizationId) {
+  const { data } = await api.get(`/website-builder/meta/${organizationId}`);
+  return data;
+}

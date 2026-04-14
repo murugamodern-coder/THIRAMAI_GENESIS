@@ -119,6 +119,40 @@ class Organization(Base):
     )
     research_documents: Mapped[list["ResearchDocument"]] = relationship(back_populates="organization")
     govt_schemes: Mapped[list["GovtScheme"]] = relationship(back_populates="organization")
+    generated_websites: Mapped[list["GeneratedWebsite"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
+
+
+class GeneratedWebsite(Base):
+    """Last built static microsite for an organization (Part E)."""
+
+    __tablename__ = "generated_websites"
+    __table_args__ = (
+        UniqueConstraint("organization_id", name="uq_generated_websites_org"),
+        UniqueConstraint("slug", name="uq_generated_websites_slug"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    template_type: Mapped[str] = mapped_column(String(32), nullable=False, default="shop")
+    public_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    disk_path: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship(back_populates="generated_websites")
 
 
 class Role(Base):

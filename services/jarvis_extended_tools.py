@@ -57,6 +57,7 @@ EXTENDED_TOOL_NAMES: frozenset[str] = frozenset(
         "add_to_watchlist",
         "generate_poster_content",
         "draft_business_email",
+        "create_website",
     }
 )
 
@@ -82,6 +83,7 @@ AUTO_EXECUTE_TOOL_NAMES: frozenset[str] = frozenset(
         "add_to_watchlist",
         "generate_poster_content",
         "draft_business_email",
+        "create_website",
     }
 )
 
@@ -465,6 +467,31 @@ def extended_tool_specs() -> list[dict[str, Any]]:
                         "timeframe": {"type": "string", "enum": ["intraday", "swing"]},
                     },
                     "required": ["symbol"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_website",
+                "description": "Build a static microsite from inventory + org profile; optional nginx deploy (THIRAMAI_WEB_DEPLOY_ENABLED).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "business_org_id": {
+                            "type": "integer",
+                            "description": "organizations.id (defaults to active org if omitted)",
+                        },
+                        "template_type": {
+                            "type": "string",
+                            "enum": ["shop", "manufacturing", "services"],
+                            "description": "Visual/copy preset",
+                        },
+                        "deploy_now": {
+                            "type": "boolean",
+                            "description": "If true, also write nginx vhost + reload when enabled on server",
+                        },
+                    },
                 },
             },
         },
@@ -1255,6 +1282,36 @@ def execute_jarvis_extended_tool(
             if uid <= 0:
                 return {"ok": False, "message": "user id required"}
             return add_to_watchlist_sync(uid, sym, exchange_suffix=ex)
+
+        if name == "create_website":
+            from services.website_builder_service import build_website_sync, user_can_access_org_sync
+
+            raw_oid = args.get("business_org_id")
+            if raw_oid is None or str(raw_oid).strip() == "":
+                site_org_id = int(effective_org_id)
+            else:
+                try:
+                    site_org_id = int(raw_oid)
+                except (TypeError, ValueError):
+                    return {"ok": False, "message": "invalid business_org_id"}
+            if site_org_id <= 0:
+                return {"ok": False, "message": "business_org_id required"}
+            if int(site_org_id) != int(effective_org_id) and not user_can_access_org_sync(
+                user_id=uid, organization_id=int(site_org_id)
+            ):
+                return {"ok": False, "message": "forbidden for this organization"}
+            tt = str(args.get("template_type") or "shop").strip().lower()
+            deploy = bool(args.get("deploy_now", False))
+            if uid <= 0:
+                return {"ok": False, "message": "user id required"}
+            out = build_website_sync(int(site_org_id), tt, user_id=uid, run_deploy=deploy)
+            if not out.get("ok"):
+                return {"ok": False, "message": out.get("error") or "build failed"}
+            return {
+                "ok": True,
+                "message": f"Site built. Public URL (needs wildcard DNS): {out.get('public_url')}",
+                **out,
+            }
 
         if name == "generate_poster_content":
             bn = str(args.get("business_name") or "Our Business").strip()

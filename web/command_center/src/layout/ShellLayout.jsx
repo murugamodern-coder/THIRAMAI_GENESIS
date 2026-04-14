@@ -84,6 +84,9 @@ export default function ShellLayout() {
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/dashboard/stocks">
             Stocks
           </NavLink>
+          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/dashboard/website-builder">
+            Websites
+          </NavLink>
           <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/dashboard/research">
             Research
           </NavLink>

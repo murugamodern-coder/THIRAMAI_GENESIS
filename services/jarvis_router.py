@@ -45,6 +45,7 @@ BUSINESS_TOOL_NAMES: frozenset[str] = frozenset(
         "get_pending_payments",
         "generate_poster_content",
         "draft_business_email",
+        "create_website",
         "get_today_brief",
     }
 )
@@ -149,6 +150,11 @@ def classify_query(message: str) -> QueryCategory:
             "poster",
             "email draft",
             "quotation",
+            "website",
+            "microsite",
+            "landing page",
+            "deploy site",
+            "nginx",
         )
     ) or biz_inventory
     if business:
