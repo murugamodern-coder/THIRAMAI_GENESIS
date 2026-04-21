@@ -23,6 +23,12 @@ from core.db.models import PersonalLoan, PushSubscription, User
 _log = logging.getLogger("thiramai.web_push")
 
 _MAX_RETRIES = 3
+
+
+def _command_center_shell(fragment: str) -> str:
+    from core.settings import get_settings
+
+    return get_settings().command_center_shell_url(fragment)
 _RETRY_DELAY_SEC = 0.6
 _memory_dedupe_expiry: dict[str, float] = {}
 
@@ -236,7 +242,7 @@ def _payload_meeting_soon(
             "meeting_id": int(meeting_id),
             "minutes_until": int(minutes_until),
             "scheduled_at": scheduled_at_iso,
-            "url": "/static/command_center/index.html#/today",
+            "url": _command_center_shell("today"),
         },
     }
 
@@ -320,7 +326,7 @@ def run_emi_web_push_scan() -> dict[str, Any]:
                     "type": "emi_due",
                     "loan_id": lid,
                     "due": due.isoformat(),
-                    "url": "/static/command_center/index.html#/personal/finance",
+                    "url": _command_center_shell("personal/finance"),
                 },
             }
             out = send_payload_to_user(user_id=uid, payload=payload, ttl=86400)
@@ -368,7 +374,7 @@ def run_daily_brief_web_push_scan() -> dict[str, Any]:
                 "tag": f"daily_brief_{uid}_{today_s}",
                 "data": {
                     "type": "daily_brief",
-                    "url": "/static/command_center/index.html#/today",
+                    "url": _command_center_shell("today"),
                 },
             }
             out = send_payload_to_user(user_id=uid, payload=payload, ttl=43200)

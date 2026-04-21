@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
 from api.dependencies import CurrentUser, get_current_user
+from core.settings import get_settings
 from services import google_calendar_integration_service as gcal
 
 router = APIRouter(tags=["Integrations"])
@@ -36,16 +37,18 @@ async def google_oauth_callback(
     state: str | None = Query(None),
     error: str | None = Query(None),
 ) -> RedirectResponse:
-    base = "/static/command_center/index.html#/personal/integrations"
+    def _shell(hq: str) -> str:
+        return get_settings().command_center_shell_url("personal/integrations", hash_query=hq)
+
     if error:
-        return RedirectResponse(url=f"{base}?gcal_error={error}", status_code=302)
+        return RedirectResponse(url=_shell(f"gcal_error={error}"), status_code=302)
     if not code or not state:
-        return RedirectResponse(url=f"{base}?gcal_error=missing_code", status_code=302)
+        return RedirectResponse(url=_shell("gcal_error=missing_code"), status_code=302)
     ok, msg, _uid = gcal.handle_oauth_callback(code=code, state=state)
     if not ok:
         safe = quote((msg or "failed").replace("&", " ")[:400], safe="")
-        return RedirectResponse(url=f"{base}?gcal_error={safe}", status_code=302)
-    return RedirectResponse(url=f"{base}?gcal=connected", status_code=302)
+        return RedirectResponse(url=_shell(f"gcal_error={safe}"), status_code=302)
+    return RedirectResponse(url=_shell("gcal=connected"), status_code=302)
 
 
 @router.post("/integrations/google/sync", summary="Push scheduled meetings to Google Calendar")

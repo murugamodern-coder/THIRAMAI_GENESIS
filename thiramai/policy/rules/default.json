@@ -1,0 +1,53 @@
+{
+  "version": "1",
+  "commands": {
+    "ls": {
+      "allow_without_sub_command": true,
+      "allow_any_sub_command": true
+    },
+    "dir": {
+      "allow_without_sub_command": true,
+      "allow_any_sub_command": true
+    },
+    "pwd": {
+      "allow_without_sub_command": true
+    },
+    "whoami": {
+      "allow_without_sub_command": true
+    },
+    "echo": {
+      "allow_without_sub_command": true,
+      "allow_any_sub_command": true
+    },
+    "git": {
+      "allowed_sub_commands_by_task": {
+        "analysis": ["status", "log", "diff"],
+        "audit": ["status", "log", "diff", "branch", "rev-parse", "show"],
+        "coding": ["status", "diff", "log", "branch", "rev-parse", "show"],
+        "fix": ["status", "diff", "log", "branch", "rev-parse", "show"],
+        "research": ["status", "log", "diff"],
+        "api": ["status", "log", "diff"],
+        "device": ["status", "log", "diff"]
+      },
+      "denied_sub_commands": ["push", "pull", "fetch", "remote", "clone", "reset", "checkout", "clean", "rebase"]
+    },
+    "python": {
+      "allow_without_sub_command": true,
+      "allowed_flags": ["--version", "-m"],
+      "denied_flags": ["-c"]
+    },
+    "pip": {
+      "allow_without_sub_command": true,
+      "allowed_sub_commands": ["--version", "list", "show"],
+      "denied_sub_commands": ["install", "uninstall"]
+    },
+    "docker": {
+      "allowed_sub_commands": ["ps", "images", "version", "info"],
+      "denied_sub_commands": ["run", "exec", "rm", "system", "build", "compose"]
+    },
+    "docker-compose": {
+      "allowed_sub_commands": ["config", "ps", "version"],
+      "denied_sub_commands": ["up", "down", "run", "exec"]
+    }
+  }
+}

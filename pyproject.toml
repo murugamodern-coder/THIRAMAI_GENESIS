@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thiramai"
+version = "0.1.0"
+description = "THIRAMAI autonomous framework for industrial and agricultural operations."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "docker",
+  "streamlit",
+  "rich",
+  "pydantic>=2",
+  "python-dotenv",
+]
+
+[project.scripts]
+thiramai = "thiramai.main:cli_entrypoint"
+
+[tool.setuptools]
+include-package-data = true

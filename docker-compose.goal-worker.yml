@@ -1,0 +1,33 @@
+# Optional stack: THIRAMAI autonomous goal worker (SQLite queue) alongside the API image.
+#
+# API service must set THIRAMAI_GOAL_WORKER_DISPATCH=1 and share the same volume as this worker
+# so both see ``thiramai/data/goal_jobs.sqlite``.
+#
+#   docker compose -f docker-compose.goal-worker.yml up -d --build
+
+services:
+  goal-worker:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "thiramai.worker"]
+    environment:
+      ENV: ${ENV:-development}
+      THIRAMAI_WORKER_MODE: "1"
+      THIRAMAI_JOB_SQLITE: "1"
+      THIRAMAI_WORKER_ORG_ID: ${THIRAMAI_WORKER_ORG_ID:-1}
+      THIRAMAI_WORKER_ID: ${THIRAMAI_WORKER_ID:-}
+      THIRAMAI_WORKER_POLL_SEC: ${THIRAMAI_WORKER_POLL_SEC:-2}
+      THIRAMAI_WORKER_HEARTBEAT_SEC: ${THIRAMAI_WORKER_HEARTBEAT_SEC:-5}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      THIRAMAI_MODE: ${THIRAMAI_MODE:-simulation}
+    volumes:
+      - thiramai_goal_data:/app/thiramai/data
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'thiramai.worker' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  thiramai_goal_data:

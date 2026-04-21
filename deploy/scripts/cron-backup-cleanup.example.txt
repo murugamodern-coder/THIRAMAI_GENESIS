@@ -1,0 +1,2 @@
+# Weekly prune of backups older than RETENTION_DAYS (adjust paths).
+# 30 3 * * 0 BACKUP_ROOT=/var/backups/thiramai RETENTION_DAYS=14 /opt/thiramai/deploy/scripts/backup-cleanup.sh >>/var/log/thiramai-backup-cleanup.log 2>&1

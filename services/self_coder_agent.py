@@ -131,8 +131,11 @@ def generate_patch_with_groq(*, focus_hint: str = "") -> tuple[bool, str, str]:
 
 
 def write_candidate_patch(patch_text: str) -> Path:
+    from core.security.sandbox_policy import enforce_llm_write_path
+
     path = sandbox_service.candidate_patch_path()
-    path.write_text(patch_text, encoding="utf-8")
+    safe_path = enforce_llm_write_path(path, operation="llm_patch_write")
+    safe_path.write_text(patch_text, encoding="utf-8")
     return path
 
 

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from api.dependencies import CurrentUser, require_roles
+from api.dependencies import CurrentUser, get_current_user, require_roles
 from services import hitl_rule_weights
 from services.experience_buffer import clear_critical_mistake_record, record_critical_mistake
 
@@ -22,6 +22,36 @@ class HitlFeedbackBody(BaseModel):
     rule_key: str = Field(..., min_length=1, max_length=128)
     sentiment: int = Field(..., ge=-1, le=1, description="-1 tighten policy, 0 note, +1 loosen")
     comment: str = Field("", max_length=4000)
+
+
+@router.post("/learning/outcome")
+async def record_learning_outcome(
+    action_type: str,
+    action_id: str,
+    success: bool,
+    predicted: str = "",
+    actual: str = "",
+    current_user=Depends(get_current_user),
+):
+    from services.self_improvement_engine import record_outcome
+    entry = record_outcome(action_type, action_id, predicted, actual, success)
+    return {"ok": True, "entry": entry}
+
+
+@router.get("/learning/stats")
+async def get_learning_stats(
+    action_type: str = "options_trade",
+    days: int = 7,
+    current_user=Depends(get_current_user),
+):
+    from services.self_improvement_engine import get_success_rate
+    return get_success_rate(action_type, days)
+
+
+@router.get("/learning/recommendations")
+async def get_recommendations(current_user=Depends(get_current_user)):
+    from services.self_improvement_engine import get_improvement_recommendations
+    return {"recommendations": get_improvement_recommendations()}
 
 
 @router.post("/hitl/feedback")

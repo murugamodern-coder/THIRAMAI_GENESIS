@@ -11,6 +11,8 @@ Sliding-window rate limiting (stdlib + Starlette; no slowapi).
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import logging
 import os
 import time
 from collections import defaultdict
@@ -30,6 +32,9 @@ _HITS: dict[tuple[str, str], list[float]] = defaultdict(list)
 _WINDOW_SEC = 60.0
 
 _WWW_BEARER = {"WWW-Authenticate": "Bearer"}
+_LOG = logging.getLogger(__name__)
+_WARNED_NO_PROXY_ALLOWLIST = False
+_ProxyNet = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
 def _truthy(name: str) -> bool:
@@ -44,14 +49,65 @@ def _int_env(name: str, default: int, *, min_v: int, max_v: int) -> int:
     return max(min_v, min(max_v, v))
 
 
+def _trusted_proxy_networks() -> list[_ProxyNet]:
+    raw = (os.getenv("THIRAMAI_TRUSTED_PROXY_IPS") or "").strip()
+    if not raw:
+        return []
+    nets: list[_ProxyNet] = []
+    for part in raw.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        try:
+            nets.append(ipaddress.ip_network(token, strict=False))
+        except ValueError:
+            # Ignore malformed tokens (fail-safe: no trust expansion).
+            continue
+    return nets
+
+
+def _is_trusted_proxy(remote_host: str, trusted_nets: list[_ProxyNet]) -> bool:
+    if not remote_host or not trusted_nets:
+        return False
+    try:
+        rip = ipaddress.ip_address(remote_host)
+    except ValueError:
+        return False
+    return any(rip in net for net in trusted_nets)
+
+
+def _leftmost_xff_ip(request: Request) -> str | None:
+    xff = (request.headers.get("x-forwarded-for") or "").strip()
+    if not xff:
+        return None
+    cand = xff.split(",")[0].strip()
+    if not cand:
+        return None
+    try:
+        ipaddress.ip_address(cand)
+    except ValueError:
+        return None
+    return cand[:128]
+
+
 def _client_key(request: Request) -> str:
-    if _truthy("THIRAMAI_RL_TRUST_X_FORWARDED_FOR"):
-        xff = (request.headers.get("x-forwarded-for") or "").strip()
-        if xff:
-            return xff.split(",")[0].strip()[:128] or "unknown"
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
+    global _WARNED_NO_PROXY_ALLOWLIST
+    remote_host = request.client.host if request.client and request.client.host else "unknown"
+    if not _truthy("THIRAMAI_RL_TRUST_X_FORWARDED_FOR"):
+        return remote_host
+
+    trusted_nets = _trusted_proxy_networks()
+    if not trusted_nets and not _WARNED_NO_PROXY_ALLOWLIST:
+        _LOG.warning(
+            {
+                "event": "rate_limit.security_warning",
+                "msg": "X-Forwarded-For trust enabled with no proxy allowlist",
+            }
+        )
+        _WARNED_NO_PROXY_ALLOWLIST = True
+    if not _is_trusted_proxy(remote_host, trusted_nets):
+        return remote_host
+    return _leftmost_xff_ip(request) or remote_host
 
 
 def _prune_and_count(key: tuple[str, str], now: float, window: float, limit: int) -> bool:
@@ -91,6 +147,31 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "bucket": "redis_global_per_minute",
                 },
             )
+
+        if request.method == "POST" and path.rstrip("/") == "/ai/goal":
+            token = _bearer_token(request)
+            ck = _client_key(request)
+            if token:
+                try:
+                    claims = await asyncio.to_thread(decode_access_token, token)
+                    sub = str(claims.get("sub") or "").strip() or "anon"
+                    key = (f"uid:{sub}", "ai_goal")
+                except (ExpiredSignatureError, JWTError):
+                    key = (f"ip:{ck}", "ai_goal_ip")
+            else:
+                key = (f"ip:{ck}", "ai_goal_ip")
+            limit = _int_env("THIRAMAI_RL_AI_GOAL_PER_USER_PER_MINUTE", 12, min_v=1, max_v=600)
+            now = time.monotonic()
+            if not _prune_and_count(key, now, _WINDOW_SEC, limit):
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": "Rate limit exceeded for POST /ai/goal. Try again shortly.",
+                        "bucket": key[1],
+                        "limit_per_minute": limit,
+                    },
+                )
+            return await call_next(request)
 
         if request.method == "POST" and path.rstrip("/") == "/chat/query":
             token = _bearer_token(request)

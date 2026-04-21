@@ -3,19 +3,51 @@
 from __future__ import annotations
 
 import os
+import time
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from prometheus_client import Counter, Gauge, Histogram
 from sqlalchemy import text
 
 from core.database import get_engine
 from core.http_metrics import snapshot as http_metrics_snapshot
 from core.migration_head import EXPECTED_ALEMBIC_REVISION
 from core.schema_mode import allow_create_all_auto
+from core.stability.circuit_breaker import export_breaker_snapshots
 from services.stock_market_data_service import get_live_price
 from services.worker_heartbeat import expected_worker_roles_from_env, redis_ping_ok, workers_ready_detail
 
 router = APIRouter(tags=["System"])
+
+REQUEST_COUNT = Counter(
+    "thiramai_requests_total",
+    "Total requests",
+    ["method", "endpoint", "status"],
+)
+
+REQUEST_LATENCY = Histogram(
+    "thiramai_request_duration_seconds",
+    "Request latency",
+    ["endpoint"],
+)
+
+WORKER_JOB_DURATION = Histogram(
+    "thiramai_worker_job_duration_seconds",
+    "Worker job processing time",
+    ["job_type"],
+)
+
+ACTIVE_ORGS = Gauge(
+    "thiramai_active_organizations",
+    "Number of active organizations",
+)
+
+
+def observe_request_metric(method: str, endpoint: str, status: int, start_ts: float) -> None:
+    """Helper for route/middleware integrations to track request count and latency."""
+    REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=str(status)).inc()
+    REQUEST_LATENCY.labels(endpoint=endpoint).observe(max(time.time() - start_ts, 0.0))
 
 
 def _truthy(name: str) -> bool:
@@ -161,6 +193,23 @@ def health_ready() -> JSONResponse:
     checks["today_brief"] = {
         "ok": True,
         "detail": "Command Center /personal and GET /personal/today expose the daily brief when authenticated.",
+    }
+
+    try:
+        from thiramai.runtime import goal_jobs
+
+        gs = goal_jobs.readiness_snapshot()
+        checks["thiramai_goal_store"] = gs
+        if gs.get("job_sqlite_enabled"):
+            ok_all = ok_all and bool(gs.get("sqlite", {}).get("ok"))
+    except Exception as exc:
+        checks["thiramai_goal_store"] = {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+        ok_all = False
+
+    cb_snaps = export_breaker_snapshots()
+    checks["circuit_breakers"] = {
+        "open_count": sum(1 for b in cb_snaps if str(b.get("state")) == "open"),
+        "items": cb_snaps,
     }
 
     body = {

@@ -35,9 +35,15 @@ def attach_domain_routers(app: FastAPI) -> None:
 
     app.include_router(sovereign_router)
 
+    from api.routes.ai_goal import router as ai_goal_router
+    from api.routes.ai_goal import router_v1_ai as ai_goal_v1_router
     from api.routes.ai_ltm import router as ai_ltm_router
     from api.routes.ai_local import router as ai_local_router
+    from api.routes.metrics_autonomy import router as metrics_autonomy_router
 
+    app.include_router(ai_goal_router)
+    app.include_router(ai_goal_v1_router)
+    app.include_router(metrics_autonomy_router)
     app.include_router(ai_ltm_router)
     app.include_router(ai_local_router)
 
@@ -103,3 +109,7 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(push_notifications_router)
     app.include_router(ai_chat_router)
     app.include_router(life_os_router)
+
+    from api.routes.os_central_brain import router as os_central_brain_router
+
+    app.include_router(os_central_brain_router)

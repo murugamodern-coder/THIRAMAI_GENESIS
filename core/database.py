@@ -10,15 +10,52 @@ idle or laptop sleep). Call ``reset_engine_cache()`` after changing env vars in-
 from __future__ import annotations
 
 import os
+from contextvars import ContextVar
 from contextlib import contextmanager
 from typing import Any, Iterator, Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy import event
 from sqlalchemy.orm import Session, sessionmaker
 
 _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker[Session]] = None
+_current_org_id: ContextVar[int | None] = ContextVar("thiramai_current_org_id", default=None)
+
+
+def set_current_org_id(organization_id: int | None) -> None:
+    """Store active tenant id in request/task context for automatic RLS session config."""
+    _current_org_id.set(int(organization_id) if organization_id is not None else None)
+
+
+def get_current_org_id() -> int | None:
+    """Return active tenant id from request/task context, if any."""
+    return _current_org_id.get()
+
+
+def _rls_bypass_enabled() -> bool:
+    return (os.getenv("THIRAMAI_RLS_BYPASS") or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _apply_session_rls_context(session: Session) -> None:
+    """
+    Set PostgreSQL session-local guards:
+    - ``row_security=off`` for privileged workers/migrations when THIRAMAI_RLS_BYPASS=1
+    - ``app.current_org_id`` for tenant-scoped sessions (explicit org arg or contextvar)
+    """
+    if _rls_bypass_enabled():
+        session.execute(text("SET LOCAL row_security = off"))
+        return
+    org_id = session.info.get("organization_id")
+    if org_id is None:
+        org_id = get_current_org_id()
+    if org_id is None:
+        return
+    session.execute(
+        text("SELECT set_config('app.current_org_id', :org_id, true)"),
+        {"org_id": str(int(org_id))},
+    )
 
 
 def get_database_url() -> Optional[str]:
@@ -69,13 +106,29 @@ def get_session_factory() -> Optional[sessionmaker[Session]]:
     return _session_factory
 
 
+@event.listens_for(Session, "after_begin")
+def _session_after_begin_set_rls(session: Session, _transaction, _connection) -> None:
+    """
+    Auto-apply tenant RLS context once a transaction begins so ad-hoc ``factory()`` sessions
+    used by existing services/routes still inherit request tenant scope.
+    """
+    try:
+        _apply_session_rls_context(session)
+    except Exception:
+        # Keep session creation resilient; query-time failures will surface naturally.
+        return
+
+
 @contextmanager
-def session_scope() -> Iterator[Session]:
+def session_scope(organization_id: int | None = None) -> Iterator[Session]:
     factory = get_session_factory()
     if factory is None:
         raise RuntimeError("DATABASE_URL is not set or engine could not be created.")
     session = factory()
     try:
+        if organization_id is not None:
+            session.info["organization_id"] = int(organization_id)
+            _apply_session_rls_context(session)
         yield session
         session.commit()
     except Exception:
@@ -101,6 +154,25 @@ def db_session() -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+@contextmanager
+def tenant_session_scope(organization_id: int) -> Iterator[Session]:
+    """Session with explicit tenant RLS context (sets ``app.current_org_id``)."""
+    with session_scope(organization_id=int(organization_id)) as session:
+        session.execute(
+            text("SET LOCAL app.current_org_id = :org_id"),
+            {"org_id": str(int(organization_id))},
+        )
+        yield session
+
+
+@contextmanager
+def worker_session_scope() -> Iterator[Session]:
+    """Privileged worker session with row-level security bypass enabled locally."""
+    with session_scope() as session:
+        session.execute(text("SET LOCAL row_security = off"))
+        yield session
 
 
 def ping_database() -> tuple[bool, str]:

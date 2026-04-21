@@ -1,0 +1,10 @@
+# Example crontab entries (run: crontab -e as a dedicated ops user).
+#
+# API liveness every 5 minutes (localhost via Nginx or direct to Docker-published port).
+# HEALTH_URL=https://127.0.0.1/health/live
+# Or public: HEALTH_URL=https://app.thiramai.co.in/health/live
+#
+# */5 * * * * HEALTH_URL=https://127.0.0.1/health/live /opt/thiramai/deploy/scripts/healthcheck-api.sh >>/var/log/thiramai-health.log 2>&1
+#
+# Certbot renewal is usually handled by systemd timer — verify with:
+#   systemctl list-timers | grep certbot

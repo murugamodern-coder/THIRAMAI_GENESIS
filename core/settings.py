@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -56,11 +56,18 @@ class ThiramaiSettings(BaseSettings):
     THIRAMAI_DASHBOARD_WS_INTERVAL: str = ""
     THIRAMAI_DASHBOARD_LOW_STOCK_THRESHOLD: str = ""
     THIRAMAI_RL_TRUST_X_FORWARDED_FOR: str = ""
+    trusted_proxy_ips: list[str] = Field(default_factory=list, validation_alias="THIRAMAI_TRUSTED_PROXY_IPS")
     THIRAMAI_STRICT_ORIGIN: str = ""
     # Comma-separated Host header allow-list (like Django ALLOWED_HOSTS). Empty = disabled.
     THIRAMAI_ALLOWED_HOSTS: str = ""
+    # Incident / degraded startup (``python run_system.py`` may set when checks fail).
+    THIRAMAI_INCIDENT_MODE: str = ""
+    THIRAMAI_STARTUP_DEGRADED: str = ""
     # Set to 1 to serve legacy ``static/index.html`` at ``GET /`` again (emergency rollback only).
     THIRAMAI_LEGACY_ROOT_SPA: str = ""
+    # Optional deploy id (git SHA, image tag). When set, app redirects use
+    # ``/static/command_center/index.html?v=<id>#/...`` so browsers/CDNs cannot reuse a cached shell.
+    THIRAMAI_COMMAND_CENTER_BUILD_ID: str = ""
 
     @field_validator(
         "THIRAMAI_CORS_ALLOW_ALL",
@@ -69,6 +76,9 @@ class ThiramaiSettings(BaseSettings):
         "THIRAMAI_SOVEREIGN_SCHEDULER",
         "THIRAMAI_BACKGROUND_AGENT",
         "THIRAMAI_LEGACY_ROOT_SPA",
+        "THIRAMAI_COMMAND_CENTER_BUILD_ID",
+        "THIRAMAI_INCIDENT_MODE",
+        "THIRAMAI_STARTUP_DEGRADED",
         mode="before",
     )
     @classmethod
@@ -76,6 +86,17 @@ class ThiramaiSettings(BaseSettings):
         if v is None:
             return ""
         return str(v).strip()
+
+    @field_validator("trusted_proxy_ips", mode="before")
+    @classmethod
+    def parse_proxy_ips(cls, v: object) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [ip.strip() for ip in v.split(",") if ip.strip()]
+        if isinstance(v, list):
+            return [str(ip).strip() for ip in v if str(ip).strip()]
+        return []
 
     def is_production(self) -> bool:
         return (self.ENV or self.THIRAMAI_ENV or "").strip().lower() == "production"
@@ -95,8 +116,33 @@ class ThiramaiSettings(BaseSettings):
     def background_agent_truthy(self) -> bool:
         return _truthy(self.THIRAMAI_BACKGROUND_AGENT)
 
+    def incident_mode_truthy(self) -> bool:
+        """Reduce background load when ops or startup validation enables incident / degraded mode."""
+        return _truthy(self.THIRAMAI_INCIDENT_MODE) or _truthy(self.THIRAMAI_STARTUP_DEGRADED)
+
     def legacy_root_spa_truthy(self) -> bool:
         return _truthy(self.THIRAMAI_LEGACY_ROOT_SPA)
+
+    def command_center_shell_url(self, fragment: str, *, hash_query: str | None = None) -> str:
+        """
+        HashRouter SPA entry: ``/static/command_center/index.html[?v=build]#/fragment[?hash_query]``.
+
+        *fragment* is a route tail such as ``today`` or ``personal/integrations`` (with or without ``/``).
+        *hash_query* is appended after the hash path (for OAuth return params on the client route).
+        """
+        from urllib.parse import quote
+
+        raw = (fragment or "today").strip().lstrip("#").lstrip("/")
+        path_part = "/" + raw if raw else "/today"
+        path = "/static/command_center/index.html"
+        bid = (self.THIRAMAI_COMMAND_CENTER_BUILD_ID or "").strip()
+        if bid:
+            path = f"{path}?v={quote(bid, safe='')}"
+        h = f"#{path_part}"
+        if hash_query:
+            hq = hash_query.lstrip("?&")
+            h += "?" + hq
+        return path + h
 
     def disable_openapi_uis(self) -> bool:
         """Hide Swagger UI and Redoc in production."""

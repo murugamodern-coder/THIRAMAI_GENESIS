@@ -1,5 +1,6 @@
 .git
 .github
+.gitignore
 .env
 .env.*
 !.env.example
@@ -7,6 +8,8 @@
 __pycache__
 *.py[cod]
 *$py.class
+*.pyc
+tests/
 .pytest_cache
 .mypy_cache
 .ruff_cache
@@ -17,5 +20,7 @@ venv
 .cursor
 terminals
 *.log
+node_modules
+web/command_center/node_modules
 Thumbs.db
 .DS_Store

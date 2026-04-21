@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any
@@ -146,18 +147,58 @@ def estimate_chars_as_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+class JsonLineFormatter(logging.Formatter):
+    """One JSON object per line when ``THIRAMAI_STRUCTURED_LOGS`` is enabled."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(record.created))
+        frac_ms = int((record.created - int(record.created)) * 1000)
+        envelope: dict[str, Any] = {
+            "timestamp": f"{ts}.{frac_ms:03d}Z",
+            "module": record.name,
+            "level": record.levelname,
+            "message": record.getMessage(),
+        }
+        raw = record.getMessage().strip()
+        if raw.startswith("{"):
+            try:
+                inner = json.loads(raw)
+                if isinstance(inner, dict):
+                    envelope["event"] = inner.get("event", "structured")
+                    if "status" in inner:
+                        envelope["status"] = inner["status"]
+                    for key, val in inner.items():
+                        if key not in envelope:
+                            envelope[key] = val
+                    return json.dumps(envelope, ensure_ascii=False, default=str)
+            except json.JSONDecodeError:
+                pass
+        envelope["event"] = "log"
+        return json.dumps(envelope, ensure_ascii=False, default=str)
+
+
 def ensure_thiramai_logging() -> None:
-    """Attach a stdout handler once so structured JSON lines from log_event are visible."""
+    """Attach stdout handlers once. Optional JSON envelope via ``THIRAMAI_STRUCTURED_LOGS``."""
+    structured = os.getenv("THIRAMAI_STRUCTURED_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}
+    formatter: logging.Formatter = JsonLineFormatter() if structured else logging.Formatter("%(message)s")
+
     if not _log.handlers:
         h = logging.StreamHandler()
-        h.setFormatter(logging.Formatter("%(message)s"))
+        h.setFormatter(formatter)
         _log.addHandler(h)
         _log.setLevel(logging.INFO)
         _log.propagate = False
+    elif structured:
+        for h in list(_log.handlers):
+            h.setFormatter(formatter)
+
     http_log = logging.getLogger("thiramai.http")
     if not http_log.handlers:
         hh = logging.StreamHandler()
-        hh.setFormatter(logging.Formatter("%(message)s"))
+        hh.setFormatter(formatter)
         http_log.addHandler(hh)
         http_log.setLevel(logging.INFO)
         http_log.propagate = False
+    elif structured:
+        for hh in list(http_log.handlers):
+            hh.setFormatter(formatter)

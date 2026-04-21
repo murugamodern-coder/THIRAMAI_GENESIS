@@ -3,10 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "lint": "eslint \"src/**/*.{js,jsx}\"",
+    "lint:fix": "eslint \"src/**/*.{js,jsx}\" --fix",
+    "build": "npm run lint && vite build && npm run build:validate",
+    "build:validate": "node scripts/validate-build.mjs",
+    "build:vite-only": "vite build",
+    "deploy:safe": "powershell -ExecutionPolicy Bypass -File scripts/deploy-command-center.ps1",
     "dev": "vite --host 127.0.0.1 --port 5173"
   },
   "dependencies": {
+    "@sentry/react": "^8.55.1",
+    "@sentry/vite-plugin": "^5.2.0",
     "axios": "^1.7.9",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -15,7 +22,14 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.0",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
+    "rollup-plugin-visualizer": "^7.0.1",
     "vite": "^5.4.11"
   }
 }

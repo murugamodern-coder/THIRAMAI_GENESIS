@@ -249,11 +249,18 @@ def build_website_sync(
     js_out = bundle["js"]
 
     try:
-        (site_dir / "index.html").write_text(html_out, encoding="utf-8")
-        (site_dir / "styles.css").write_text(css_out, encoding="utf-8")
-        (site_dir / "app.js").write_text(js_out, encoding="utf-8")
+        from core.security.sandbox_policy import enforce_llm_write_path
+
+        index_path = enforce_llm_write_path(site_dir / "index.html", operation="llm_site_write")
+        css_path = enforce_llm_write_path(site_dir / "styles.css", operation="llm_site_write")
+        js_path = enforce_llm_write_path(site_dir / "app.js", operation="llm_site_write")
+        index_path.write_text(html_out, encoding="utf-8")
+        css_path.write_text(css_out, encoding="utf-8")
+        js_path.write_text(js_out, encoding="utf-8")
     except OSError as exc:
         return {"ok": False, "error": f"write failed: {exc}"}
+    except PermissionError as exc:
+        return {"ok": False, "error": str(exc)}
 
     public_url = f"https://{slug}.{_public_domain()}/"
     out: dict[str, Any] = {

@@ -8,7 +8,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Integer, JSON, LargeBinary, Numeric, PrimaryKeyConstraint, SmallInteger, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Index, Integer, JSON, LargeBinary, Numeric, PrimaryKeyConstraint, SmallInteger, String, Text, UniqueConstraint, func
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -339,6 +339,32 @@ class User(Base):
     govt_scheme_rows: Mapped[list["GovtScheme"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    runtime_configs: Mapped[list["UserRuntimeConfig"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class UserRuntimeConfig(Base):
+    """
+    Per-user key/value runtime settings (broker keys, feature toggles, trading halt).
+    Matches Alembic ``0048_user_runtime_config``.
+    """
+
+    __tablename__ = "user_runtime_config"
+    __table_args__ = (Index("ix_user_runtime_config_updated_at", "updated_at"),)
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    config_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    config_value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="runtime_configs")
 
 
 class RefreshToken(Base):
@@ -2929,6 +2955,46 @@ class JarvisAgentEventQueue(Base):
 
     organization: Mapped[Optional["Organization"]] = relationship()
     user: Mapped[Optional["User"]] = relationship()
+
+
+class AgentTask(Base):
+    """Persisted Jarvis agentic workflow (plan → approve → execute)."""
+
+    __tablename__ = "agent_tasks"
+    __table_args__ = (UniqueConstraint("task_id", name="uq_agent_tasks_task_id"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    task_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    os_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    full_plan_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+    )
+    current_step_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    execution_logs: Mapped[list[Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+    )
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+    organization: Mapped["Organization"] = relationship()
 
 
 class StockWatchlistEntry(Base):

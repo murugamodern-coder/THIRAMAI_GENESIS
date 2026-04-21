@@ -38,6 +38,11 @@ def _max_daily_loss_inr() -> Decimal:
         return Decimal("2000")
 
 
+def trading_guard_limit_inr() -> Decimal:
+    """Same threshold as equity daily loss guard / agent kill-switch."""
+    return _max_daily_loss_inr()
+
+
 def _ist_day_start_utc() -> datetime:
     now_ist = datetime.now(_IST)
     start_ist = now_ist.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -353,6 +358,55 @@ def add_to_watchlist_sync(user_id: int, symbol: str, *, exchange_suffix: str = "
                 }
             session.add(StockWatchlistEntry(user_id=uid, symbol=sym, exchange_suffix=ex))
     return {"ok": True, "symbol": sym, "created": True}
+
+
+def liquidate_all_equity_positions_sync(user_id: int) -> dict[str, Any]:
+    """
+    Sell every open equity paper position at last price (best-effort).
+    Used by daily loss kill-switch — not a guaranteed live-market sweep.
+    """
+    uid = int(user_id)
+    if uid <= 0:
+        return {"ok": False, "error": "invalid user"}
+    factory = _factory()
+    if factory is None:
+        return {"ok": False, "error": "database not configured"}
+
+    from services.stock_market_data_service import get_live_price
+
+    sold: list[dict[str, Any]] = []
+    errors: list[str] = []
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(EquityPortfolioPosition)
+                .where(EquityPortfolioPosition.user_id == uid)
+                .where(EquityPortfolioPosition.quantity > 0)
+            ).all()
+        )
+
+    for row in rows:
+        sym = str(row.symbol)
+        ex = str(row.exchange_suffix or "NS")
+        qty = Decimal(str(row.quantity or 0))
+        if qty <= 0:
+            continue
+        qpx = get_live_price(sym, exchange_suffix=ex)
+        if not qpx.get("ok"):
+            errors.append(f"{sym}: quote failed")
+            continue
+        try:
+            px = Decimal(str(qpx.get("last")))
+        except Exception:
+            errors.append(f"{sym}: bad price")
+            continue
+        out = sell_stock_sync(uid, sym, qty, px, exchange_suffix=ex)
+        if out.get("ok"):
+            sold.append({"symbol": sym, **out})
+        else:
+            errors.append(f"{sym}: {out.get('error')}")
+
+    return {"ok": True, "sold": sold, "errors": errors, "count": len(sold)}
 
 
 def list_watchlist_symbols_sync(user_id: int, *, limit: int = 20) -> list[str]:

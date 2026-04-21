@@ -1,0 +1,44 @@
+{
+  "title": "Tiruvannamalai Land Profile",
+  "tags": [
+    "land",
+    "tiruvannamalai",
+    "agro-industrial",
+    "drip irrigation",
+    "biomass"
+  ],
+  "location": {
+    "district": "Tiruvannamalai",
+    "state": "Tamil Nadu",
+    "village_cluster": "Polur belt"
+  },
+  "land_assets": {
+    "total_acres": 18.75,
+    "irrigated_acres": 11.2,
+    "rainfed_acres": 7.55,
+    "soil_type": [
+      "red loam",
+      "sandy loam"
+    ],
+    "water_sources": [
+      "open_well",
+      "borewell",
+      "farm_pond"
+    ]
+  },
+  "recommended_use": {
+    "crop_cycles": [
+      "sugarcane_12_month_cycle",
+      "groundnut_short_cycle",
+      "fodder_intercrop"
+    ],
+    "irrigation": "drip irrigation with soil moisture threshold at 0.30",
+    "power_strategy": "biomass + grid hybrid for jaggery/processing loads"
+  },
+  "industrial_linkage": {
+    "jaggery_plant_target_capacity_tpd": 25,
+    "feedstock_radius_km": 20,
+    "logistics_notes": "Prefer farm-gate aggregation with daily cane intake scheduling."
+  },
+  "last_updated": "2026-04-20"
+}

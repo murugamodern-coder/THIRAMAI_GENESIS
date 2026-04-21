@@ -1,3 +1,10 @@
-# Production ASGI process manager (used by multi-stage Dockerfile).
-# Install alongside requirements.txt in release images only.
-gunicorn>=22.0.0
+# Production ASGI stack (Gunicorn + Uvicorn workers) and error reporting.
+-r requirements-base.txt
+uvicorn[standard]==0.44.0
+gunicorn==25.3.0
+sentry-sdk[fastapi]==2.58.0
+prometheus-fastapi-instrumentator==7.1.0
+
+# Live broker SDKs (Fyers v3 / Zerodha Kite) — required for ``execution_mode=live`` when not using paper fallback.
+fyers-apiv3>=3.1.0,<4
+kiteconnect>=5.0.0,<6

@@ -27,12 +27,27 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: |
+            requirements-base.txt
+            requirements-production.txt
+            requirements-dev.txt
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Prepare reports directory
+        run: mkdir -p reports
+
       - name: Run tests
         run: pytest tests/ -q --tb=short
+
+      - name: SAST scan (Bandit)
+        run: |
+          pip install bandit
+          bandit -r app/ core/ api/ workers/ -ll -ii \
+            --exclude tests/ \
+            -f json -o reports/bandit.json || true
+          python scripts/gate_bandit.py reports/bandit.json
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -43,7 +58,10 @@ jobs:
 
       - name: Build Command Center (Vite)
         working-directory: web/command_center
-        run: npm ci && npm run build
+        env:
+          CC_GIT_SHA: ${{ github.sha }}
+          CC_BUILD_VERSION: ${{ github.run_number }}
+        run: rm -rf ../../static/command_center/* && npm ci && npm run build
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -53,6 +71,33 @@ jobs:
         with:
           context: .
           push: false
-          tags: thiramai-genesis:ci
+          load: true
+          tags: |
+            thiramai-genesis:ci
+            thiramai-app:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Container scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: thiramai-app:latest
+          format: sarif
+          output: reports/trivy.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Semgrep SAST
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/python
+            p/django
+            p/jwt
+            p/secrets
+
+      - name: Upload security scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: reports/

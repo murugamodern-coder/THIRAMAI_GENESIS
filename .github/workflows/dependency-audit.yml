@@ -1,0 +1,28 @@
+name: Dependency audit
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit + CVSS helper
+        run: python -m pip install --upgrade pip pip-audit cvss
+
+      - name: Audit requirement files (fail on High or Critical CVSS)
+        run: |
+          set -euo pipefail
+          python scripts/gate_pip_audit_high_critical.py \
+            requirements-base.txt \
+            requirements-production.txt \
+            requirements-dev.txt

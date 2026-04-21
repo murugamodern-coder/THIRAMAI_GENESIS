@@ -18,9 +18,9 @@ RUN apt-get update \
 
 WORKDIR /workspace
 
-COPY requirements.txt /tmp/requirements.txt
+COPY requirements-base.txt requirements-dev.txt /tmp/req/
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements.txt
+    && pip install --no-cache-dir -r /tmp/req/requirements-dev.txt
 
 # Idle image; commands supplied by Docker SDK from the host.
 CMD ["python", "-c", "print('thiramai-sandbox ready')"]

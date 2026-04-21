@@ -171,7 +171,31 @@ The React **Command Center** is built to `static/command_center/` with `base: /s
 
    Then ensure **`/static/command_center/`** is still reachable (same `proxy_pass` upstream as other paths, unless you offload static files to Nginx with a **synced** tree from each deploy).
 
-3. **Cache busting:** Command Center `index.html` is served with **`Cache-Control: no-store`** from the app. CDN in front of `app.*` should **not** cache `index.html` aggressively; long cache is fine for `cc-app.js?v=…` query strings from the Vite build.
+3. **Cache busting:** Command Center uses **Vite content hashes** only (`cc-app-[hash].js`, `cc-*-[hash].css`). There must be **no** legacy `cc-app.js` or `?v=` query cache-busting. The FastAPI app sets **`Cache-Control: no-store`** on `/static/command_center/*` (see `CommandCenterStaticNoStoreMiddleware` in `app.py`) and on `index.html`. **Nginx in front of the app should not cache this path** — duplicate the policy at the edge:
+
+   ```nginx
+   # Command Center: always fetch fresh index + hashed chunks (no stale bundles)
+   location /static/command_center/ {
+       proxy_pass http://127.0.0.1:8000;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header Connection "";
+       add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+       add_header Pragma "no-cache" always;
+   }
+   ```
+
+   Adjust `proxy_pass` to match your upstream (same as `location /`). If you merge this with a broader `location /`, ensure **`/static/command_center/`** is either more specific (as above) or inherits **`no-store`** — do not add long-lived `expires` for this prefix.
+
+4. **Deploy hygiene:** Before building, clear old artifacts: `rm -rf static/command_center/*` then `npm run build` in `web/command_center` (Dockerfile frontend stage already does this). **Never** serve a cached tree containing unhashed `cc-app.js`.
+
+5. **Shell URL cache-bust:** Set **`THIRAMAI_COMMAND_CENTER_BUILD_ID`** (e.g. `GITHUB_SHA`) in `.env.production` / compose. The API then redirects to  
+   `/static/command_center/index.html?v=<build>#/…` and exposes **`GET /api/system/command-center-build`** so legacy `static/index.html` can navigate with the same query. Remove or rotate the id when you no longer need to force clients off a bad cache.
+
+6. **Nginx: one upstream, no duplicate static roots:** Do **not** add a second `location /static/command_center/` that uses `alias` to an old directory on disk while also `proxy_pass` to the app — browsers may get HTML from one path and mismatched ages. Prefer **only** `proxy_pass` to Gunicorn, or only Nginx `alias` to a directory that you **rsync** from each deploy (never mix). A `location /static/command_center/` block must not duplicate a broader `location /` that serves files from a different root.
 
 ## 9. Operational notes
 

@@ -8,6 +8,8 @@ WORKDIR /app/web/command_center
 COPY web/command_center/package.json web/command_center/package-lock.json ./
 RUN npm ci
 COPY web/command_center/ ./
-RUN npm run build
+RUN mkdir -p /app/static/command_center \
+ && rm -rf /app/static/command_center/* \
+ && npm run build
 
 # Keeps build output at /app/static/command_center (Vite base /static/command_center/)

@@ -107,6 +107,67 @@ def parse_json_lenient(text: str) -> dict[str, Any] | None:
     return None
 
 
+def market_sentiment_score_sync(*, window_hours: int = 2) -> dict[str, Any]:
+    """
+    Tavily (recent headlines) + Groq JSON → ``score`` in [-1, 1] for Indian equity index tone.
+    ``-1`` bearish, ``0`` neutral, ``+1`` bullish. Falls back to neutral when keys or API fail.
+    """
+    wh = max(1, min(int(window_hours), 72))
+    query = (
+        f"India NSE BSE Nifty Bank Nifty stock market news sentiment today last {wh} hours "
+        f"RBI inflation FII DII institutional"
+    )
+    raw = tavily_search_sync(query, max_results=12)
+    if not isinstance(raw, dict) or (raw.get("ok") is False) or not (raw.get("results") or []):
+        return {
+            "ok": False,
+            "score": 0.0,
+            "label": "neutral",
+            "summary": (raw.get("error") if isinstance(raw, dict) else None) or "tavily empty or unavailable",
+            "window_hours": wh,
+        }
+    blob = snippets_blob_from_tavily(raw if isinstance(raw, dict) else {}, limit=12)
+    if not blob.strip():
+        return {
+            "ok": False,
+            "score": 0.0,
+            "label": "neutral",
+            "summary": "no snippets",
+            "window_hours": wh,
+        }
+
+    system = (
+        "You output a single JSON object only. Infer SHORT-HORIZON market sentiment for Indian indices "
+        f"(Nifty/Bank Nifty) from the news snippets (implicitly focused on roughly the last {wh} hours when present). "
+        'Schema: {"score": number between -1 and 1 inclusive, "label": one of bullish|neutral|bearish, '
+        '"summary": string max 400 chars explaining the score}. No markdown.'
+    )
+    parsed = groq_json_object_sync(system=system, user_content=f"Snippets:\n{blob[:14000]}")
+    if not parsed or not isinstance(parsed, dict):
+        return {
+            "ok": False,
+            "score": 0.0,
+            "label": "neutral",
+            "summary": "groq sentiment parse failed",
+            "window_hours": wh,
+        }
+    try:
+        sc = float(parsed.get("score"))
+        sc = max(-1.0, min(1.0, sc))
+    except Exception:
+        sc = 0.0
+    lab = str(parsed.get("label") or "neutral").strip().lower()
+    if lab not in ("bullish", "neutral", "bearish"):
+        lab = "neutral"
+    return {
+        "ok": True,
+        "score": round(sc, 4),
+        "label": lab,
+        "summary": str(parsed.get("summary") or "")[:500],
+        "window_hours": wh,
+    }
+
+
 def long_llm_sync(system: str, user_content: str, *, prefer_gemini: bool = True) -> str:
     if prefer_gemini:
         g = gemini_generate_sync(f"{system}\n\n{user_content}")

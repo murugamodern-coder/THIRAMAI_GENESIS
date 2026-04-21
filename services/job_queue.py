@@ -28,6 +28,11 @@ def use_db_job_queue() -> bool:
     return (os.getenv("THIRAMAI_JOB_QUEUE") or "inline").strip().lower() == "db"
 
 
+# Dead-letter / poison: stop retrying the same job_id after this many failed dispatch attempts
+# (each claim increments ``attempts``; cap is the lesser of row ``max_attempts`` and this).
+POISON_MAX_ATTEMPTS = 3
+
+
 def enqueue_issue_invoice(
     *,
     organization_id: int,
@@ -303,7 +308,9 @@ def mark_job_done(session: Session, job_id: int) -> None:
 def mark_job_failed(session: Session, job: BackgroundJob, message: str) -> None:
     attempts = int(job.attempts or 0)
     max_a = int(job.max_attempts or 5)
-    if attempts >= max_a:
+    # Poison / dead-letter: never retry past min(max_attempts, POISON_MAX_ATTEMPTS)
+    ceiling = min(max_a, POISON_MAX_ATTEMPTS)
+    if attempts >= ceiling:
         status = "dead"
         completed_at = datetime.now(timezone.utc)
         started_at = job.started_at

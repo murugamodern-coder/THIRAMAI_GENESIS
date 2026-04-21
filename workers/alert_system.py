@@ -14,6 +14,7 @@ Apply DDL: `db/notifications_alerts.sql` (or use fresh `db/db_schema.sql` which 
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -30,10 +31,19 @@ from sqlalchemy.orm import Session
 from core.database import get_session_factory, session_scope
 from core.db.models import Debt, Inventory, Notification, Organization, User, UserOrganizationMembership
 from core.observability import ensure_thiramai_logging, log_event, new_request_id
+from core.worker_resilience import CircuitBreaker, ExponentialBackoff, WorkerHealthTracker
 
 _log = logging.getLogger("thiramai.alert_system")
+# Alert worker scans across all organizations and must bypass tenant RLS policies.
+os.environ.setdefault("THIRAMAI_RLS_BYPASS", "1")
 
 _scheduler: BackgroundScheduler | None = None
+
+# Resilience (shared by embedded API scheduler and standalone ``python -m workers.alert_system``)
+_alert_circuit = CircuitBreaker()
+_alert_health = WorkerHealthTracker()
+_alert_backoff: ExponentialBackoff | None = None
+_alert_scan_suppress_until: float = 0.0
 
 NOTIFICATION_CONSTRAINT = "uq_notifications_org_dedupe"
 
@@ -55,6 +65,16 @@ def _interval_minutes() -> int:
         return max(1, int((os.getenv("THIRAMAI_ALERT_INTERVAL_MINUTES") or "15").strip()))
     except ValueError:
         return 15
+
+
+def _alert_backoff_instance() -> ExponentialBackoff:
+    """Max backoff is min(30m, one scheduler interval) so we do not oversleep the next tick."""
+    global _alert_backoff
+    if _alert_backoff is None:
+        interval_sec = float(_interval_minutes() * 60)
+        cap = min(1800.0, interval_sec)
+        _alert_backoff = ExponentialBackoff(max_delay=cap)
+    return _alert_backoff
 
 
 def _org_id_allowlist() -> set[int] | None:
@@ -185,13 +205,41 @@ def _notify_overdue_debts(session: Session, *, org_ids: list[int], today_key: st
 
 def run_alert_scan() -> None:
     """Single scan: all active orgs; insert notifications with dedupe (one row per kind/entity/day)."""
+    global _alert_scan_suppress_until
+
     try:
         from services.worker_heartbeat import touch_heartbeat
 
         touch_heartbeat("alert_worker")
     except Exception:
         pass
+
     rid = new_request_id()
+    now = time.time()
+    if now < _alert_scan_suppress_until:
+        log_event(
+            rid,
+            "alert_system.scan_skipped",
+            ok=True,
+            extra={
+                "reason": "exponential_backoff",
+                "suppress_until_epoch": _alert_scan_suppress_until,
+            },
+        )
+        return
+
+    if not _alert_circuit.can_execute():
+        log_event(
+            rid,
+            "alert_system.circuit_open",
+            ok=False,
+            extra={
+                "circuit_state": _alert_circuit.state.value,
+                "seconds_until_half_open": round(_alert_circuit.seconds_until_half_open(), 2),
+            },
+        )
+        return
+
     factory = get_session_factory()
     if factory is None:
         log_event(
@@ -203,10 +251,31 @@ def run_alert_scan() -> None:
         return
 
     today_key = _today_utc().isoformat()
+    t0 = time.perf_counter()
+    orgs_scanned = 0
+    alerts_sent = 0
+    n_low = n_debt = n_factory = 0
     try:
         with session_scope() as session:
             org_ids = active_organization_ids(session)
+            orgs_scanned = len(org_ids)
             if not org_ids:
+                duration_ms = (time.perf_counter() - t0) * 1000.0
+                _alert_circuit.record_success()
+                _alert_backoff_instance().reset()
+                _alert_health.record_success()
+                _log.info(
+                    json.dumps(
+                        {
+                            "event": "alert.scan_complete",
+                            "duration_ms": round(duration_ms, 2),
+                            "orgs_scanned": 0,
+                            "alerts_sent": 0,
+                            "note": "no_active_orgs",
+                        },
+                        separators=(",", ":"),
+                    )
+                )
                 log_event(
                     rid,
                     "alert_system.scan",
@@ -225,20 +294,43 @@ def run_alert_scan() -> None:
                 )
             except Exception as exc:
                 _log.warning("alert_system.factory_stage2_scan_skipped: %s", exc)
-            log_event(
-                rid,
-                "alert_system.scan",
-                ok=True,
-                extra={
-                    "active_organizations": len(org_ids),
-                    "notifications_low_stock": n_low,
-                    "notifications_debt_overdue": n_debt,
-                    "notifications_factory_stage2": n_factory,
+            alerts_sent = int(n_low + n_debt + n_factory)
+        duration_ms = (time.perf_counter() - t0) * 1000.0
+        _alert_circuit.record_success()
+        _alert_backoff_instance().reset()
+        _alert_health.record_success()
+        _alert_scan_suppress_until = 0.0
+        _log.info(
+            json.dumps(
+                {
+                    "event": "alert.scan_complete",
+                    "duration_ms": round(duration_ms, 2),
+                    "orgs_scanned": orgs_scanned,
+                    "alerts_sent": alerts_sent,
+                    "healthy": _alert_health.is_healthy(),
                 },
+                separators=(",", ":"),
             )
+        )
+        log_event(
+            rid,
+            "alert_system.scan",
+            ok=True,
+            extra={
+                "active_organizations": orgs_scanned,
+                "notifications_low_stock": n_low,
+                "notifications_debt_overdue": n_debt,
+                "notifications_factory_stage2": n_factory,
+            },
+        )
     except Exception as exc:
         _log.exception("alert_system.scan_failed")
         log_event(rid, "alert_system.scan", ok=False, error=str(exc))
+        _alert_circuit.record_failure()
+        _alert_health.record_failure(str(exc))
+        bo = _alert_backoff_instance()
+        delay = bo.next_sleep()
+        _alert_scan_suppress_until = time.time() + delay
 
 
 def start_alert_scheduler() -> BackgroundScheduler | None:

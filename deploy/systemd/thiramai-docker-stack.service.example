@@ -1,0 +1,25 @@
+# OPTIONAL: systemd unit to bring up the Docker Compose production stack on boot.
+# Copy and adjust paths; never commit real secrets into unit files — use EnvironmentFile.
+#
+# Install:
+#   sudo cp deploy/systemd/thiramai-docker-stack.service.example /etc/systemd/system/thiramai-docker-stack.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now thiramai-docker-stack.service
+#
+# [Unit]
+# Description=THIRAMAI Genesis (Docker Compose production stack)
+# After=docker.service network-online.target
+# Requires=docker.service
+# Wants=network-online.target
+#
+# [Service]
+# Type=oneshot
+# RemainAfterExit=yes
+# WorkingDirectory=/opt/thiramai/THIRAMAI_GENESIS
+# EnvironmentFile=/opt/thiramai/THIRAMAI_GENESIS/.env.production
+# ExecStart=/usr/bin/docker compose -f docker-compose.production.yml --env-file .env.production up -d --remove-orphans
+# ExecStop=/usr/bin/docker compose -f docker-compose.production.yml --env-file .env.production down --timeout 60
+# TimeoutStopSec=120
+#
+# [Install]
+# WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+# Build local sandbox image (optional; default image is python:3.12-slim from Docker Hub).
+#
+#   docker compose -f docker/docker-compose.sandbox.yml build
+#
+# Then set THIRAMAI_SANDBOX_IMAGE=thiramai-sandbox:latest in .env
+
+services:
+  thiramai-sandbox:
+    build:
+      context: ..
+      dockerfile: docker/thiramai-sandbox.Dockerfile
+    image: thiramai-sandbox:latest

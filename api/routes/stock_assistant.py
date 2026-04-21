@@ -41,6 +41,47 @@ def _uid(user: CurrentUser) -> int:
     return uid
 
 
+@router.post("/options/execute")
+async def execute_options(
+    symbol: str,
+    expiry: str,
+    strike: float,
+    option_type: str,
+    transaction_type: str,
+    quantity: int = 1,
+    mode: str = "paper",
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from services.broker.options_executor import (
+        OptionsOrder, OptionType, TransactionType, execute_options_order,
+        INSTRUMENT_CONFIG
+    )
+    cfg = INSTRUMENT_CONFIG.get(symbol.upper(), {"lot_size": 50})
+    try:
+        ot = OptionType(option_type.upper())
+        tx = TransactionType(transaction_type.upper())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid option params: {exc}") from exc
+    order = OptionsOrder(
+        symbol=symbol.upper(),
+        expiry=expiry,
+        strike=strike,
+        option_type=ot,
+        transaction_type=tx,
+        quantity=quantity,
+        lot_size=cfg["lot_size"],
+    )
+    result = await execute_options_order(order, user_id=_uid(current_user), mode=mode)
+    return {
+        "ok": result.success,
+        "order_id": result.order_id,
+        "broker": result.broker,
+        "symbol": result.symbol,
+        "message": result.message,
+        "raw": result.raw_response,
+    }
+
+
 @router.get("/watchlist", summary="List watchlist symbols")
 async def get_watchlist(user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
     uid = _uid(user)

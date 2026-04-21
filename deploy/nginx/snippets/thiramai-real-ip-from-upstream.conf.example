@@ -1,0 +1,9 @@
+# Rename to thiramai-real-ip-from-upstream.conf and include from server {}
+# ONLY if this Nginx is NOT the Internet-facing hop (e.g. sits behind another L7 LB or CDN).
+#
+# Wrong settings allow IP spoofing — list only your LB/CDN subnets.
+#
+# set_real_ip_from 10.0.0.0/8;
+# set_real_ip_from 172.16.0.0/12;
+# real_ip_header X-Forwarded-For;
+# real_ip_recursive on;

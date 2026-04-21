@@ -361,12 +361,25 @@
       /** Personal OS UI lives in the React Command Center (HashRouter), not this legacy page. */
       function goCommandCenter(hashTail) {
         var h = hashTail && String(hashTail).charAt(0) === '#' ? hashTail : '#/personal';
-        var url = '/static/command_center/index.html' + h;
-        try {
-          location.replace(url);
-        } catch (e) {
-          location.href = url;
+        function nav(q) {
+          var base = '/static/command_center/index.html' + (q ? q : '') + h;
+          try {
+            location.replace(base);
+          } catch (e) {
+            location.href = base;
+          }
         }
+        fetch('/api/system/command-center-build', { credentials: 'same-origin' })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (j) {
+            var v = j && j.v ? String(j.v) : '';
+            nav(v ? '?v=' + encodeURIComponent(v) : '');
+          })
+          .catch(function () {
+            nav('');
+          });
       }
 
       function showLogin() {

@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.auth import decode_access_token, token_subject_user_id
-from core.database import get_session_factory
+from core.database import get_session_factory, set_current_org_id, tenant_session_scope
 from core.production_safety import is_production_environment
 from core.db.models import Organization, Role, User
 from core.rbac import Permission, user_has_permission
@@ -42,6 +42,8 @@ ROLE_LEVEL_BY_NAME: dict[str, int] = {
     "worker": 4,
     "staff": 4,
     "customer": 5,
+    # Read-only dashboards / AI goal observers (narrow route allowlists in routers).
+    "viewer": 6,
 }
 
 
@@ -219,7 +221,9 @@ async def get_current_user(
             if org is not None and bool(getattr(org, "is_disabled", False)):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization is disabled")
 
-            return _user_to_principal(u, role, active_organization_id=int(mem.organization_id))
+            principal = _user_to_principal(u, role, active_organization_id=int(mem.organization_id))
+            set_current_org_id(int(principal.organization_id))
+            return principal
 
     return await asyncio.to_thread(_resolve)
 
@@ -436,6 +440,70 @@ async def get_current_user_optional_org_match(
     return user
 
 
+def require_goal_read_access() -> Callable[..., CurrentUser]:
+    """
+    Allow owner, admin, manager (goal operators), and viewer (read-only) for AI goal GET routes.
+
+    Blocks staff/worker/customer roles from autonomous goal observability endpoints.
+    """
+
+    allowed_names = frozenset({"owner", "admin", "manager", "viewer"})
+
+    async def _dep(user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
+        if user.role_name.lower() in allowed_names:
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient role for AI goal read access",
+        )
+
+    return _dep
+
+
+def require_autonomy_admin_actions() -> Callable[..., CurrentUser]:
+    """Pause / resume / cancel autonomous jobs — owners and admins only."""
+
+    async def _dep(user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
+        if user.role_name.lower() not in {"owner", "admin"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Requires owner or admin role",
+            )
+        return user
+
+    return _dep
+
+
+def require_autonomy_internal_ops() -> Callable[..., CurrentUser]:
+    """Internal autonomy diagnostics — owners and admins only (never expose broadly)."""
+
+    async def _dep(user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
+        if user.role_name.lower() not in {"owner", "admin"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Requires owner or admin for internal autonomy endpoints",
+            )
+        return user
+
+    return _dep
+
+
+def require_internal_client_when_production(request: Request) -> None:
+    """Optional localhost-only gate for sensitive routes when THIRAMAI_INTERNAL_LOCAL_ONLY=1 (production)."""
+    if not is_production_environment():
+        return
+    raw = (os.getenv("THIRAMAI_INTERNAL_LOCAL_ONLY") or "").strip().lower()
+    if raw not in {"1", "true", "yes", "on"}:
+        return
+    host = (request.client.host if request.client else "") or ""
+    allowed = {"127.0.0.1", "::1", "localhost"}
+    if host not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Internal endpoint not reachable from this network",
+        )
+
+
 def validate_user_access(user_id: int, organization_id: int) -> bool:
     """
     Guard-layer membership check without a route ``CurrentUser`` (service jobs, scripts, tests).
@@ -453,3 +521,24 @@ def validate_user_access(user_id: int, organization_id: int) -> bool:
 
     with factory() as session:
         return validate_user_access_in_session(session, uid, oid)
+
+
+def get_db_session(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+):
+    """
+    Tenant-scoped DB dependency for routes/services that need direct Session access.
+
+    Uses ``tenant_session_scope`` so PostgreSQL RLS can enforce ``organization_id`` at DB level.
+    """
+    with tenant_session_scope(int(user.organization_id)) as session:
+        yield session
+
+
+def get_db(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+):
+    """
+    Backward-compatible alias for legacy routes that import ``get_db``.
+    """
+    yield from get_db_session(user)

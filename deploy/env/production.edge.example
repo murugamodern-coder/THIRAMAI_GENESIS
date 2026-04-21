@@ -1,0 +1,38 @@
+# =============================================================================
+# THIRAMAI — production edge + API (.env.production fragment)
+# Copy values into your real `.env.production` (never commit secrets).
+# Stack: Nginx (TLS + static) → FastAPI on 127.0.0.1:8000 → Postgres/Redis/workers (Docker).
+# =============================================================================
+
+ENV=production
+THIRAMAI_ENV=production
+
+# --- App should not run in debug-style modes ---
+# UVICORN/Live reload are not used with Gunicorn production CMD.
+THIRAMAI_AUTH_DISABLED=0
+
+# Safe HTTP error bodies to clients (recommended public Internet)
+THIRAMAI_SAFE_ERRORS=1
+
+# Autonomy “safe mode” limits concurrency / strict connectors — off for normal prod unless operating degraded
+THIRAMAI_SAFE_MODE=0
+
+# JSON access logs on API (rotate via Docker json-file options or journald)
+THIRAMAI_LOG_JSON=1
+
+# Behind Nginx: trust forwarded headers from the edge proxy
+THIRAMAI_RL_TRUST_X_FORWARDED_FOR=1
+THIRAMAI_PROXY_TRUSTED_HOSTS=*
+# Optional: lock Host header to your real domain (recommended once DNS is stable)
+THIRAMAI_ALLOWED_HOSTS=app.thiramai.co.in
+
+# CORS: same SPA origin as Nginx public URL (comma-separated, no spaces)
+THIRAMAI_CORS_ORIGINS=https://app.thiramai.co.in
+
+# --- Client build ---
+# Build the React client with same-origin API (empty BASE → relative /ai, /api paths):
+#   cd client && set REACT_APP_API_URL= && npm run build
+# On Unix:    REACT_APP_API_URL= npm run build
+
+# Publish API only on loopback — Nginx terminates TLS and proxies
+WEB_PORT=8000

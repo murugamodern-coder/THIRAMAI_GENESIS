@@ -173,4 +173,13 @@ OPENAPI_TAGS: list[dict[str, str]] = [
             "Background: **`THIRAMAI_SOVEREIGN_SCHEDULER=1`**."
         ),
     },
+    {
+        "name": "Agentic workflow",
+        "description": (
+            "**Plan → Approve → Execute:** **`POST /api/agent/command`** (Groq JSON plan), **`GET /api/agent/plan/{task_id}`**, "
+            "**`POST /api/agent/approve/{task_id}`** with JSON body `{ \"signal\": \"success\" | \"reject\" }`. "
+            "Persisted in PostgreSQL **`agent_tasks`** (survives restarts). Trading steps use **`trade`** / **`search`** / **`code`** / **`reason`** "
+            "(`services.orchestrator`). Model: **`THIRAMAI_AGENT_PLAN_MODEL`**."
+        ),
+    },
 ]

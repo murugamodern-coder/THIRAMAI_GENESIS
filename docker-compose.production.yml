@@ -1,18 +1,4 @@
-# THIRAMAI Genesis — production SaaS stack (Gunicorn API + Postgres + Redis + workers)
-#
-# - **web**: Gunicorn → Uvicorn workers (`GUNICORN_WORKERS`), `THIRAMAI_JOB_QUEUE=db`
-# - **db / redis**: not published to the host (Docker network only)
-# - **worker-jobs**: drains PostgreSQL `background_jobs` (`python -m workers.run_worker`)
-# - **worker-alerts**: APScheduler + alert scans (`python -m workers.alert_system`)
-#
-# Usage (VPS):
-#   cp .env.production.example .env.production   # fill secrets
-#   # Full sequence (checklist → Alembic → up → /health/ready): see scripts/deploy_production.sh
-#   #   ./scripts/deploy_production.sh
-#   docker compose -f docker-compose.production.yml --env-file .env.production up -d --build
-#
-# TLS: terminate HTTPS on host Nginx/Caddy → proxy to 127.0.0.1:8000 (see docs/PRODUCTION_NGINX_SSL.md).
-
+# THIRAMAI Genesis — production SaaS stack
 services:
   db:
     image: postgres:16-alpine
@@ -29,6 +15,11 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:7-alpine
@@ -41,14 +32,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # API image must be built from this repository; `image` tags the result. Without `build`, `docker compose
+  # build web` does not refresh code (stale /ai/* routes on old thiramai-app images).
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SKIP_FRONTEND: ${SKIP_FRONTEND:-0}
+        THIRAMAI_COMMAND_CENTER_BUILD_ID: ${THIRAMAI_COMMAND_CENTER_BUILD_ID:-}
+    image: thiramai-app:${DEPLOY_TAG:-latest}
     restart: unless-stopped
+    stop_grace_period: 90s
     ports:
-      # Bind loopback only — put Nginx/Caddy on the host in front for HTTPS.
       - "127.0.0.1:${WEB_PORT:-8000}:8000"
     environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       ENV: production
       THIRAMAI_ENV: production
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
@@ -60,41 +65,63 @@ services:
       THIRAMAI_SAFE_ERRORS: ${THIRAMAI_SAFE_ERRORS:-1}
       THIRAMAI_LOG_JSON: ${THIRAMAI_LOG_JSON:-1}
       THIRAMAI_RL_TRUST_X_FORWARDED_FOR: ${THIRAMAI_RL_TRUST_X_FORWARDED_FOR:-1}
+      THIRAMAI_TRUSTED_PROXY_IPS: ${THIRAMAI_TRUSTED_PROXY_IPS:-}
       THIRAMAI_PROXY_TRUSTED_HOSTS: ${THIRAMAI_PROXY_TRUSTED_HOSTS:-*}
-      THIRAMAI_ALLOWED_HOSTS: ${THIRAMAI_ALLOWED_HOSTS:-}
       THIRAMAI_JOB_QUEUE: db
-      THIRAMAI_ENABLE_ALERT_SCHEDULER: ${THIRAMAI_ENABLE_ALERT_SCHEDULER:-0}
+      THIRAMAI_ENABLE_ALERT_SCHEDULER: "0"
       THIRAMAI_AUTH_DISABLED: ${THIRAMAI_AUTH_DISABLED:-0}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+      THIRAMAI_COMMAND_CENTER_BUILD_ID: ${THIRAMAI_COMMAND_CENTER_BUILD_ID:-}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   worker-jobs:
-    build: .
+    build:
+      context: .
+      args:
+        THIRAMAI_COMMAND_CENTER_BUILD_ID: ${THIRAMAI_COMMAND_CENTER_BUILD_ID:-}
     restart: unless-stopped
-    # Image HEALTHCHECK targets Gunicorn on :8000; this process has no HTTP server.
-    healthcheck:
-      disable: true
+    stop_grace_period: 60s
     command: ["python", "-m", "workers.run_worker"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       THIRAMAI_JOB_QUEUE: db
       THIRAMAI_WORKER_POLL_SEC: ${THIRAMAI_WORKER_POLL_SEC:-2}
+      THIRAMAI_RLS_BYPASS: "1"
+      THIRAMAI_COMMAND_CENTER_BUILD_ID: ${THIRAMAI_COMMAND_CENTER_BUILD_ID:-}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f workers.run_worker || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   worker-alerts:
-    build: .
+    build:
+      context: .
+      args:
+        THIRAMAI_COMMAND_CENTER_BUILD_ID: ${THIRAMAI_COMMAND_CENTER_BUILD_ID:-}
     restart: unless-stopped
-    healthcheck:
-      disable: true
+    stop_grace_period: 60s
     command: ["python", "-m", "workers.alert_system"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
@@ -102,11 +129,24 @@ services:
       THIRAMAI_ENABLE_ALERT_SCHEDULER: "1"
       THIRAMAI_ALERT_INTERVAL_MINUTES: ${THIRAMAI_ALERT_INTERVAL_MINUTES:-15}
       THIRAMAI_ALERT_LOW_STOCK_THRESHOLD: ${THIRAMAI_ALERT_LOW_STOCK_THRESHOLD:-10}
+      THIRAMAI_RLS_BYPASS: "1"
+      THIRAMAI_COMMAND_CENTER_BUILD_ID: ${THIRAMAI_COMMAND_CENTER_BUILD_ID:-}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f workers.alert_system || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
 volumes:
   thiramai_pgdata:

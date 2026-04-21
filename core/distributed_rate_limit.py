@@ -9,6 +9,7 @@ Disable with ``THIRAMAI_RL_REDIS_GLOBAL=0``.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import time
 
@@ -24,6 +25,7 @@ _EXEMPT_PREFIXES: tuple[str, ...] = (
     "/openapi.json",
     "/favicon.ico",
 )
+_ProxyNet = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
 def _truthy_global_enabled() -> bool:
@@ -40,18 +42,46 @@ def _limit_per_minute() -> int:
 
 
 def _client_ip(request: Request) -> str:
-    if (os.getenv("THIRAMAI_RL_TRUST_X_FORWARDED_FOR") or "").strip().lower() in (
+    remote_host = request.client.host if request.client and request.client.host else "unknown"
+    trust_xff = (os.getenv("THIRAMAI_RL_TRUST_X_FORWARDED_FOR") or "").strip().lower() in (
         "1",
         "true",
         "yes",
         "on",
-    ):
-        xff = (request.headers.get("x-forwarded-for") or "").strip()
-        if xff:
-            return xff.split(",")[0].strip()[:128] or "unknown"
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
+    )
+    if not trust_xff:
+        return remote_host
+
+    raw = (os.getenv("THIRAMAI_TRUSTED_PROXY_IPS") or "").strip()
+    nets: list[_ProxyNet] = []
+    for part in raw.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        try:
+            nets.append(ipaddress.ip_network(token, strict=False))
+        except ValueError:
+            continue
+    if not nets:
+        return remote_host
+    try:
+        remote_ip = ipaddress.ip_address(remote_host)
+    except ValueError:
+        return remote_host
+    if not any(remote_ip in net for net in nets):
+        return remote_host
+
+    xff = (request.headers.get("x-forwarded-for") or "").strip()
+    if not xff:
+        return remote_host
+    cand = xff.split(",")[0].strip()
+    if not cand:
+        return remote_host
+    try:
+        ipaddress.ip_address(cand)
+    except ValueError:
+        return remote_host
+    return cand[:128]
 
 
 def _bearer(request: Request) -> str | None:

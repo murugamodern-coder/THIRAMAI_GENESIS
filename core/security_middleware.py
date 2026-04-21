@@ -86,21 +86,32 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         ):
             csp = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "script-src 'self' https://cdn.tailwindcss.com; "
+                "style-src 'self' https://fonts.googleapis.com; "
                 "font-src 'self' https://fonts.gstatic.com data:; "
                 "img-src 'self' data:; "
                 "connect-src 'self'; "
-                "frame-ancestors 'self'"
+                "frame-ancestors 'none'; "
+                "base-uri 'self'; "
+                "object-src 'none'; "
+                "form-action 'self'"
             )
         else:
-            csp = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+            csp = (
+                "default-src 'none'; "
+                "frame-ancestors 'none'; "
+                "base-uri 'none'; "
+                "form-action 'none'; "
+                "object-src 'none'"
+            )
 
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        response.headers.setdefault("Cross-Origin-Embedder-Policy", "require-corp")
         response.headers.setdefault("X-XSS-Protection", "0")
 
         # Production: drop framework / dev leakage headers (defense in depth behind reverse proxies).

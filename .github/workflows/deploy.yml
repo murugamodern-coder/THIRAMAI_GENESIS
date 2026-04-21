@@ -1,23 +1,3 @@
-# Production CD — DigitalOcean / Docker Compose
-#
-# Trigger: push to `main` or manual `workflow_dispatch`.
-# Flow: gate with pytest → SSH to server → git pull → docker compose build → recreate services → /health/ready → optional rollback.
-#
-# Required GitHub Actions secrets (Repository → Settings → Secrets and variables → Actions):
-#   PRODUCTION_SSH_KEY        — private key (full PEM / OpenSSH block, including BEGIN/END lines)
-#   PRODUCTION_HOST           — hostname or IP (e.g. app.thiramai.co.in or droplet IP)
-#   PRODUCTION_USER           — SSH user (e.g. root)
-#   PRODUCTION_DEPLOY_PATH    — repo root on server (e.g. /root/thiramai-app)
-#
-# Optional secrets:
-#   PRODUCTION_SSH_PORT                 — default 22
-#   PRODUCTION_SSH_FINGERPRINT          — host key SHA256 fingerprint (see .github/DEPLOY_SETUP.md)
-#   PRODUCTION_DOCKER_BUILD_NO_CACHE    — set to "true" to force docker build --no-cache (slower)
-#   PRODUCTION_DEPLOY_SERVICES          — space-separated service names (default: web worker-jobs worker-alerts)
-#   PRODUCTION_HEALTH_URL               — override health URL (default: http://127.0.0.1:$WEB_PORT/health/ready from .env.production)
-#
-# Environments (optional): create a `production` environment with required reviewers for extra safety.
-
 name: Deploy production
 
 on:
@@ -48,24 +28,77 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements-base.txt
+            requirements-production.txt
+            requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest httpx
 
       - name: Run tests
         run: pytest tests/ -q --tb=short --import-mode=importlib
 
   deploy:
-    name: SSH deploy
+    name: Immutable deploy
     runs-on: ubuntu-latest
     needs: [verify]
     if: always() && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
     environment: production
+    permissions:
+      contents: read
+      packages: write
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive immutable image tag
+        id: tag
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="$(git rev-parse --short HEAD)"
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
+          echo "${IMAGE_TAG}" > .current_deploy_tag
+          echo "tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure image name
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ vars.CONTAINER_REGISTRY }}"
+          if [ -z "${REGISTRY}" ]; then
+            REGISTRY="ghcr.io"
+          fi
+          REPO="${{ vars.CONTAINER_IMAGE_REPO }}"
+          if [ -z "${REPO}" ]; then
+            REPO="${{ github.repository_owner }}/thiramai-app"
+          fi
+          echo "REGISTRY=${REGISTRY}" >> "$GITHUB_ENV"
+          echo "REGISTRY_IMAGE=${REGISTRY}/${REPO}" >> "$GITHUB_ENV"
+
+      - name: Login to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Build and push immutable image tags
+        run: |
+          set -euo pipefail
+          docker build -t thiramai-app:${IMAGE_TAG} .
+          docker tag thiramai-app:${IMAGE_TAG} thiramai-app:latest
+          docker tag thiramai-app:${IMAGE_TAG} ${REGISTRY_IMAGE}:${IMAGE_TAG}
+          docker tag thiramai-app:${IMAGE_TAG} ${REGISTRY_IMAGE}:latest
+          docker push ${REGISTRY_IMAGE}:${IMAGE_TAG}
+          docker push ${REGISTRY_IMAGE}:latest
+
+      - name: Upload deploy tag artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-deploy-tag
+          path: .current_deploy_tag
+
       - name: Require production SSH secrets
         env:
           KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
@@ -91,12 +124,11 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         env:
           DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
-          COMPOSE_FILE: docker-compose.production.yml
-          ENV_BASENAME: .env.production
-          DEPLOY_SERVICES: ${{ secrets.PRODUCTION_DEPLOY_SERVICES }}
-          BUILD_NO_CACHE: ${{ secrets.PRODUCTION_DOCKER_BUILD_NO_CACHE }}
-          HEALTH_URL_OVERRIDE: ${{ secrets.PRODUCTION_HEALTH_URL }}
-          GITHUB_SHA: ${{ github.sha }}
+          REGISTRY_IMAGE: ${{ env.REGISTRY_IMAGE }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          GHCR_USERNAME: ${{ secrets.REGISTRY_USERNAME || github.actor }}
+          GHCR_TOKEN: ${{ secrets.REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
+          REGISTRY: ${{ env.REGISTRY }}
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
@@ -104,80 +136,30 @@ jobs:
           port: ${{ steps.sshport.outputs.port }}
           fingerprint: ${{ secrets.PRODUCTION_SSH_FINGERPRINT }}
           command_timeout: 45m
-          envs: DEPLOY_PATH,COMPOSE_FILE,ENV_BASENAME,DEPLOY_SERVICES,BUILD_NO_CACHE,HEALTH_URL_OVERRIDE,GITHUB_SHA
+          envs: DEPLOY_PATH,REGISTRY_IMAGE,IMAGE_TAG,GHCR_USERNAME,GHCR_TOKEN,REGISTRY
           script: |
             set -euo pipefail
             set -x
             export DEPLOY_PATH="${DEPLOY_PATH:?}"
-            export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.production.yml}"
-            export ENV_BASENAME="${ENV_BASENAME:-.env.production}"
-            ENV_FILE="${DEPLOY_PATH}/${ENV_BASENAME}"
-
-            compose() {
-              docker compose -f "${DEPLOY_PATH}/${COMPOSE_FILE}" --env-file "${ENV_FILE}" "$@"
-            }
-
             cd "${DEPLOY_PATH}"
-            test -f "${ENV_FILE}" || { echo "::error::Missing ${ENV_FILE}"; exit 1; }
+            test -f ".env.production" || { echo "::error::Missing .env.production"; exit 1; }
 
-            SVC="${DEPLOY_SERVICES:-web worker-jobs worker-alerts}"
-            BUILD_ARGS=""
-            if [ "${BUILD_NO_CACHE:-}" = "true" ]; then
-              BUILD_ARGS="--no-cache"
+            if [ -n "${GHCR_TOKEN:-}" ]; then
+              echo "${GHCR_TOKEN}" | docker login "${REGISTRY}" -u "${GHCR_USERNAME}" --password-stdin
             fi
 
-            PREV="$(git rev-parse HEAD)"
-            echo "=== Previous commit: ${PREV} ==="
+            docker pull "${REGISTRY_IMAGE}:${IMAGE_TAG}"
+            docker tag "${REGISTRY_IMAGE}:${IMAGE_TAG}" "thiramai-app:${IMAGE_TAG}"
+            docker tag "${REGISTRY_IMAGE}:${IMAGE_TAG}" "thiramai-app:latest"
 
-            rollback() {
-              echo "::error::Deploy failed — rolling back git to ${PREV} and recreating containers."
-              git reset --hard "${PREV}" || true
-              compose build ${BUILD_ARGS} ${SVC} || true
-              compose up -d --force-recreate ${SVC} || true
-              exit 1
-            }
-
-            git fetch origin main
-            git checkout main
-            if ! git pull origin main; then
-              echo "::error::git pull failed"
+            if ! bash scripts/pre_deploy_check.sh; then
+              echo "::error::pre_deploy_check failed"
+              bash scripts/rollback.sh || true
               exit 1
             fi
-            NEW="$(git rev-parse HEAD)"
-            echo "=== Deploying commit: ${NEW} (trigger SHA ${GITHUB_SHA:-n/a}) ==="
 
-            set -a
-            # shellcheck disable=SC1090
-            . "${ENV_FILE}"
-            set +a
-            HEALTH_PORT="${WEB_PORT:-8000}"
-            READY_URL="${HEALTH_URL_OVERRIDE:-http://127.0.0.1:${HEALTH_PORT}/health/ready}"
-
-            if ! compose build ${BUILD_ARGS} ${SVC}; then
-              rollback
+            if ! bash scripts/deploy_production.sh "${IMAGE_TAG}"; then
+              echo "::error::deploy_production failed, running rollback"
+              bash scripts/rollback.sh || true
+              exit 1
             fi
-            if ! compose up -d --force-recreate ${SVC}; then
-              rollback
-            fi
-
-            compose ps
-
-            echo "=== Waiting for health: ${READY_URL} ==="
-            ok=0
-            for i in $(seq 1 90); do
-              if curl -fsS "${READY_URL}" >/dev/null 2>&1; then
-                ok=1
-                break
-              fi
-              sleep 2
-            done
-
-            if [ "${ok}" -ne 1 ]; then
-              echo "::error::Health check failed after ~180s"
-              rollback
-            fi
-
-            echo "=== Recent web container logs (last 100 lines) ==="
-            compose logs --tail=100 web || true
-
-            echo "=== Deploy succeeded at ${NEW} ==="
