@@ -30,12 +30,6 @@ export default function FinancialControlTower({ snapshot }) {
   const rows = buildPeriodRows(analytics);
   const pm = profitMonth?.ok ? profitMonth : null;
   const revToday = parseInr(analytics?.revenue_inr?.today);
-  const expenses = pm
-    ? parseInr(pm.cogs_inr) +
-      parseInr(pm.staff_salaries_monthly_inr) +
-      parseInr(pm.operational_expenses_inr) +
-      parseInr(pm.maintenance_costs_inr)
-    : null;
 
   useEffect(() => {
     const LARGE_TXN_THRESHOLD_INR = 500000;
@@ -43,6 +37,13 @@ export default function FinancialControlTower({ snapshot }) {
       showToastDedup({ type: "warning", message: "Large transaction volume today" });
     }
   }, [revToday]);
+
+  const expenses = pm
+    ? parseInr(pm.cogs_inr) +
+      parseInr(pm.staff_salaries_monthly_inr) +
+      parseInr(pm.operational_expenses_inr) +
+      parseInr(pm.maintenance_costs_inr)
+    : null;
 
   return (
     <div className="cc-card">

@@ -1,8 +1,8 @@
 import { create } from "zustand";
-import { getToken, setToken, TOKEN_KEY } from "../api/client.js";
+import { setToken, TOKEN_KEY } from "../api/client.js";
 import { inferRole } from "../lib/rbac.js";
 
-export const useCommandStore = create((set, get) => ({
+export const useCommandStore = create((set) => ({
   token: typeof localStorage !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null,
   me: null,
   role: "VIEWER",

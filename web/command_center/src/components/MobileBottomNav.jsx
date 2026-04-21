@@ -1,15 +1,9 @@
 import { NavLink } from "react-router-dom";
 
-import { useCommandStore } from "../store/useCommandStore.js";
-
 /**
  * Touch-first bottom navigation (mobile). Hidden from md breakpoint up.
  */
 export default function MobileBottomNav() {
-  const orgs = useCommandStore((s) => s.orgs);
-  const bizOrgId =
-    orgs.find((o) => o.is_current)?.organization?.id ?? orgs[0]?.organization?.id ?? 1;
-
   return (
     <nav className="cc-mobile-nav" aria-label="Main">
       <NavLink className={({ isActive }) => `cc-mobile-nav__item${isActive ? " is-active" : ""}`} end to="/today">
@@ -27,18 +21,18 @@ export default function MobileBottomNav() {
       <NavLink
         className={({ isActive }) => `cc-mobile-nav__item${isActive ? " is-active" : ""}`}
         end
-        to={`/business/${bizOrgId}/dashboard`}
+        to="/dashboard/inventory"
       >
         <span className="cc-mobile-nav__icon" aria-hidden>
           ◆
         </span>
-        Shop OS
+        Business
       </NavLink>
-      <NavLink className={({ isActive }) => `cc-mobile-nav__item${isActive ? " is-active" : ""}`} end to="/ai">
+      <NavLink className={({ isActive }) => `cc-mobile-nav__item${isActive ? " is-active" : ""}`} end to="/os/stock">
         <span className="cc-mobile-nav__icon" aria-hidden>
-          ✦
+          ◍
         </span>
-        AI
+        Stock
       </NavLink>
     </nav>
   );

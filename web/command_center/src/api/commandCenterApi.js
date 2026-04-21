@@ -612,3 +612,84 @@ export async function fetchWebsiteMeta(organizationId) {
   const { data } = await api.get(`/website-builder/meta/${organizationId}`);
   return data;
 }
+
+/** Stable browser thread id for agent missions (session-scoped). */
+export function ensureAgentCorrelationId(storageKey = "thiramai_agent_correlation_id") {
+  if (typeof window === "undefined" || !window.sessionStorage) {
+    return `srv-${Date.now()}`;
+  }
+  try {
+    let v = sessionStorage.getItem(storageKey);
+    if (!v) {
+      v =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      sessionStorage.setItem(storageKey, v);
+    }
+    return v;
+  } catch {
+    return `m-${Date.now()}`;
+  }
+}
+
+export async function postAgentCommand(payload) {
+  const { data } = await api.post("/api/agent/command", payload);
+  return data;
+}
+
+export async function getAgentPlan(taskId) {
+  const { data } = await api.get(`/api/agent/plan/${encodeURIComponent(taskId)}`);
+  return data;
+}
+
+export async function postAgentApprove(taskId, body) {
+  const { data } = await api.post(`/api/agent/approve/${encodeURIComponent(taskId)}`, body ?? {});
+  return data;
+}
+
+export async function fetchAgentMissions(params = {}) {
+  const { data } = await api.get("/api/agent/missions", { params });
+  return data;
+}
+
+/**
+ * Bearer-friendly SSE reader for `/api/agent/plan/{task_id}/events`.
+ * Parses `data: {...}` frames until the stream closes.
+ */
+export async function streamAgentPlan(taskId, onEvent, signal) {
+  const token = getToken();
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${typeof window !== "undefined" ? "" : ""}/api/agent/plan/${encodeURIComponent(taskId)}/events`, {
+    headers,
+    signal,
+    credentials: "same-origin",
+  });
+  if (!res.ok || !res.body) {
+    throw new Error(`agent stream HTTP ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const parts = buf.split(/\n\n/);
+    buf = parts.pop() || "";
+    for (const block of parts) {
+      const lines = block.split(/\n/).filter((l) => l.trim());
+      for (const ln of lines) {
+        if (ln.startsWith("data:")) {
+          const raw = ln.replace(/^data:\s*/, "").trim();
+          try {
+            onEvent(JSON.parse(raw));
+          } catch {
+            /* ignore partial json */
+          }
+        }
+      }
+    }
+  }
+}

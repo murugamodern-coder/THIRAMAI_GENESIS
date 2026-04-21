@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const DEFAULT_INTERVAL_MS = 10_000;
 const PAUSE_AFTER_CONSECUTIVE_FAILURES = 3;
@@ -149,16 +149,13 @@ export function useLiveData(fetchFn, intervalMs = DEFAULT_INTERVAL_MS, options =
     return () => stop();
   }, [intervalMs, paused, runOnce, stop]);
 
-  const status = useMemo(
-    () => ({
-      connected,
-      paused,
-      consecutiveFailures,
-      lastUpdatedAt,
-      intervalMs,
-    }),
-    [connected, paused, consecutiveFailures, lastUpdatedAt, intervalMs],
-  );
+  const status = {
+    connected,
+    paused,
+    consecutiveFailures,
+    lastUpdatedAt,
+    intervalMs,
+  };
 
   return { data, loading, error, refresh, status };
 }

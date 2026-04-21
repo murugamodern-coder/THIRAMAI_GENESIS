@@ -8,6 +8,7 @@ import {
   postResearchMarket,
   postResearchSchemes,
 } from "../api/commandCenterApi.js";
+import AgentWorkflowPanel from "../components/agent/AgentWorkflowPanel.jsx";
 import { showToastDedup } from "../lib/toastDedup.js";
 
 function Card({ title, children }) {
@@ -172,6 +173,12 @@ export default function ResearchPage() {
         Market intelligence, government schemes, DPR drafts, competitor scans, and multi-source deep research. Results
         are saved to your workspace (requires Tavily + Groq; Gemini optional via GOOGLE_API_KEY).
       </p>
+
+      <AgentWorkflowPanel
+        osKey="research"
+        title="Research missions · Jarvis agentic workflow"
+        correlationStorageKey="thiramai_research_agent_thread"
+      />
 
       <Card title="Deep research (multi-source)">
         <textarea

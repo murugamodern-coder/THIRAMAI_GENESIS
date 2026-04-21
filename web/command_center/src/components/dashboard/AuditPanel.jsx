@@ -1,16 +1,14 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { queryAudit } from "../../lib/auditLogger.js";
+import { safeArray } from "../../lib/safeData.js";
 
 export default function AuditPanel() {
   const [q, setQ] = useState("");
   const [actionType, setActionType] = useState("");
 
-  const rows = useMemo(() => queryAudit({ q, actionType: actionType || undefined, limit: 80 }), [q, actionType]);
-  const actions = useMemo(() => {
-    const set = new Set(rows.map((r) => r.actionType));
-    return Array.from(set).sort();
-  }, [rows]);
+  const rows = safeArray(queryAudit({ q, actionType: actionType || undefined, limit: 80 }));
+  const actions = Array.from(new Set(rows.map((r) => r.actionType))).sort();
 
   return (
     <div className="cc-card">

@@ -1,43 +1,30 @@
-# Secrets
-.env
-.env.production
-.env.*.local
+# Environment — NEVER commit these
+server/.env
+client/.env
+client/.env.production
+*.env.local
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-.eggs/
-dist/
-build/
-.venv/
-venv/
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
 
-# Micro-kernel / Self-Coder (local patches + reload signals)
-var/
+# Build output
+client/build/
+server/dist/
 
-# Experience buffer / reflections (append-only logs)
-logs/*.jsonl
-logs/thought_stream.json
+# Logs
+*.log
+npm-debug.log*
 
-# Test / tooling
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-.ruff_cache/
-
-# Executive OS user uploads (land docs, PDFs)
-vault/executive_uploads/
-
-# Command Center React bundle (keep built assets in static/command_center for deploy)
-web/command_center/node_modules/
-# Legacy duplicate path removed (Phase 7); canonical UI: web/command_center/
-
-# IDE / OS
-.idea/
-.vscode/
-*.swp
+# OS files
 .DS_Store
 Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.env
+.env.production
+.env.local
+*.env

@@ -1,5 +1,7 @@
 import axios from "axios";
 
+import { reportAxiosError, reportAxiosSuccess } from "../lib/telemetry.js";
+
 export const TOKEN_KEY = "thiramai_jwt";
 
 export function getToken() {
@@ -19,14 +21,30 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  const c = config;
+  if (typeof performance !== "undefined") {
+    c.metadata = { ...(c.metadata || {}), start: performance.now() };
+  }
   const t = getToken();
-  if (t) config.headers.Authorization = `Bearer ${t}`;
-  return config;
+  if (t) c.headers.Authorization = `Bearer ${t}`;
+  return c;
 });
 
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    try {
+      reportAxiosSuccess(res);
+    } catch {
+      /* telemetry must not break responses */
+    }
+    return res;
+  },
   (err) => {
+    try {
+      reportAxiosError(err);
+    } catch {
+      /* ignore */
+    }
     // Hypothesis H4: requests reach backend but are rejected with 401 -> UI shows "Network Error".
     // For HashRouter, redirecting via window.location.hash is reliable and avoids hook usage here.
     if (Number(err?.response?.status) === 401) {

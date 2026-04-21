@@ -1,0 +1,172 @@
+.company-select-page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: var(--cc-s3) var(--cc-s2) calc(var(--cc-s3) + 40px);
+}
+
+.company-select-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--cc-s2);
+  margin-bottom: var(--cc-s2);
+}
+
+.company-search-wrap {
+  margin-bottom: var(--cc-s2);
+}
+
+.company-section-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-muted);
+}
+
+.company-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cc-s2);
+  margin-bottom: var(--cc-s3);
+}
+
+.company-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-card);
+  background: var(--cc-surface);
+  padding: var(--cc-s2);
+  cursor: pointer;
+  box-shadow: var(--cc-shadow-sm);
+  transition:
+    transform var(--cc-dur) var(--cc-ease),
+    box-shadow var(--cc-dur) var(--cc-ease),
+    border-color var(--cc-dur) var(--cc-ease);
+}
+
+.company-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--cc-shadow-md);
+  border-color: rgba(99, 102, 241, 0.55);
+}
+
+.company-card.is-active {
+  border-color: var(--cc-primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.company-card:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.company-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.company-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.company-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.company-type {
+  color: var(--cc-muted);
+  font-size: 12px;
+}
+
+.company-meta {
+  margin-top: 12px;
+  color: var(--cc-muted);
+  font-size: 12px;
+}
+
+.company-stats {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.company-card--skeleton {
+  cursor: default;
+}
+
+.biz-company-switcher-wrap {
+  position: relative;
+}
+
+.biz-company-trigger {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.biz-company-caret {
+  color: var(--cc-muted);
+  font-size: 12px;
+}
+
+.biz-company-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(320px, 85vw);
+  background: var(--cc-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-control);
+  box-shadow: var(--cc-shadow-md);
+  z-index: 60;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.biz-company-option {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--cc-text);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.biz-company-option:hover {
+  background: var(--cc-surface-2);
+}
+
+.biz-company-option.is-active {
+  background: rgba(99, 102, 241, 0.13);
+  color: var(--cc-primary);
+}
+
+@media (max-width: 900px) {
+  .company-grid {
+    grid-template-columns: 1fr;
+  }
+}

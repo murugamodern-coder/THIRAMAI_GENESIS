@@ -1,10 +1,90 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { postChatQuery, fetchMyOrganizations } from "../../api/commandCenterApi.js";
+import {
+  postChatQuery,
+  fetchMyOrganizations,
+  postAgentCommand,
+  ensureAgentCorrelationId,
+} from "../../api/commandCenterApi.js";
 import { showToastDedup } from "../../lib/toastDedup.js";
 import { runAIAction, getActionConfirmation } from "../../lib/aiActionHandler.js";
 import { AI_MOCK_INSIGHTS } from "../../lib/aiMockInsights.js";
+
+function insightPriorityRank(p) {
+  if (p === "high") return 0;
+  if (p === "medium") return 1;
+  return 2;
+}
+
+const InsightCard = memo(function InsightCard({
+  insight,
+  idx,
+  criticalIdx,
+  pillClassForPriority,
+  busyKey,
+  loading,
+  onRunAction,
+}) {
+  const actions = Array.isArray(insight?.actions) ? insight.actions : [];
+  const confidence =
+    typeof insight?.confidence === "number" && Number.isFinite(insight.confidence)
+      ? Math.max(0, Math.min(1, insight.confidence))
+      : null;
+  const isCritical = idx === criticalIdx && insight?.priority === "high";
+
+  return (
+    <div
+      className="cc-card"
+      style={{
+        marginBottom: 16,
+        borderColor: isCritical ? "rgba(187, 0, 0, 0.35)" : undefined,
+        boxShadow: isCritical ? "0 8px 20px rgba(187, 0, 0, 0.10)" : undefined,
+      }}
+    >
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>
+            {insight?.title || "Insight"}
+          </div>
+          <div className="cc-muted" style={{ marginTop: 8, fontSize: 14 }}>
+            {insight?.description || "—"}
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+          <span className={pillClassForPriority(insight?.priority)}>{insight?.priority || "low"}</span>
+          <div className="cc-muted" style={{ fontSize: 12 }}>
+            Confidence: {confidence == null ? "—" : `${Math.round(confidence * 100)}%`}
+          </div>
+        </div>
+      </div>
+
+      {actions.length > 0 ? (
+        <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
+          {actions.map((a, i) => {
+            const k = `${insight?.id || "insight"}__${a?.type || "action"}__${JSON.stringify(a?.payload || {})}`;
+            const isBusy = busyKey === k;
+            return (
+              <button
+                key={`${insight?.id || "insight"}_${i}`}
+                type="button"
+                className={i === 0 ? "cc-btn cc-btn-primary" : "cc-btn cc-btn-secondary"}
+                disabled={loading || isBusy}
+                onClick={() => onRunAction(a, insight?.id)}
+              >
+                {isBusy ? "Working…" : a?.label || "Run action"}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="cc-muted" style={{ marginTop: 16, fontSize: 12 }}>
+          No actions suggested.
+        </div>
+      )}
+    </div>
+  );
+});
 
 export default function AIAssistantPanel() {
   const navigate = useNavigate();
@@ -26,6 +106,7 @@ export default function AIAssistantPanel() {
   const [chatMessages, setChatMessages] = useState([]);
   const [jarvisOrgId, setJarvisOrgId] = useState("");
   const [orgOptions, setOrgOptions] = useState([]);
+  const [agenticPlanMode, setAgenticPlanMode] = useState(false);
 
   useEffect(() => {
     const st = location.state;
@@ -51,20 +132,6 @@ export default function AIAssistantPanel() {
       cancelled = true;
     };
   }, []);
-
-  const priorityRank = useCallback((p) => {
-    if (p === "high") return 0;
-    if (p === "medium") return 1;
-    return 2;
-  }, []);
-
-  const sortedInsights = useMemo(() => {
-    const arr = Array.isArray(insights) ? insights.slice() : [];
-    arr.sort((a, b) => priorityRank(a?.priority) - priorityRank(b?.priority));
-    return arr;
-  }, [insights, priorityRank]);
-
-  const criticalIdx = useMemo(() => sortedInsights.findIndex((x) => x?.priority === "high"), [sortedInsights]);
 
   const safeParseInsights = useCallback((value) => {
     if (!value) return null;
@@ -108,6 +175,50 @@ export default function AIAssistantPanel() {
       if (!isPartialPending && (!m || loading)) return;
       const confirming = opts.confirmPending === true && pendingId && !isPartialPending;
       const useAgentMode = opts.forceAgentMode != null ? !!opts.forceAgentMode : agentMode;
+      if (!isPartialPending && !confirming && agenticPlanMode) {
+        setLoading(true);
+        setError(null);
+        setRaw("");
+        setInsights([]);
+        setProposals([]);
+        setChatMessages((prev) => [...prev, { role: "user", text: m, ts: Date.now() }]);
+        try {
+          const corr = ensureAgentCorrelationId("thiramai_cc_agent_thread");
+          const path = location.pathname || "";
+          const os_key = path.includes("/research")
+            ? "research"
+            : path.includes("/stock")
+              ? "stock"
+              : "stock";
+          const pdata = await postAgentCommand({
+            command: m,
+            os_key,
+            execution_mode: "paper",
+            correlation_id: corr,
+          });
+          const summary = [
+            `**${pdata.title || "Agent plan"}**`,
+            "",
+            `Task id: \`${pdata.task_id}\``,
+            pdata.correlation_id ? `Thread: \`${String(pdata.correlation_id).slice(0, 12)}…\`` : "",
+            pdata.requires_approval ? "\nApprove steps in the **Research / Stock** workflow panel (live logs stream there)." : "",
+          ]
+            .filter(Boolean)
+            .join("\n");
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: summary, ts: Date.now(), agentPlan: pdata },
+          ]);
+          showToastDedup({ type: "success", message: "Agent plan ready — approve steps in the workflow panel." });
+        } catch (e) {
+          const msg = e?.response?.data?.detail || e?.message || "Agent command failed";
+          setError(msg);
+          showToastDedup({ type: "error", message: String(msg) });
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
       setLoading(true);
       setError(null);
       if (!confirming && !isPartialPending) {
@@ -211,7 +322,18 @@ export default function AIAssistantPanel() {
         setLoading(false);
       }
     },
-    [loading, message, safeParseInsights, agentMode, pendingId, speakReplies, tamilVoice, jarvisOrgId],
+    [
+      loading,
+      message,
+      safeParseInsights,
+      agentMode,
+      pendingId,
+      speakReplies,
+      tamilVoice,
+      jarvisOrgId,
+      agenticPlanMode,
+      location.pathname,
+    ],
   );
 
   const confirmProposalAt = useCallback(
@@ -262,6 +384,19 @@ export default function AIAssistantPanel() {
       setLoading(false);
     }
   }, [loading]);
+
+  useEffect(() => {
+    const handler = (event) => {
+      const txt = String(event?.detail?.command || "").trim();
+      if (!txt) return;
+      setAgenticPlanMode(true);
+      setAgentMode(false);
+      setMessage(txt);
+      send({ textOverride: txt, forceAgentMode: false });
+    };
+    window.addEventListener("thiramai-global-command", handler);
+    return () => window.removeEventListener("thiramai-global-command", handler);
+  }, [send]);
 
   const startVoice = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -324,68 +459,10 @@ export default function AIAssistantPanel() {
       }
     }, [busyKey, navigate]);
 
-  const InsightCard = useMemo(() => {
-    return memo(function InsightCardInner({ insight, idx, criticalIdx, pillClassForPriority, busyKey, loading, onRunAction }) {
-      const actions = Array.isArray(insight?.actions) ? insight.actions : [];
-      const confidence =
-        typeof insight?.confidence === "number" && Number.isFinite(insight.confidence)
-          ? Math.max(0, Math.min(1, insight.confidence))
-          : null;
-      const isCritical = idx === criticalIdx && insight?.priority === "high";
-
-      return (
-        <div
-          className="cc-card"
-          style={{
-            marginBottom: 16,
-            borderColor: isCritical ? "rgba(187, 0, 0, 0.35)" : undefined,
-            boxShadow: isCritical ? "0 8px 20px rgba(187, 0, 0, 0.10)" : undefined,
-          }}
-        >
-          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", justifyContent: "space-between" }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>
-                {insight?.title || "Insight"}
-              </div>
-              <div className="cc-muted" style={{ marginTop: 8, fontSize: 14 }}>
-                {insight?.description || "—"}
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-              <span className={pillClassForPriority(insight?.priority)}>{insight?.priority || "low"}</span>
-              <div className="cc-muted" style={{ fontSize: 12 }}>
-                Confidence: {confidence == null ? "—" : `${Math.round(confidence * 100)}%`}
-              </div>
-            </div>
-          </div>
-
-          {actions.length > 0 ? (
-            <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
-              {actions.map((a, i) => {
-                const k = `${insight?.id || "insight"}__${a?.type || "action"}__${JSON.stringify(a?.payload || {})}`;
-                const isBusy = busyKey === k;
-                return (
-                  <button
-                    key={`${insight?.id || "insight"}_${i}`}
-                    type="button"
-                    className={i === 0 ? "cc-btn cc-btn-primary" : "cc-btn cc-btn-secondary"}
-                    disabled={loading || isBusy}
-                    onClick={() => onRunAction(a, insight?.id)}
-                  >
-                    {isBusy ? "Working…" : a?.label || "Run action"}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="cc-muted" style={{ marginTop: 16, fontSize: 12 }}>
-              No actions suggested.
-            </div>
-          )}
-        </div>
-      );
-    });
-  }, []);
+  const sortedInsights = Array.isArray(insights) ? insights.slice() : [];
+  sortedInsights.sort((a, b) => insightPriorityRank(a?.priority) - insightPriorityRank(b?.priority));
+  const criticalIdx = sortedInsights.findIndex((x) => x?.priority === "high");
+  const orgRows = Array.isArray(orgOptions) ? orgOptions : [];
 
   return (
     <div className="cc-card" style={{ position: "sticky", top: 24 }}>
@@ -397,9 +474,21 @@ export default function AIAssistantPanel() {
       <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "pointer" }}>
         <input
           type="checkbox"
+          checked={agenticPlanMode}
+          onChange={(e) => {
+            setAgenticPlanMode(e.target.checked);
+            if (e.target.checked) setAgentMode(false);
+          }}
+        />
+        <span>Agentic workflow (plan → approve — FastAPI /api/agent/command)</span>
+      </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "pointer" }}>
+        <input
+          type="checkbox"
           checked={agentMode}
           onChange={(e) => {
             setAgentMode(e.target.checked);
+            if (e.target.checked) setAgenticPlanMode(false);
             setPendingId(null);
             setProposals([]);
           }}
@@ -417,7 +506,7 @@ export default function AIAssistantPanel() {
           onChange={(e) => setJarvisOrgId(e.target.value)}
         >
           <option value="">Active workspace (JWT)</option>
-          {orgOptions.map((row) => (
+          {orgRows.map((row) => (
             <option key={row.organization?.id ?? row.id} value={row.organization?.id ?? row.id}>
               {row.organization?.name || `Organization ${row.organization?.id}`}
             </option>

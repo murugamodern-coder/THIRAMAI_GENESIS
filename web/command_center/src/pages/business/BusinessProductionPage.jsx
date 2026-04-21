@@ -10,6 +10,7 @@ import api from "../../api/client.js";
 
 export default function BusinessProductionPage() {
   const [summary, setSummary] = useState(null);
+  const [assets, setAssets] = useState([]);
   const [machines, setMachines] = useState([]);
   const [err, setErr] = useState(null);
   const [log, setLog] = useState({
@@ -35,8 +36,8 @@ export default function BusinessProductionPage() {
         fetchProductionMachines(),
       ]);
       setSummary(s);
-      setAssets(ast?.assets || []);
-      setMachines(m?.machines || []);
+      setAssets(Array.isArray(ast?.assets) ? ast.assets : []);
+      setMachines(Array.isArray(m?.machines) ? m.machines : []);
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || "Load failed");
     }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
@@ -11,6 +11,7 @@ import {
 import { requestNotificationPermission, useSmartNotifications } from "../hooks/useSmartNotifications.js";
 import { registerWebPushSubscription } from "../lib/webPushSubscribe.js";
 import { showToastDedup } from "../lib/toastDedup.js";
+import { safeArray } from "../lib/safeData.js";
 
 function formatLongDate(isoDate) {
   if (!isoDate) return "";
@@ -145,6 +146,13 @@ export default function TodayPage() {
 
   useSmartNotifications(data, { enabled: notifOn });
 
+  const tp = data?.tasks_progress;
+  const doneProgress = Number(tp?.completed_today) || 0;
+  const openProgress = Number(tp?.open_total) || 0;
+  const totalProgress = doneProgress + openProgress;
+  const progressPct =
+    totalProgress <= 0 ? null : Math.min(100, Math.round((doneProgress / totalProgress) * 100));
+
   const persistWin = useCallback(() => {
     if (!isoDate || typeof window === "undefined") return;
     window.localStorage.setItem(winStorageKey(isoDate), winText.trim());
@@ -158,25 +166,16 @@ export default function TodayPage() {
   const weatherLine = data?.weather_configured ? weatherLabel(weather) : null;
   const focus = data?.focus_task;
   const dueField = focus?.due_date || focus?.deadline;
-  const meetings = data?.meetings_today || [];
+  const meetings = safeArray(data?.meetings_today);
   const nextMeeting = data?.next_meeting;
   const health = data?.health_score_yesterday || data?.health_score;
   const biz = data?.business_snapshot;
-  const alerts = data?.proactive_alerts || [];
+  const alerts = safeArray(data?.proactive_alerts);
   const insight = data?.motivational_insight || data?.ai_insight || "";
-  const tp = data?.tasks_progress;
   const streak = data?.habit_streak_days;
   const lowStock = data?.low_stock_count;
   const upcomingEmi = data?.upcoming_emis;
   const cross = data?.cross_domain_insights;
-
-  const progressPct = useMemo(() => {
-    const done = Number(tp?.completed_today) || 0;
-    const open = Number(tp?.open_total) || 0;
-    const total = done + open;
-    if (total <= 0) return null;
-    return Math.min(100, Math.round((done / total) * 100));
-  }, [tp]);
 
   async function onEnableNotifs() {
     const p = await requestNotificationPermission();
@@ -258,7 +257,7 @@ export default function TodayPage() {
           </p>
           {wowCaptain ? <p className="cc-wow-captain">{wowCaptain}</p> : null}
           <ol className="cc-wow-list">
-            {wowInsights.map((row, i) => (
+            {safeArray(wowInsights).map((row, i) => (
               <li key={i} className="cc-wow-item">
                 <strong>{row.title || "Insight"}</strong>
                 {row.detail ? <p className="cc-muted cc-wow-detail">{row.detail}</p> : null}

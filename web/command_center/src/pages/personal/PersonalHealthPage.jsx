@@ -7,6 +7,7 @@ import {
   fetchPersonalVitals,
 } from "../../api/commandCenterApi.js";
 import { safeAsync } from "../../lib/safeAsync.js";
+import { safeArray } from "../../lib/safeData.js";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -53,8 +54,8 @@ export default function PersonalHealthPage() {
     setLoading(true);
     try {
       const [v, m] = await Promise.all([fetchPersonalVitals(40), fetchPersonalMedicines()]);
-      setVitals(v?.items || []);
-      setMedicines(m?.items || []);
+      setVitals(safeArray(v?.items));
+      setMedicines(safeArray(m?.items));
     } finally {
       setLoading(false);
     }
@@ -259,14 +260,14 @@ export default function PersonalHealthPage() {
                 </tr>
               </thead>
               <tbody>
-                {vitals.length === 0 ? (
+                {safeArray(vitals).length === 0 ? (
                   <tr>
                     <td colSpan={6} className="personal-os-empty-cta">
                       No vitals yet → log your first reading above.
                     </td>
                   </tr>
                 ) : (
-                  vitals.map((r) => (
+                  safeArray(vitals).map((r) => (
                     <tr key={r.id}>
                       <td>{r.recorded_at?.slice(0, 16)}</td>
                       <td>{r.weight_kg ?? "—"}</td>
@@ -285,8 +286,8 @@ export default function PersonalHealthPage() {
         <section className="personal-os-card">
           <h2 className="personal-os-card-title">Medicines</h2>
           <ul className="personal-os-list personal-os-list--plain">
-            {medicines.length === 0 && <li className="personal-os-empty-cta">No medicines yet → add one above.</li>}
-            {medicines.map((r) => (
+            {safeArray(medicines).length === 0 && <li className="personal-os-empty-cta">No medicines yet → add one above.</li>}
+            {safeArray(medicines).map((r) => (
               <li key={r.id}>
                 <strong>{r.name}</strong>
                 <div className="cc-muted" style={{ fontSize: 12 }}>

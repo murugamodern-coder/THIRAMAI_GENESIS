@@ -6,6 +6,11 @@ import {
   fetchInventoryList,
   updateInventoryItem,
 } from "../api/commandCenterApi.js";
+import Button from "../components/ui/Button.jsx";
+import Card from "../components/ui/Card.jsx";
+import Input from "../components/ui/Input.jsx";
+import Table from "../components/ui/Table.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
 
 export default function InventoryPage() {
   const [items, setItems] = useState([]);
@@ -19,6 +24,8 @@ export default function InventoryPage() {
     reorder_point: "",
   });
   const [editQty, setEditQty] = useState({});
+  const [query, setQuery] = useState("");
+  const [stockFilter, setStockFilter] = useState("all");
 
   const load = useCallback(async () => {
     setErr(null);
@@ -76,12 +83,35 @@ export default function InventoryPage() {
     }
   }
 
+  const filteredItems = (items ?? []).filter((row) => {
+    const byQuery = query.trim()
+      ? String(row?.sku_name || "").toLowerCase().includes(query.trim().toLowerCase())
+      : true;
+    if (!byQuery) return false;
+    if (stockFilter === "low") return Number(row?.quantity) <= Number(row?.reorder_point ?? 0);
+    if (stockFilter === "healthy") return Number(row?.quantity) > Number(row?.reorder_point ?? 0);
+    return true;
+  });
+
   return (
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 16px" }}>Inventory</h1>
       {err && <p className="cc-error">{err}</p>}
 
-      <div className="cc-card">
+      <Card title="Search and filters" subtitle="Use category/status filters and bulk actions">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Input variant="search" placeholder="Search SKU..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="cc-select" value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
+            <option value="all">All stock levels</option>
+            <option value="low">Low stock</option>
+            <option value="healthy">Healthy stock</option>
+          </select>
+          <Button variant="secondary" size="sm">Bulk export</Button>
+          <Button variant="secondary" size="sm">Bulk update</Button>
+        </div>
+      </Card>
+
+      <Card title="Low stock">
         <h2>Low stock</h2>
         {alerts.length === 0 ? (
           <p className="cc-muted">No low-stock SKUs for current threshold.</p>
@@ -94,9 +124,9 @@ export default function InventoryPage() {
             ))}
           </ul>
         )}
-      </div>
+      </Card>
 
-      <div className="cc-card">
+      <Card title="Add item">
         <h2>Add item</h2>
         <form onSubmit={addItem} style={{ display: "grid", gap: 10, maxWidth: 480 }}>
           <input
@@ -138,33 +168,27 @@ export default function InventoryPage() {
               onChange={(e) => setForm((f) => ({ ...f, reorder_point: e.target.value }))}
             />
           </div>
-          <button type="submit" className="cc-btn cc-btn-primary" style={{ width: 120 }}>
-            Add
-          </button>
+          <Button type="submit" variant="primary" size="md">Add</Button>
         </form>
-      </div>
+      </Card>
 
-      <div className="cc-card">
+      <Card title="Stock table">
         <h2>Stock</h2>
-        <div className="cc-table-wrap">
-          <table className="cc-table">
-            <thead>
-              <tr>
-                <th>SKU</th>
-                <th>Location</th>
-                <th>Qty</th>
-                <th>Reorder</th>
-                <th>Update qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.sku_name}</td>
-                  <td>{row.location || "—"}</td>
-                  <td>{row.quantity}</td>
-                  <td>{row.reorder_point ?? "—"}</td>
-                  <td>
+        {filteredItems.length === 0 ? (
+          <EmptyState title="No inventory items" description="Try adjusting filters or adding an item." />
+        ) : (
+          <Table
+            rows={filteredItems}
+            columns={[
+              { key: "sku_name", label: "SKU" },
+              { key: "location", label: "Location", render: (r) => r.location || "—" },
+              { key: "quantity", label: "Qty" },
+              { key: "reorder_point", label: "Reorder", render: (r) => r.reorder_point ?? "—" },
+              {
+                key: "actions",
+                label: "Quick edit",
+                render: (row) => (
+                  <div style={{ display: "flex", gap: 6 }}>
                     <input
                       className="cc-input"
                       style={{ width: 100 }}
@@ -173,17 +197,16 @@ export default function InventoryPage() {
                       placeholder={String(row.quantity)}
                       value={editQty[row.id] ?? ""}
                       onChange={(e) => setEditQty((q) => ({ ...q, [row.id]: e.target.value }))}
-                    />{" "}
-                    <button type="button" className="cc-btn" onClick={() => saveQty(row.id)}>
-                      Save
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                    />
+                    <Button variant="secondary" size="sm" onClick={() => saveQty(row.id)}>Save</Button>
+                  </div>
+                ),
+              },
+            ]}
+          />
+        )}
+      </Card>
+      <Button variant="primary" className="cc-fab-main" aria-label="Add inventory item">+</Button>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   fetchMyOrganizations,
@@ -23,6 +23,7 @@ export default function WebsiteBuilderPage() {
   const [publicUrl, setPublicUrl] = useState("");
   const [slug, setSlug] = useState("");
   const [loading, setLoading] = useState(false);
+  const orgRows = Array.isArray(orgs) ? orgs.filter((row) => row?.organization?.id != null) : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +43,7 @@ export default function WebsiteBuilderPage() {
     };
   }, []);
 
-  const oidNum = useMemo(() => Number(orgId) || 0, [orgId]);
+  const oidNum = Number(orgId) || 0;
 
   const refreshMeta = useCallback(async () => {
     if (!oidNum) return;
@@ -125,19 +126,19 @@ export default function WebsiteBuilderPage() {
 
   return (
     <div className="cc-dashboard" style={{ maxWidth: 1100, margin: "0 auto", padding: "16px 20px 40px" }}>
-      <h1 style={{ marginBottom: 8 }}>Website builder</h1>
+      <h1 style={{ marginBottom: 8 }}>Agentic Platform</h1>
       <p className="cc-muted" style={{ marginBottom: 20 }}>
-        Generate a static site from your org name + inventory, preview inline, then deploy nginx config when your
-        server is ready. Wildcard DNS <code>*.thiramai.co.in</code> must point at the host.
+        Build and deploy autonomous web experiences from organization context. This is the platform layer that powers
+        generated digital surfaces and deployment workflows.
       </p>
 
       <section className="cc-card" style={{ marginBottom: 20 }}>
-        <h2 className="cc-today-card-title">Configure</h2>
+        <h2 className="cc-today-card-title">Platform configuration</h2>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
           <label className="cc-muted" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             Business
             <select className="cc-select" value={orgId} onChange={(e) => setOrgId(e.target.value)} style={{ minWidth: 220 }}>
-              {orgs.map((row) => (
+              {orgRows.map((row) => (
                 <option key={row.organization.id} value={String(row.organization.id)}>
                   {row.organization.name}
                 </option>
@@ -155,13 +156,13 @@ export default function WebsiteBuilderPage() {
             </select>
           </label>
           <button type="button" className="cc-btn cc-btn-primary" disabled={loading || !oidNum} onClick={onBuild}>
-            Build site
+            Build platform artifact
           </button>
           <button type="button" className="cc-btn" disabled={loading || !oidNum} onClick={onDeploy}>
             Deploy (nginx)
           </button>
           <button type="button" className="cc-btn" disabled={loading || !oidNum} onClick={refreshPreview}>
-            Refresh preview
+            Refresh artifact preview
           </button>
         </div>
         {(slug || publicUrl) && (
@@ -179,9 +180,9 @@ export default function WebsiteBuilderPage() {
       </section>
 
       <section className="cc-card">
-        <h2 className="cc-today-card-title">Live preview</h2>
+        <h2 className="cc-today-card-title">Live artifact preview</h2>
         {!previewHtml ? (
-          <p className="cc-muted">{loading ? "Loading…" : "Build a site to see preview here."}</p>
+          <p className="cc-muted">{loading ? "Loading…" : "Generate an artifact to view preview here."}</p>
         ) : (
           <iframe
             title="site-preview"

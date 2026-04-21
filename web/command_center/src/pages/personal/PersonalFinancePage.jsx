@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   createPersonalBudget,
@@ -13,6 +13,7 @@ import {
   postPersonalExpenseScanPreview,
 } from "../../api/commandCenterApi.js";
 import { safeAsync } from "../../lib/safeAsync.js";
+import { safeArray } from "../../lib/safeData.js";
 
 const EXPENSE_CATEGORIES = [
   { value: "food", label: "Food" },
@@ -93,9 +94,9 @@ export default function PersonalFinancePage() {
         fetchPersonalLoans(),
         fetchPersonalBudgets(),
       ]);
-      setExpenses(e?.items || []);
-      setLoans(l?.items || []);
-      setBudgets(b?.items || []);
+      setExpenses(safeArray(e?.items));
+      setLoans(safeArray(l?.items));
+      setBudgets(safeArray(b?.items));
     } finally {
       setLoading(false);
     }
@@ -274,20 +275,6 @@ export default function PersonalFinancePage() {
       setMessage(err?.response?.data?.detail || err?.message || "Failed.");
     }
   };
-
-  const expenseRows = useMemo(
-    () =>
-      expenses.map((x) => (
-        <tr key={x.id}>
-          <td>{x.spent_at?.slice(0, 16)}</td>
-          <td>{x.category}</td>
-          <td>{x.subcategory || "—"}</td>
-          <td style={{ textAlign: "right" }}>{x.amount}</td>
-          <td className="cc-muted">{x.title || "—"}</td>
-        </tr>
-      )),
-    [expenses],
-  );
 
   return (
     <div className="personal-os-page personal-os-touch">
@@ -512,14 +499,22 @@ export default function PersonalFinancePage() {
               </tr>
             </thead>
             <tbody>
-              {expenseRows.length === 0 ? (
+              {safeArray(expenses).length === 0 ? (
                 <tr>
                   <td colSpan={5} className="personal-os-empty-cta">
                     No expenses yet → add one with the form above.
                   </td>
                 </tr>
               ) : (
-                expenseRows
+                safeArray(expenses).map((x) => (
+                  <tr key={x.id}>
+                    <td>{x.spent_at?.slice(0, 16)}</td>
+                    <td>{x.category}</td>
+                    <td>{x.subcategory || "—"}</td>
+                    <td style={{ textAlign: "right" }}>{x.amount}</td>
+                    <td className="cc-muted">{x.title || "—"}</td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -530,8 +525,8 @@ export default function PersonalFinancePage() {
         <section className="personal-os-card">
           <h2 className="personal-os-card-title">Loans</h2>
           <ul className="personal-os-list personal-os-list--plain">
-            {loans.length === 0 && <li className="personal-os-empty-cta">No loans yet → use the loan form above.</li>}
-            {loans.map((r) => (
+            {safeArray(loans).length === 0 && <li className="personal-os-empty-cta">No loans yet → use the loan form above.</li>}
+            {safeArray(loans).map((r) => (
               <li key={r.id}>
                 <strong>{r.display_name}</strong> · {r.loan_kind}
                 <div className="cc-muted" style={{ fontSize: 12 }}>
@@ -545,8 +540,8 @@ export default function PersonalFinancePage() {
         <section className="personal-os-card">
           <h2 className="personal-os-card-title">Budgets</h2>
           <ul className="personal-os-list personal-os-list--plain">
-            {budgets.length === 0 && <li className="cc-muted">No budgets.</li>}
-            {budgets.map((r) => (
+            {safeArray(budgets).length === 0 && <li className="cc-muted">No budgets.</li>}
+            {safeArray(budgets).map((r) => (
               <li key={r.id}>
                 <strong>{r.category}</strong> {r.budget_amount} {r.currency}
                 <div className="cc-muted" style={{ fontSize: 12 }}>

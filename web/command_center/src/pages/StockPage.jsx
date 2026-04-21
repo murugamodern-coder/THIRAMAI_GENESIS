@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   deleteStockAlert,
@@ -15,6 +15,7 @@ import {
   subscribeStockRealtime,
 } from "../api/commandCenterApi.js";
 import { showToastDedup } from "../lib/toastDedup.js";
+import { safeArray } from "../lib/safeData.js";
 
 function Card({ title, children }) {
   return (
@@ -243,14 +244,11 @@ export default function StockPage() {
     return { borderLeft: "4px solid #94a3b8" };
   };
 
-  const displayPrices = useMemo(() => {
-    const p = liveTick?.prices || {};
-    const merged = { ...quotes };
-    Object.keys(p).forEach((k) => {
-      merged[k] = { ok: true, last: p[k]?.last, cached: !!p[k]?.cached };
-    });
-    return merged;
-  }, [liveTick, quotes]);
+  const tickPrices = liveTick?.prices || {};
+  const displayPrices = { ...quotes };
+  Object.keys(tickPrices).forEach((k) => {
+    displayPrices[k] = { ok: true, last: tickPrices[k]?.last, cached: !!tickPrices[k]?.cached };
+  });
 
   return (
     <div className="cc-dashboard" style={{ maxWidth: 1100, margin: "0 auto", padding: "16px 20px 40px" }}>
@@ -286,7 +284,7 @@ export default function StockPage() {
               borderBottom: "1px solid var(--cc-border, #333)",
             }}
           >
-            {watchlist.map((sym) => {
+            {safeArray(watchlist).map((sym) => {
               const q = displayPrices[sym] || {};
               const last = q.last;
               return (
@@ -310,7 +308,7 @@ export default function StockPage() {
           <div style={{ marginTop: 12 }}>
             <strong>Price alerts (this session)</strong>
             <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-              {liveTick.alerts.map((a, i) => (
+              {safeArray(liveTick?.alerts).map((a, i) => (
                 <li key={i} style={{ fontSize: 14 }}>
                   {a.message} <span className="cc-muted">({a.action})</span>
                 </li>
@@ -322,7 +320,7 @@ export default function StockPage() {
           <div style={{ marginTop: 12 }}>
             <strong>Live signals</strong>
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-              {liveTick.signals.map((s, i) => (
+              {safeArray(liveTick?.signals).map((s, i) => (
                 <div key={i} className="cc-card" style={{ padding: 10, margin: 0 }}>
                   <div style={{ fontWeight: 700 }}>{s.kind}</div>
                   <div className="cc-muted" style={{ fontSize: 13 }}>
@@ -346,7 +344,7 @@ export default function StockPage() {
             </div>
             {Array.isArray(brief?.intraday_opportunities_top3) && brief.intraday_opportunities_top3.length > 0 ? (
               <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {brief.intraday_opportunities_top3.map((o) => (
+                {safeArray(brief?.intraday_opportunities_top3).map((o) => (
                   <li key={o.symbol}>
                     <strong>{o.symbol}</strong> — {o.action}: {o.reasoning}
                   </li>
@@ -364,7 +362,7 @@ export default function StockPage() {
           {watchlist.length === 0 ? (
             <span className="cc-muted">No symbols yet — add NSE tickers (e.g. RELIANCE).</span>
           ) : (
-            watchlist.map((sym) => (
+            safeArray(watchlist).map((sym) => (
               <span key={sym} className="cc-pill">
                 {sym}
               </span>
@@ -424,7 +422,7 @@ export default function StockPage() {
         </div>
         {savedAlerts.length ? (
           <ul style={{ marginTop: 16, paddingLeft: 18 }}>
-            {savedAlerts.map((a) => (
+            {safeArray(savedAlerts).map((a) => (
               <li key={a.id} style={{ marginBottom: 8, fontSize: 14 }}>
                 <strong>{a.symbol}</strong> — {a.condition}{" "}
                 {a.price_threshold != null ? `₹${a.price_threshold}` : ""}
@@ -451,7 +449,7 @@ export default function StockPage() {
             gap: 12,
           }}
         >
-          {watchlist.map((sym) => {
+          {safeArray(watchlist).map((sym) => {
             const q = displayPrices[sym] || {};
             const last = q.last;
             return (
@@ -469,7 +467,7 @@ export default function StockPage() {
 
       <Card title="Signal cards">
         <div style={{ display: "grid", gap: 12 }}>
-          {watchlist.map((sym) => {
+          {safeArray(watchlist).map((sym) => {
             const sg = signals[sym] || {};
             const act = sg.action || "—";
             return (
@@ -520,7 +518,7 @@ export default function StockPage() {
                 </tr>
               </thead>
               <tbody>
-                {(portfolio.positions || []).map((row) => (
+                {safeArray(portfolio?.positions).map((row) => (
                   <tr key={row.symbol}>
                     <td>{row.symbol}</td>
                     <td>{row.quantity}</td>

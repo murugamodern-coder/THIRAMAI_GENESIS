@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { fetchBusinessTasks, patchBusinessTask, postBusinessTask } from "../../api/commandCenterApi.js";
+import { safeArray } from "../../lib/safeData.js";
 
 const PRESETS = {
   machine_startup: [
@@ -34,7 +35,7 @@ export default function BusinessTasksPage() {
     setErr(null);
     try {
       const out = await fetchBusinessTasks(120);
-      setTasks(out?.tasks || []);
+      setTasks(safeArray(out?.tasks));
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || "Load failed");
     }
@@ -130,11 +131,11 @@ export default function BusinessTasksPage() {
 
       <div className="cc-card">
         <h2>Pending</h2>
-        {tasks.filter((t) => t.status === "pending").length === 0 ? (
+        {safeArray(tasks).filter((t) => t.status === "pending").length === 0 ? (
           <p className="cc-muted">No pending tasks.</p>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {tasks
+            {safeArray(tasks)
               .filter((t) => t.status === "pending")
               .map((t) => (
                 <li key={t.id} className="cc-card" style={{ marginBottom: 10, padding: 12 }}>

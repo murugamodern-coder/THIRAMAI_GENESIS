@@ -6,8 +6,10 @@ import { can, PERMISSIONS } from "../../lib/rbac.js";
 import { useCommandStore } from "../../store/useCommandStore.js";
 import { safeAsync } from "../../lib/safeAsync.js";
 import { showToastDedup } from "../../lib/toastDedup.js";
+import { safeArray } from "../../lib/safeData.js";
 
 export default function MissionHub({ items, onResolved }) {
+  const list = safeArray(items);
   const [busyId, setBusyId] = useState(null);
   const [err, setErr] = useState(null);
   const role = useCommandStore((s) => s.role);
@@ -47,7 +49,7 @@ export default function MissionHub({ items, onResolved }) {
     }
   }
 
-  if (!items?.length) {
+  if (!list.length) {
     return (
       <div className="cc-card">
         <h2>Mission hub — AI decisions</h2>
@@ -74,7 +76,7 @@ export default function MissionHub({ items, onResolved }) {
             </tr>
           </thead>
           <tbody>
-            {items.map((row) => (
+            {list.map((row) => (
               <tr key={row.id}>
                 <td>{row.id}</td>
                 <td>{row.action}</td>
