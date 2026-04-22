@@ -3,14 +3,6 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/client.js";
 import { showToastDedup } from "../lib/toastDedup.js";
 
-const OS_BADGE = {
-  stock: { label: "Stock OS", color: "#f59e0b" },
-  research: { label: "Research OS", color: "#f97316" },
-  business: { label: "Business OS", color: "#3b82f6" },
-  personal: { label: "Personal OS", color: "#10b981" },
-  agentic: { label: "Agentic OS", color: "#a855f7" },
-};
-
 function inferOsKey(payload) {
   const direct = payload?.os_key || payload?.handled_by || payload?.os;
   if (typeof direct === "string" && direct.trim()) return direct.trim().toLowerCase();
@@ -30,12 +22,9 @@ export default function GlobalCommandBar() {
   const recognitionRef = useRef(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [result, setResult] = useState(null);
   const [attachment, setAttachment] = useState(null);
   const [listening, setListening] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-
   const isMobile = useMemo(() => window.matchMedia?.("(max-width: 768px)")?.matches, []);
   const MAX_SIZE = 10 * 1024 * 1024;
 
@@ -76,7 +65,6 @@ export default function GlobalCommandBar() {
       preview: isImage ? dataUrl : "",
     });
     setErrorMsg("");
-    setOpen(true);
   }
 
   useEffect(() => {
@@ -95,10 +83,8 @@ export default function GlobalCommandBar() {
         const tag = document.activeElement?.tagName?.toLowerCase();
         if (isSlash && (tag === "input" || tag === "textarea")) return;
         e.preventDefault();
-        setOpen(true);
         setTimeout(() => inputRef.current?.focus(), 50);
       }
-      if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -133,17 +119,7 @@ export default function GlobalCommandBar() {
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("paste", onPaste);
     };
-  });
-
-  useEffect(() => {
-    const onCommandRequest = (ev) => {
-      const command = String(ev?.detail?.command || "").trim();
-      if (!command || busy) return;
-      executeSubmit(command, ev?.detail?.source || "external_event");
-    };
-    window.addEventListener("thiramai-command-request", onCommandRequest);
-    return () => window.removeEventListener("thiramai-command-request", onCommandRequest);
-  }, [busy]);
+  }, []);
 
   function stopVoice() {
     try {
@@ -184,9 +160,7 @@ export default function GlobalCommandBar() {
       setErrorMsg(msg);
       showToastDedup({ type: "error", message: msg });
     };
-    recognition.onend = () => {
-      setListening(false);
-    };
+    recognition.onend = () => setListening(false);
     recognitionRef.current = recognition;
     recognition.start();
   }
@@ -198,7 +172,6 @@ export default function GlobalCommandBar() {
     setBusy(true);
     setErrorMsg("");
     setValue("");
-    setResult(null);
     try {
       const resp = await api.post("/api/orchestrator/command", {
         command,
@@ -208,7 +181,6 @@ export default function GlobalCommandBar() {
           : undefined,
       });
       const payload = resp.data || { message: "Command accepted" };
-      setResult(payload);
       setAttachment(null);
       window.dispatchEvent(new CustomEvent("thiramai-chat-response", { detail: { payload } }));
       if (!payload?.show_inline) {
@@ -226,7 +198,6 @@ export default function GlobalCommandBar() {
       }
     } catch (err) {
       const error = err?.response?.data?.detail || err?.message || "Command failed";
-      setResult({ error });
       setErrorMsg(String(error));
       window.dispatchEvent(new CustomEvent("thiramai-chat-error", { detail: { error } }));
     } finally {
@@ -234,12 +205,17 @@ export default function GlobalCommandBar() {
     }
   }
 
-  function submit() {
-    executeSubmit(value, "global_bar");
-  }
+  useEffect(() => {
+    const onCommandRequest = (ev) => {
+      const command = String(ev?.detail?.command || "").trim();
+      if (!command || busy) return;
+      executeSubmit(command, ev?.detail?.source || "external_event");
+    };
+    window.addEventListener("thiramai-command-request", onCommandRequest);
+    return () => window.removeEventListener("thiramai-command-request", onCommandRequest);
+  }, [busy]);
 
-  const osKey = result ? inferOsKey(result) : "agentic";
-  const badge = OS_BADGE[osKey] || OS_BADGE.agentic;
+  const canSend = value.trim().length > 0 || !!attachment;
 
   return (
     <div className="cc-global-command">
@@ -260,37 +236,33 @@ export default function GlobalCommandBar() {
       ) : null}
 
       <div className="cc-command-pill">
-        <button type="button" className="cc-command-icon" disabled={busy} onClick={() => fileInputRef.current?.click()} title="Attach file">
-          📎
+        <button type="button" className="cc-command-icon" disabled={busy} onClick={() => fileInputRef.current?.click()} title="Attach file">📎</button>
+        <button type="button" className={`cc-command-icon cc-mic-btn ${listening ? "is-listening" : ""}`} disabled={busy} onClick={toggleVoice} title="Voice (Chrome only)">
+          <span className="cc-mic-glyph">🎤</span>
         </button>
-        <button type="button" className="cc-command-icon" disabled={busy} onClick={toggleVoice} title="Voice (Chrome only)">
-          🎤
-        </button>
+        {listening ? <span className="cc-mic-listening-text">Listening...</span> : null}
         {isMobile ? (
-          <button type="button" className="cc-command-icon" disabled={busy} onClick={() => cameraInputRef.current?.click()} title="Camera">
-            📷
-          </button>
+          <button type="button" className="cc-command-icon" disabled={busy} onClick={() => cameraInputRef.current?.click()} title="Camera">📷</button>
         ) : null}
         <textarea
           ref={inputRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          onFocus={() => setOpen(true)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              submit();
+              executeSubmit(value, "global_bar");
             }
-            if (e.key === "Escape") setOpen(false);
           }}
           placeholder="Thiramai-கிட்ட கேளு... (/ or Cmd+K)"
           className="cc-command-textarea"
           disabled={busy}
           rows={1}
         />
-        <button onClick={submit} disabled={busy} className="cc-command-run">
-          {busy ? "..." : "Run →"}
+        <button onClick={() => executeSubmit(value, "global_bar")} disabled={busy || !canSend} className={`cc-command-run ${canSend ? "has-content" : ""}`}>
+          {busy ? "…" : "➤"}
         </button>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -314,28 +286,7 @@ export default function GlobalCommandBar() {
         />
       </div>
 
-      {(listening || errorMsg) ? (
-        <div className={`cc-command-hint ${errorMsg ? "error" : ""}`}>
-          {errorMsg || <><span className="cc-listening-dot" /> Listening...</>}
-        </div>
-      ) : null}
-
-      {open && result ? (
-        <div className="cc-global-command-result">
-          <span className="cc-command-route-badge" style={{ color: badge.color, borderColor: `${badge.color}60`, background: `${badge.color}15` }}>
-            → Routed to {badge.label}
-          </span>
-          <div>
-            {result?.error
-              ? `Error: ${result.error}`
-              : result?.show_inline
-                ? String(result?.response || "No response available")
-                : result?.task_id
-                  ? `Mission ${result.task_id} created${result?.requires_approval ? " · approval required" : ""}`
-                  : String(result?.message || "Command accepted")}
-          </div>
-        </div>
-      ) : null}
+      {errorMsg ? <div className="cc-command-hint error">{errorMsg}</div> : null}
     </div>
   );
 }

@@ -128,7 +128,10 @@ export default function ShellLayout() {
   }
 
   return (
-    <div className={`cc-shell ${mobileMenuOpen ? "mobile-open" : ""}`}>
+    <div
+      className={`cc-shell ${mobileMenuOpen ? "mobile-open" : ""}`}
+      style={{ "--cc-sidebar-width": collapsed ? "88px" : "260px" }}
+    >
       <IncidentBanner />
       <aside className={`cc-sidebar ${collapsed ? "is-collapsed" : ""}`} aria-label="Primary navigation">
         <div className="cc-sidebar__brand">

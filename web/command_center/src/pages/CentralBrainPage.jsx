@@ -30,7 +30,9 @@ export default function CentralBrainPage() {
   const [alertsOpen, setAlertsOpen] = useState(true);
   const [alertsDismissed, setAlertsDismissed] = useState(false);
   const [expandedByIndex, setExpandedByIndex] = useState({});
+  const [copiedByIndex, setCopiedByIndex] = useState({});
   const listRef = useRef(null);
+  const messagesEndRef = useRef(null);
 
   const alertsCount = proactiveAlerts.length;
 
@@ -49,8 +51,7 @@ export default function CentralBrainPage() {
   }, []);
 
   useEffect(() => {
-    if (!listRef.current) return;
-    listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, thinking]);
 
   useEffect(() => {
@@ -166,23 +167,32 @@ export default function CentralBrainPage() {
                   <div className="cb-meta">
                     <span>{new Date(m.timestamp).toLocaleTimeString()}</span>
                     {!user ? (
-                      <button
-                        type="button"
-                        className="cb-copy-btn"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(String(m.content || ""));
-                            showToastDedup({ type: "success", message: "Copied!" });
-                          } catch {
-                            showToastDedup({ type: "error", message: "Copy failed" });
-                          }
-                        }}
-                      >
-                        📋
-                      </button>
+                      null
                     ) : null}
                   </div>
                 </div>
+                {!user ? (
+                  <div className="cb-action-bar">
+                    <button
+                      type="button"
+                      className="cb-copy-action"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(String(m.content || ""));
+                          setCopiedByIndex((prev) => ({ ...prev, [idx]: true }));
+                          showToastDedup({ type: "success", message: "Copied!" });
+                          setTimeout(() => {
+                            setCopiedByIndex((prev) => ({ ...prev, [idx]: false }));
+                          }, 2000);
+                        } catch {
+                          showToastDedup({ type: "error", message: "Copy failed" });
+                        }
+                      }}
+                    >
+                      {copiedByIndex[idx] ? "✓ Copied" : "📋 Copy"}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             );
           })
@@ -198,6 +208,7 @@ export default function CentralBrainPage() {
             </div>
           </div>
         ) : null}
+        <div ref={messagesEndRef} />
       </div>
     </div>
   );
