@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client.js";
+import { showToastDedup } from "../lib/toastDedup.js";
 
 const OS_BADGE = {
   stock: { label: "Stock OS", color: "#f59e0b" },
@@ -30,9 +31,8 @@ export default function GlobalCommandBar() {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState(null);
-  const [attachments, setAttachments] = useState([]);
-  const [isListening, setIsListening] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState("");
+  const [attachment, setAttachment] = useState(null);
+  const [listening, setListening] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const recognitionRef = useRef(null);
 
@@ -48,38 +48,34 @@ export default function GlobalCommandBar() {
     });
   }
 
-  async function normalizeFiles(files) {
-    const accepted = [];
-    for (const file of files) {
-      if (file.size > MAX_SIZE) {
-        setErrorMsg(`${file.name} exceeds 10MB limit`);
-        continue;
-      }
-      const ext = (file.name.split(".").pop() || "").toLowerCase();
-      const isImage = file.type.startsWith("image/");
-      const allowed = isImage || ["pdf", "txt", "csv", "xlsx"].includes(ext);
-      if (!allowed) {
-        setErrorMsg(`Unsupported file type: ${file.name}`);
-        continue;
-      }
-      const base64 = await fileToDataUrl(file);
-      accepted.push({
-        name: file.name,
-        type: file.type || `application/${ext}`,
-        size: file.size,
-        preview: isImage ? base64 : "",
-        base64,
-      });
-    }
-    if (accepted.length > 0) setErrorMsg("");
-    return accepted;
-  }
-
   async function addFiles(list) {
     const files = Array.from(list || []);
     if (!files.length) return;
-    const normalized = await normalizeFiles(files);
-    setAttachments((prev) => [...prev, ...normalized]);
+    const file = files[0];
+    if (file.size > MAX_SIZE) {
+      const msg = `${file.name} exceeds 10MB limit`;
+      setErrorMsg(msg);
+      showToastDedup({ type: "error", message: msg });
+      return;
+    }
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const isImage = file.type.startsWith("image/");
+    const allowed = isImage || ["pdf", "txt", "csv", "xlsx"].includes(ext);
+    if (!allowed) {
+      const msg = `Unsupported file type: ${file.name}`;
+      setErrorMsg(msg);
+      showToastDedup({ type: "error", message: msg });
+      return;
+    }
+    const dataUrl = await fileToDataUrl(file);
+    const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+    setAttachment({
+      name: file.name,
+      type: file.type || `application/${ext}`,
+      data: base64,
+      preview: isImage ? dataUrl : "",
+    });
+    setErrorMsg("");
     setOpen(true);
   }
 
@@ -139,7 +135,7 @@ export default function GlobalCommandBar() {
     };
     window.addEventListener("thiramai-command-request", onCommandRequest);
     return () => window.removeEventListener("thiramai-command-request", onCommandRequest);
-  }, [busy, value, attachments]);
+  }, [busy]);
 
   function stopVoice() {
     try {
@@ -147,46 +143,41 @@ export default function GlobalCommandBar() {
     } catch {
       // ignore
     }
-    setIsListening(false);
-    setVoiceStatus("");
+    setListening(false);
   }
 
   function toggleVoice() {
-    if (isListening) {
+    if (listening) {
       stopVoice();
       return;
     }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setErrorMsg("SpeechRecognition is not supported in this browser");
+      const msg = "Voice not supported in this browser";
+      setErrorMsg(msg);
+      showToastDedup({ type: "warning", message: msg });
       return;
     }
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
     recognition.lang = "ta-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
     recognition.onstart = () => {
-      setIsListening(true);
-      setVoiceStatus("Listening...");
+      setListening(true);
       setErrorMsg("");
     };
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        transcript += event.results[i][0].transcript;
-      }
-      if (transcript.trim()) {
-        setValue((prev) => `${prev}${prev ? " " : ""}${transcript.trim()}`);
-      }
+    recognition.onresult = (e) => {
+      const transcript = e?.results?.[0]?.[0]?.transcript || "";
+      if (transcript.trim()) setValue(transcript);
     };
-    recognition.onerror = () => {
-      setErrorMsg("Voice recognition failed");
-      setIsListening(false);
-      setVoiceStatus("");
+    recognition.onerror = (e) => {
+      setListening(false);
+      const msg = `Mic error: ${e?.error || "unknown"}`;
+      setErrorMsg(msg);
+      showToastDedup({ type: "error", message: msg });
     };
     recognition.onend = () => {
-      setIsListening(false);
-      setVoiceStatus("");
+      setListening(false);
     };
     recognitionRef.current = recognition;
     recognition.start();
@@ -204,16 +195,13 @@ export default function GlobalCommandBar() {
       const resp = await api.post("/api/orchestrator/command", {
         command,
         source,
-        attachments: attachments.map((a) => ({
-          name: a.name,
-          type: a.type,
-          size: a.size,
-          base64: a.base64,
-        })),
+        attachment: attachment
+          ? { name: attachment.name, type: attachment.type, data: attachment.data }
+          : undefined,
       });
       const payload = resp.data || { message: "Command accepted" };
       setResult(payload);
-      setAttachments([]);
+      setAttachment(null);
       window.dispatchEvent(new CustomEvent("thiramai-chat-response", { detail: { payload } }));
       if (!payload?.show_inline) {
         const routedOs = inferOsKey(payload);
@@ -258,27 +246,25 @@ export default function GlobalCommandBar() {
         border: "1px solid rgba(0,0,0,0.12)", borderRadius: "16px",
         padding: "10px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
       }}>
-        {attachments.length > 0 ? (
+        {attachment ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-            {attachments.map((a, idx) => (
-              <div key={`${a.name}_${idx}`} style={{ display: "flex", gap: 6, alignItems: "center", background: "rgba(15,23,42,0.06)", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
-                {a.preview ? <img src={a.preview} alt={a.name} style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 6 }} /> : <span>📄</span>}
-                <span>{a.name}</span>
-                <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== idx))}>×</button>
-              </div>
-            ))}
+            <div style={{ display: "flex", gap: 6, alignItems: "center", background: "rgba(15,23,42,0.06)", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
+              {attachment.preview ? <img src={attachment.preview} alt={attachment.name} style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 6 }} /> : <span>📄</span>}
+              <span>{attachment.name}</span>
+              <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setAttachment(null)}>×</button>
+            </div>
           </div>
         ) : null}
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={() => fileInputRef.current?.click()} title="Attach file">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={() => fileInputRef.current?.click()} title="Attach file" style={{ width: 36, height: 36, padding: 0, flexShrink: 0 }}>
             📎
           </button>
-          <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={toggleVoice} title="Voice input">
+          <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={toggleVoice} title="Voice (Chrome only)" style={{ width: 36, height: 36, padding: 0, flexShrink: 0 }}>
             🎤
-            {isListening ? <span style={{ width: 8, height: 8, marginLeft: 6, borderRadius: "50%", display: "inline-block", background: "#ef4444", boxShadow: "0 0 0 0 rgba(239,68,68,0.8)", animation: "cbPulse 1s infinite" }} /> : null}
+            {listening ? <span style={{ width: 8, height: 8, marginLeft: 6, borderRadius: "50%", display: "inline-block", background: "#ef4444", boxShadow: "0 0 0 0 rgba(239,68,68,0.8)", animation: "cbPulse 1s infinite" }} /> : null}
           </button>
           {isMobile ? (
-            <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={() => cameraInputRef.current?.click()} title="Camera">
+            <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={() => cameraInputRef.current?.click()} title="Camera" style={{ width: 36, height: 36, padding: 0, flexShrink: 0 }}>
               📷
             </button>
           ) : null}
@@ -297,7 +283,7 @@ export default function GlobalCommandBar() {
             placeholder="Command Thiramai... (/ or Cmd+K)"
             style={{
               flex: 1, border: "none", background: "transparent",
-              outline: "none", fontSize: "14px", color: "#1a1a1a", resize: "none", minHeight: 40, maxHeight: 120,
+              outline: "none", fontSize: "14px", color: "#1a1a1a", resize: "none", minHeight: 40, maxHeight: 120, minWidth: 0,
             }}
             disabled={busy}
           />
@@ -307,7 +293,7 @@ export default function GlobalCommandBar() {
             style={{
               background: busy ? "#94a3b8" : "#0f172a", color: "#fff",
               border: "none", borderRadius: "10px", padding: "7px 18px",
-              fontSize: "13px", fontWeight: 500, cursor: busy ? "not-allowed" : "pointer",
+              fontSize: "13px", fontWeight: 500, cursor: busy ? "not-allowed" : "pointer", flexShrink: 0,
             }}
           >
             {busy ? "..." : "Run →"}
@@ -335,9 +321,9 @@ export default function GlobalCommandBar() {
             }}
           />
         </div>
-        {(voiceStatus || errorMsg) ? (
+        {(listening || errorMsg) ? (
           <div style={{ marginTop: 8, fontSize: 12, color: errorMsg ? "#b91c1c" : "#1d4ed8" }}>
-            {errorMsg || voiceStatus}
+            {errorMsg || "Listening..."}
           </div>
         ) : null}
         {open && result && (
