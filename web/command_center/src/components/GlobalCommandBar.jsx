@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api/client.js";
 
 const OS_BADGE = {
@@ -21,6 +22,7 @@ function inferOsKey(payload) {
 }
 
 export default function GlobalCommandBar() {
+  const navigate = useNavigate();
   const inputRef = useRef(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,12 +49,24 @@ export default function GlobalCommandBar() {
   async function submit() {
     const command = value.trim();
     if (!command || busy) return;
+    setValue("");
     setBusy(true);
     setResult(null);
     try {
       const resp = await api.post("/api/orchestrator/command", { command, source: "global_bar" });
-      setResult(resp.data || { message: "Command accepted" });
-      setValue("");
+      const payload = resp.data || { message: "Command accepted" };
+      setResult(payload);
+      const routedOs = inferOsKey(payload);
+      const nextRoute = routedOs === "stock"
+        ? "/os/stock"
+        : routedOs === "research"
+          ? "/os/research"
+          : routedOs === "business"
+            ? "/dashboard/inventory"
+            : routedOs === "personal"
+              ? "/personal"
+              : "/os/agentic-platform";
+      navigate(nextRoute);
     } catch (err) {
       setResult({ error: err?.response?.data?.detail || err?.message || "Command failed" });
     } finally {

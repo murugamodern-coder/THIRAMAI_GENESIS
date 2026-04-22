@@ -8,6 +8,7 @@ import {
   postAgentCommand,
   streamAgentPlan,
 } from "../../api/commandCenterApi.js";
+import { showToastDedup } from "../../lib/toastDedup.js";
 
 /** Production THIRAMAI agentic workflow — Plan → Approve → Execute + live logs (SSE + poll fallback). */
 function AgentWorkflowPanelInner({
@@ -115,13 +116,18 @@ function AgentWorkflowPanelInner({
     try {
       const data = await postAgentApprove(plan.task_id, {
         signal,
+        mission_id: plan.task_id,
+        correlation_id: plan.correlation_id || threadId,
         execution_mode: executionMode === "live" ? "live" : "paper",
       });
       if (data.task_id) setPlan(data);
       else if (plan.task_id) setPlan(await refreshPlan(plan.task_id));
       setApproveSlider(0);
+      showToastDedup({ type: "success", message: signal === "reject" ? "Mission rejected" : "Mission step approved" });
     } catch (e) {
-      setError(e?.message || String(e));
+      const msg = e?.response?.data?.detail || e?.message || "Mission approval failed";
+      setError(msg);
+      showToastDedup({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
     }

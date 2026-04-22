@@ -643,9 +643,22 @@ export async function getAgentPlan(taskId) {
   return data;
 }
 
-export async function postAgentApprove(taskId, body) {
-  const { data } = await api.post(`/api/agent/approve/${encodeURIComponent(taskId)}`, body ?? {});
-  return data;
+export async function postAgentApprove(taskId, body = {}) {
+  const missionId = String(body?.mission_id || taskId || "").trim();
+  const payload = {
+    mission_id: missionId,
+    correlation_id: body?.correlation_id ?? null,
+    signal: body?.signal || "success",
+    execution_mode: body?.execution_mode || null,
+  };
+  try {
+    const { data } = await api.post("/api/agent/approve", payload);
+    return data;
+  } catch (e) {
+    if (e?.response?.status !== 404 && e?.response?.status !== 405) throw e;
+    const { data } = await api.post(`/api/agent/approve/${encodeURIComponent(missionId)}`, payload);
+    return data;
+  }
 }
 
 export async function fetchAgentMissions(params = {}) {
