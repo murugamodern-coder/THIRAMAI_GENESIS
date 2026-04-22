@@ -172,6 +172,51 @@ class OrchestratorCommandBody(BaseModel):
     source: str = Field("global_bar", max_length=128)
 
 
+def _classify_three_level_route(command_text: str) -> tuple[str, str, str]:
+    t = (command_text or "").strip().lower()
+    chat_keywords = (
+        "என்ன",
+        "what",
+        "when",
+        "எப்போ",
+        "who",
+        "யார்",
+        "how many",
+        "எத்தனை",
+        "status",
+        "நிலை",
+    )
+    mission_keywords = (
+        "plan",
+        "research",
+        "பிளான்",
+        "ஆராய்ச்சி",
+        "analyze",
+        "report",
+        "அறிக்கை",
+        "strategy",
+    )
+    action_keywords = (
+        "fix",
+        "build",
+        "deploy",
+        "create",
+        "சரிபண்ணு",
+        "உருவாக்கு",
+        "code",
+        "automate",
+    )
+
+    if any(k in t for k in action_keywords):
+        return "ACTION", "AgenticOS", "/os/agentic-platform"
+    if any(k in t for k in mission_keywords):
+        return "MISSION", "ResearchOS", "/os/research"
+    if any(k in t for k in chat_keywords):
+        return "CHAT", "Groq Chat", "/dashboard"
+    # Default to chat so short commands get instant response unless explicitly mission/action.
+    return "CHAT", "Groq Chat", "/dashboard"
+
+
 def _classify_os_key(command_text: str) -> str:
     t = (command_text or "").strip().lower()
     if any(k in t for k in ("stock", "trade", "option", "nifty")):
@@ -194,10 +239,32 @@ async def post_orchestrator_command(
     user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     from services.orchestrator import create_plan_from_command
+    from services.research_common import long_llm_sync
 
     command = body.command.strip()
-    os_key = _classify_os_key(command)
+    routing, routed_to, suggested_route = _classify_three_level_route(command)
+    os_key = "research" if routing == "MISSION" else "agentic" if routing == "ACTION" else "research"
     corr = (request.headers.get("X-Correlation-ID") or "").strip() or str(uuid.uuid4())
+
+    if routing == "CHAT":
+        response_text = await asyncio.to_thread(
+            lambda: long_llm_sync(
+                "You are THIRAMAI Central Brain. Give a concise, accurate instant answer in plain text.",
+                command,
+                prefer_gemini=False,
+            )
+        )
+        return {
+            "ok": True,
+            "routing": routing,
+            "routed_to": routed_to,
+            "response": str(response_text or "No response available right now."),
+            "suggested_route": suggested_route,
+            "os_key": "chat",
+            "task_id": None,
+            "requires_approval": False,
+        }
+
     out = create_plan_from_command(
         command,
         user_id=_uid(user),
@@ -206,8 +273,17 @@ async def post_orchestrator_command(
         correlation_id=corr[:128],
         execution_mode="paper",
     )
+    response_text = (
+        str(out.get("title") or "").strip()
+        or str(out.get("message") or "").strip()
+        or ("Mission created and ready for approval." if out.get("task_id") else "Command accepted.")
+    )
     return {
         "ok": bool(out.get("ok", True)),
+        "routing": routing,
+        "routed_to": routed_to,
+        "response": response_text,
+        "suggested_route": suggested_route,
         "os_key": os_key,
         "task_id": out.get("task_id"),
         "requires_approval": bool(out.get("requires_approval")),
