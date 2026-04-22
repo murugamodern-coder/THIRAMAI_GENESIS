@@ -306,6 +306,7 @@ function OSTile({ os, activity }) {
 }
 
 export default function CentralBrainPage() {
+  const navigate = useNavigate();
   const [time, setTime] = useState(() => new Date());
   const [activityMap, setActivityMap] = useState({});
   const [auditOpen, setAuditOpen] = useState(false);
@@ -313,10 +314,29 @@ export default function CentralBrainPage() {
   const [auditResults, setAuditResults] = useState([]);
   const [healthOpen, setHealthOpen] = useState(false);
   const [repairLogs, setRepairLogs] = useState([]);
+  const [proactiveAlerts, setProactiveAlerts] = useState([]);
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    api
+      .get("/api/brain/proactive")
+      .then((r) => {
+        if (!mounted) return;
+        const items = Array.isArray(r.data?.alerts) ? r.data.alerts : [];
+        setProactiveAlerts(items);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setProactiveAlerts([]);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -461,6 +481,59 @@ export default function CentralBrainPage() {
       </div>
 
       <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--cc-text, #111)", marginBottom: 10 }}>
+          Proactive Alerts
+        </div>
+        {proactiveAlerts.length === 0 ? (
+          <div
+            style={{
+              border: "1px solid var(--cc-border, #e5e7eb)",
+              borderRadius: 10,
+              padding: "10px 12px",
+              marginBottom: 12,
+              background: "var(--cc-bg2, #f9fafb)",
+              fontSize: 12,
+              color: "var(--cc-muted, #6b7280)",
+            }}
+          >
+            No active proactive alerts.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+            {proactiveAlerts.map((a, idx) => {
+              const critical = String(a?.severity || "").toLowerCase() === "critical";
+              return (
+                <div
+                  key={`${a?.type || "alert"}_${idx}`}
+                  style={{
+                    borderRadius: 10,
+                    border: `1px solid ${critical ? "#DC2626" : "#D97706"}`,
+                    background: critical ? "#FEE2E2" : "#FEF3C7",
+                    color: critical ? "#7F1D1D" : "#78350F",
+                    padding: "10px 12px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    fontSize: 12,
+                  }}
+                >
+                  <div>
+                    <strong style={{ textTransform: "uppercase", fontSize: 11 }}>{a?.type || "alert"}</strong>
+                    <div style={{ marginTop: 2 }}>{a?.message || "Attention required"}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="cc-btn cc-btn-secondary"
+                    onClick={() => navigate(String(a?.action_route || "/dashboard"))}
+                  >
+                    Fix Now →
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--cc-text, #111)", marginBottom: 2 }}>
           Operating Systems
         </div>

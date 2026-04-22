@@ -10,7 +10,7 @@ from collections import deque
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
@@ -20,6 +20,7 @@ from sqlalchemy import text
 
 from api.dependencies import CurrentUser, get_current_user, try_resolve_current_user_from_access_token
 from core.database import get_session_factory
+from core.stability.circuit_breaker import export_breaker_snapshots
 from services.health_checker import OSHealthChecker
 
 _log_agent = logging.getLogger("thiramai.api.agent")
@@ -326,6 +327,127 @@ def _classify_os_key(command_text: str) -> str:
     return "agentic"
 
 
+def _parse_dt_safe(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _task_is_pending(row: dict[str, Any]) -> bool:
+    try:
+        idx = int(row.get("current_step_index") or 0)
+    except Exception:
+        idx = 0
+    fp = row.get("full_plan_json")
+    if isinstance(fp, str):
+        try:
+            fp = json.loads(fp)
+        except Exception:
+            fp = {}
+    steps = (fp or {}).get("steps") if isinstance(fp, dict) else []
+    if not isinstance(steps, list) or not steps:
+        return True
+    if idx < len(steps):
+        return True
+    # If pointer moved past last step, still consider pending if statuses are not terminal.
+    return any(
+        isinstance(s, dict) and str(s.get("status") or "") not in ("completed", "skipped", "failed")
+        for s in steps
+    )
+
+
+async def _compute_proactive_alerts(user: CurrentUser) -> list[dict[str, Any]]:
+    alerts: list[dict[str, Any]] = []
+    uid = _uid(user)
+
+    # a) Any OS unhealthy/degraded/offline.
+    unhealthy: list[str] = []
+    for os_key in sorted(_ALLOWED):
+        try:
+            h = await _HEALTH_CHECKER.check_os(os_key, user_id=uid)
+            st = str(h.get("status") or "offline")
+            if st != "healthy":
+                unhealthy.append(f"{os_key}:{st}")
+        except Exception:
+            unhealthy.append(f"{os_key}:offline")
+    if unhealthy:
+        alerts.append(
+            {
+                "type": "os_health",
+                "message": f"{len(unhealthy)} OS module(s) degraded/offline ({', '.join(unhealthy[:3])}{'...' if len(unhealthy) > 3 else ''})",
+                "severity": "critical",
+                "action_route": "/dashboard",
+            }
+        )
+
+    # b) Pending missions older than 24h.
+    fac = get_session_factory()
+    if fac is not None:
+        stale_count = 0
+        now = datetime.now(timezone.utc)
+        try:
+            with fac() as session:
+                rows = session.execute(
+                    text(
+                        """
+                        SELECT task_id, updated_at, current_step_index, full_plan_json
+                        FROM agent_tasks
+                        WHERE user_id = :user_id
+                        ORDER BY updated_at DESC
+                        LIMIT 300
+                        """
+                    ),
+                    {"user_id": uid},
+                ).mappings().all()
+            for r in rows:
+                updated = _parse_dt_safe(r.get("updated_at"))
+                if not updated:
+                    continue
+                if now - updated <= timedelta(hours=24):
+                    continue
+                if _task_is_pending(dict(r)):
+                    stale_count += 1
+            if stale_count > 0:
+                alerts.append(
+                    {
+                        "type": "stale_pending_tasks",
+                        "message": f"{stale_count} pending mission(s) older than 24 hours",
+                        "severity": "warning",
+                        "action_route": "/os/research",
+                    }
+                )
+        except Exception:
+            # Table may not exist yet in some environments.
+            pass
+
+    # c) Any worker circuit breaker open.
+    try:
+        snaps = export_breaker_snapshots()
+        open_breakers = [s for s in snaps if str(s.get("state") or "").lower() == "open"]
+        if open_breakers:
+            alerts.append(
+                {
+                    "type": "circuit_breaker_open",
+                    "message": f"{len(open_breakers)} worker circuit breaker(s) OPEN",
+                    "severity": "critical",
+                    "action_route": "/dashboard",
+                }
+            )
+    except Exception:
+        pass
+
+    return alerts
+
+
 @router.post("/api/brain/vault/save", summary="Save Project Vault memory entry")
 async def save_project_vault_entry(
     body: VaultSaveBody,
@@ -391,6 +513,14 @@ async def search_project_vault(
     return {"ok": True, "items": items}
 
 
+@router.get("/api/brain/proactive", summary="Proactive central brain alerts")
+async def get_proactive_alerts(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    alerts = await _compute_proactive_alerts(user)
+    return {"alerts": alerts}
+
+
 @router.post("/api/orchestrator/command", summary="Global command router -> orchestrator plan")
 async def post_orchestrator_command(
     request: Request,
@@ -414,27 +544,33 @@ async def post_orchestrator_command(
                 for i, h in enumerate(vault_hits)
             ]
         )
+        proactive_alerts = await _compute_proactive_alerts(user)
+        alerts_count = len(proactive_alerts)
         response_text = await asyncio.to_thread(
             lambda: long_llm_sync(
                 "You are THIRAMAI Central Brain. Give a concise, accurate instant answer in plain text. Use project vault context when relevant.",
                 (
                     f"User query:\n{command}\n\n"
-                    f"Project vault context (may be empty):\n{vault_context or 'No matching vault context found.'}"
+                    f"Project vault context (may be empty):\n{vault_context or 'No matching vault context found.'}\n\n"
+                    f"Active proactive alerts count: {alerts_count}"
                 ),
                 prefer_gemini=False,
             )
         )
+        base_response = str(response_text or "No response available right now.")
+        decorated = f"{base_response} (⚠️ {alerts_count} active alerts need attention)"
         return {
             "ok": True,
             "routing": routing,
             "routed_to": routed_to,
-            "response": str(response_text or "No response available right now."),
+            "response": decorated,
             "suggested_route": suggested_route,
             "show_inline": True,
             "vault_matches": [
                 {"vault_id": h.get("vault_id"), "project_name": h.get("project_name"), "category": h.get("category")}
                 for h in vault_hits
             ],
+            "alerts_count": alerts_count,
             "os_key": "chat",
             "task_id": None,
             "requires_approval": False,
