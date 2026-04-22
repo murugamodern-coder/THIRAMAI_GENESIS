@@ -132,7 +132,7 @@ export default function ShellLayout() {
           </button>
           {!collapsed ? <span className="cc-brand">THIRAMAI</span> : null}
         </div>
-        <nav className="cc-nav" aria-label="Primary">
+        <nav className="cc-nav cc-nav--sidebar" aria-label="Primary">
           <NavLink
             className={({ isActive }) => (isActive ? "active" : undefined)}
             end

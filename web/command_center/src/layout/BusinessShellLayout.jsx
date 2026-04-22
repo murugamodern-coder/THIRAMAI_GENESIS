@@ -165,7 +165,7 @@ export default function BusinessShellLayout() {
         <Outlet context={{ orgId: idNum, base, hint }} />
       </main>
 
-      <nav className="biz-bottom-nav" aria-label="Business sections">
+      <nav className="biz-bottom-nav biz-bottom-nav--scroll" aria-label="Business sections">
         {NAV.map(({ to, label }) => (
           <NavLink
             key={to}
