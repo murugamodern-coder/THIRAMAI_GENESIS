@@ -1566,6 +1566,14 @@ table.cc-table {
   }
 }
 
+.cc-mobile-menu-btn {
+  display: none;
+}
+
+.cc-sidebar-overlay {
+  display: none;
+}
+
 .cc-mobile-nav__item {
   flex: 1;
   display: flex;
@@ -1592,6 +1600,88 @@ table.cc-table {
 .cc-mobile-nav__item.is-active {
   color: var(--cc-primary);
   background: rgba(10, 110, 209, 0.06);
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 90%;
+  }
+
+  .cc-mobile-menu-btn {
+    display: inline-flex;
+  }
+
+  .cc-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .cc-shell.mobile-open .cc-sidebar {
+    display: grid;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(82vw, 320px);
+    z-index: 1400;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+
+  .cc-shell.mobile-open .cc-sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: none;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 1300;
+    padding: 0;
+  }
+
+  .cc-global-command {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    padding: 8px;
+  }
+
+  .cc-global-command input,
+  .cc-global-command button {
+    min-height: 56px !important;
+    font-size: 16px !important;
+  }
+
+  .cc-global-command-result {
+    position: fixed;
+    inset: 0;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    padding: 24px 16px !important;
+    overflow-y: auto;
+    z-index: 1600;
+    background: rgba(255, 255, 255, 0.98) !important;
+  }
+
+  .os-tiles-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .proactive-alerts-list {
+    display: flex !important;
+    flex-direction: column;
+  }
+
+  .proactive-alert-item {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .cc-shell:not(.mobile-open) .cc-sidebar { display: none; }
+  .cc-mobile-nav { display: flex; }
+  .cc-main { padding: 8px; padding-bottom: 140px; }
+  .os-tiles-grid { grid-template-columns: 1fr; }
 }
 
 .cc-copilot-page {

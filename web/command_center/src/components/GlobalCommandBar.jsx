@@ -80,10 +80,13 @@ export default function GlobalCommandBar() {
   const badge = OS_BADGE[osKey] || OS_BADGE.agentic;
 
   return (
-    <div style={{
+    <div
+      className="cc-global-command"
+      style={{
       position: "fixed", bottom: "20px", left: "50%", transform: "translateX(-50%)",
       width: "min(720px, calc(100vw - 32px))", zIndex: 1200,
-    }}>
+      }}
+    >
       <div style={{
         background: "rgba(255,255,255,0.85)", backdropFilter: "blur(12px)",
         border: "1px solid rgba(0,0,0,0.12)", borderRadius: "16px",
@@ -119,7 +122,7 @@ export default function GlobalCommandBar() {
           </button>
         </div>
         {open && result && (
-          <div style={{
+          <div className="cc-global-command-result" style={{
             marginTop: "10px", padding: "10px 12px",
             background: "rgba(0,0,0,0.04)", borderRadius: "10px", fontSize: "13px",
           }}>

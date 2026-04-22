@@ -31,6 +31,7 @@ export default function ShellLayout() {
   const logout = useCommandStore((s) => s.logout);
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [systemLogs, setSystemLogs] = useState([]);
   const logsWsRef = useRef(null);
@@ -66,6 +67,10 @@ export default function ShellLayout() {
       navigate("/onboarding", { replace: true });
     }
   }, [me, navigate]);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!logDrawerOpen || !token) return undefined;
@@ -123,7 +128,7 @@ export default function ShellLayout() {
   }
 
   return (
-    <div className="cc-shell">
+    <div className={`cc-shell ${mobileMenuOpen ? "mobile-open" : ""}`}>
       <IncidentBanner />
       <aside className={`cc-sidebar ${collapsed ? "is-collapsed" : ""}`} aria-label="Primary navigation">
         <div className="cc-sidebar__brand">
@@ -171,6 +176,14 @@ export default function ShellLayout() {
 
       <div className="cc-shell__content">
         <header className="cc-topbar">
+          <button
+            type="button"
+            className="cc-btn cc-btn-ghost cc-mobile-menu-btn"
+            aria-label="Toggle mobile navigation"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+          >
+            ☰
+          </button>
           <div className="cc-breadcrumbs" aria-label="Breadcrumb">
             {breadcrumbs.map((crumb, idx) => (
               <span key={`${crumb}-${idx}`} className="cc-muted">
@@ -240,6 +253,14 @@ export default function ShellLayout() {
           <BuildFooter />
         </footer>
       </div>
+      {mobileMenuOpen ? (
+        <button
+          type="button"
+          className="cc-sidebar-overlay"
+          aria-label="Close navigation"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      ) : null}
       <MobileBottomNav />
       {isFeatureEnabled("QUICK_ACTIONS_FAB") ? <QuickActionsFAB /> : null}
       <GlobalCommandBar />

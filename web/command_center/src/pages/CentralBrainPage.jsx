@@ -499,12 +499,13 @@ export default function CentralBrainPage() {
             No active proactive alerts.
           </div>
         ) : (
-          <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+          <div className="proactive-alerts-list" style={{ display: "grid", gap: 8, marginBottom: 12 }}>
             {proactiveAlerts.map((a, idx) => {
               const critical = String(a?.severity || "").toLowerCase() === "critical";
               return (
                 <div
                   key={`${a?.type || "alert"}_${idx}`}
+                  className="proactive-alert-item"
                   style={{
                     borderRadius: 10,
                     border: `1px solid ${critical ? "#DC2626" : "#D97706"}`,
@@ -541,9 +542,10 @@ export default function CentralBrainPage() {
       </div>
 
       <div
+        className="os-tiles-grid"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
           gap: 14,
           marginBottom: 32,
         }}
