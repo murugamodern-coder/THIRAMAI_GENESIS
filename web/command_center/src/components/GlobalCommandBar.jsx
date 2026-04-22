@@ -49,6 +49,7 @@ export default function GlobalCommandBar() {
   async function submit() {
     const command = value.trim();
     if (!command || busy) return;
+    window.dispatchEvent(new CustomEvent("thiramai-chat-user", { detail: { content: command } }));
     setValue("");
     setBusy(true);
     setResult(null);
@@ -56,6 +57,7 @@ export default function GlobalCommandBar() {
       const resp = await api.post("/api/orchestrator/command", { command, source: "global_bar" });
       const payload = resp.data || { message: "Command accepted" };
       setResult(payload);
+      window.dispatchEvent(new CustomEvent("thiramai-chat-response", { detail: { payload } }));
       if (!payload?.show_inline) {
         const routedOs = inferOsKey(payload);
         const nextRoute = routedOs === "stock"
@@ -70,7 +72,9 @@ export default function GlobalCommandBar() {
         navigate(nextRoute);
       }
     } catch (err) {
-      setResult({ error: err?.response?.data?.detail || err?.message || "Command failed" });
+      const error = err?.response?.data?.detail || err?.message || "Command failed";
+      setResult({ error });
+      window.dispatchEvent(new CustomEvent("thiramai-chat-error", { detail: { error } }));
     } finally {
       setBusy(false);
     }
