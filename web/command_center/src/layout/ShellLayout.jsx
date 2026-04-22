@@ -229,7 +229,11 @@ export default function ShellLayout() {
             Sign out
           </button>
         </header>
-        <main className="cc-main" id="cc-main-content">
+        <main
+          className="cc-main"
+          id="cc-main-content"
+          style={{ overflowY: "auto", minHeight: 0, paddingBottom: 120 }}
+        >
           <Outlet />
         </main>
         <footer className="cc-build-footer" style={{ padding: "6px 16px 10px", borderTop: "1px solid var(--cc-border, #e5e7eb)" }}>

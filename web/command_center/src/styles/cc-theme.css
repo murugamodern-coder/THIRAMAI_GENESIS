@@ -61,6 +61,11 @@ body,
   margin: 0;
 }
 
+html,
+body {
+  scroll-behavior: smooth;
+}
+
 body {
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   background: var(--cc-bg);
@@ -68,7 +73,12 @@ body {
   font-size: 14px;
   line-height: 1.45;
   overflow-x: hidden;
+  overflow-y: auto;
   touch-action: manipulation;
+}
+
+#root {
+  overflow-y: auto;
 }
 
 .cc-app {
@@ -88,6 +98,10 @@ body {
 
 .cc-shell__content {
   min-width: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
 }
 
 .cc-sidebar {

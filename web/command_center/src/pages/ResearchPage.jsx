@@ -167,7 +167,15 @@ export default function ResearchPage() {
   const compTable = deepOut?.comparison_table;
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "16px 20px 48px" }}>
+    <div
+      style={{
+        maxWidth: 960,
+        margin: "0 auto",
+        padding: "16px 20px 120px",
+        overflowY: "auto",
+        minHeight: 0,
+      }}
+    >
       <h1 style={{ fontSize: 26, marginBottom: 8 }}>Research engine</h1>
       <p className="cc-muted" style={{ marginBottom: 24 }}>
         Market intelligence, government schemes, DPR drafts, competitor scans, and multi-source deep research. Results
