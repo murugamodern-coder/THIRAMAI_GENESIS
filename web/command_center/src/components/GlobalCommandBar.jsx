@@ -27,6 +27,7 @@ export default function GlobalCommandBar() {
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const recognitionRef = useRef(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -34,7 +35,6 @@ export default function GlobalCommandBar() {
   const [attachment, setAttachment] = useState(null);
   const [listening, setListening] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const recognitionRef = useRef(null);
 
   const isMobile = useMemo(() => window.matchMedia?.("(max-width: 768px)")?.matches, []);
   const MAX_SIZE = 10 * 1024 * 1024;
@@ -78,6 +78,14 @@ export default function GlobalCommandBar() {
     setErrorMsg("");
     setOpen(true);
   }
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, 140);
+    el.style.height = `${Math.max(24, next)}px`;
+  }, [value]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -125,7 +133,7 @@ export default function GlobalCommandBar() {
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("paste", onPaste);
     };
-  }, []);
+  });
 
   useEffect(() => {
     const onCommandRequest = (ev) => {
@@ -168,7 +176,7 @@ export default function GlobalCommandBar() {
     };
     recognition.onresult = (e) => {
       const transcript = e?.results?.[0]?.[0]?.transcript || "";
-      if (transcript.trim()) setValue(transcript);
+      if (transcript.trim()) setValue((prev) => `${prev}${prev ? " " : ""}${transcript.trim()}`);
     };
     recognition.onerror = (e) => {
       setListening(false);
@@ -234,129 +242,100 @@ export default function GlobalCommandBar() {
   const badge = OS_BADGE[osKey] || OS_BADGE.agentic;
 
   return (
-    <div
-      className="cc-global-command"
-      style={{
-      position: "fixed", bottom: "20px", left: "50%", transform: "translateX(-50%)",
-      width: "min(720px, calc(100vw - 32px))", zIndex: 1200,
-      }}
-    >
-      <div style={{
-        background: "rgba(255,255,255,0.85)", backdropFilter: "blur(12px)",
-        border: "1px solid rgba(0,0,0,0.12)", borderRadius: "16px",
-        padding: "10px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-      }}>
-        {attachment ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-            <div style={{ display: "flex", gap: 6, alignItems: "center", background: "rgba(15,23,42,0.06)", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
-              {attachment.preview ? <img src={attachment.preview} alt={attachment.name} style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 6 }} /> : <span>📄</span>}
-              <span>{attachment.name}</span>
-              <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setAttachment(null)}>×</button>
+    <div className="cc-global-command">
+      {attachment ? (
+        <div className="cc-attachment-preview">
+          {attachment.preview ? (
+            <div className="cc-attachment-thumb-wrap">
+              <img src={attachment.preview} alt={attachment.name} className="cc-attachment-thumb" />
+              <button type="button" className="cc-attachment-remove" onClick={() => setAttachment(null)}>×</button>
             </div>
-          </div>
-        ) : null}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={() => fileInputRef.current?.click()} title="Attach file" style={{ width: 36, height: 36, padding: 0, flexShrink: 0 }}>
-            📎
-          </button>
-          <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={toggleVoice} title="Voice (Chrome only)" style={{ width: 36, height: 36, padding: 0, flexShrink: 0 }}>
-            🎤
-            {listening ? <span style={{ width: 8, height: 8, marginLeft: 6, borderRadius: "50%", display: "inline-block", background: "#ef4444", boxShadow: "0 0 0 0 rgba(239,68,68,0.8)", animation: "cbPulse 1s infinite" }} /> : null}
-          </button>
-          {isMobile ? (
-            <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={() => cameraInputRef.current?.click()} title="Camera" style={{ width: 36, height: 36, padding: 0, flexShrink: 0 }}>
-              📷
-            </button>
-          ) : null}
-          <textarea
-            ref={inputRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onFocus={() => setOpen(true)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-              if (e.key === "Escape") setOpen(false);
-            }}
-            placeholder="Command Thiramai... (/ or Cmd+K)"
-            style={{
-              flex: 1, border: "none", background: "transparent",
-              outline: "none", fontSize: "14px", color: "#1a1a1a", resize: "none", minHeight: 40, maxHeight: 120, minWidth: 0,
-            }}
-            disabled={busy}
-          />
-          <button
-            onClick={submit}
-            disabled={busy}
-            style={{
-              background: busy ? "#94a3b8" : "#0f172a", color: "#fff",
-              border: "none", borderRadius: "10px", padding: "7px 18px",
-              fontSize: "13px", fontWeight: 500, cursor: busy ? "not-allowed" : "pointer", flexShrink: 0,
-            }}
-          >
-            {busy ? "..." : "Run →"}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,.pdf,.txt,.csv,.xlsx"
-            multiple
-            style={{ display: "none" }}
-            onChange={async (e) => {
-              await addFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: "none" }}
-            onChange={async (e) => {
-              await addFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
+          ) : (
+            <div className="cc-attachment-pill">
+              <span>📄 {attachment.name}</span>
+              <button type="button" className="cc-attachment-remove-inline" onClick={() => setAttachment(null)}>×</button>
+            </div>
+          )}
         </div>
-        {(listening || errorMsg) ? (
-          <div style={{ marginTop: 8, fontSize: 12, color: errorMsg ? "#b91c1c" : "#1d4ed8" }}>
-            {errorMsg || "Listening..."}
-          </div>
+      ) : null}
+
+      <div className="cc-command-pill">
+        <button type="button" className="cc-command-icon" disabled={busy} onClick={() => fileInputRef.current?.click()} title="Attach file">
+          📎
+        </button>
+        <button type="button" className="cc-command-icon" disabled={busy} onClick={toggleVoice} title="Voice (Chrome only)">
+          🎤
+        </button>
+        {isMobile ? (
+          <button type="button" className="cc-command-icon" disabled={busy} onClick={() => cameraInputRef.current?.click()} title="Camera">
+            📷
+          </button>
         ) : null}
-        {open && result && (
-          <div className="cc-global-command-result" style={{
-            marginTop: "10px", padding: "10px 12px",
-            background: "rgba(0,0,0,0.04)", borderRadius: "10px", fontSize: "13px",
-          }}>
-            <span style={{
-              display: "inline-block", padding: "2px 10px", borderRadius: "20px",
-              background: badge.color + "22", color: badge.color,
-              fontWeight: 600, marginBottom: "6px", fontSize: "12px",
-            }}>
-              → Routed to {badge.label}
-            </span>
-            <div style={{ color: "#374151" }}>
-              {result?.error
-                ? `Error: ${result.error}`
-                : result?.show_inline
-                  ? String(result?.response || "No response available")
+        <textarea
+          ref={inputRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+            if (e.key === "Escape") setOpen(false);
+          }}
+          placeholder="Thiramai-கிட்ட கேளு... (/ or Cmd+K)"
+          className="cc-command-textarea"
+          disabled={busy}
+          rows={1}
+        />
+        <button onClick={submit} disabled={busy} className="cc-command-run">
+          {busy ? "..." : "Run →"}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.pdf,.txt,.csv,.xlsx"
+          style={{ display: "none" }}
+          onChange={async (e) => {
+            await addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={async (e) => {
+            await addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      {(listening || errorMsg) ? (
+        <div className={`cc-command-hint ${errorMsg ? "error" : ""}`}>
+          {errorMsg || <><span className="cc-listening-dot" /> Listening...</>}
+        </div>
+      ) : null}
+
+      {open && result ? (
+        <div className="cc-global-command-result">
+          <span className="cc-command-route-badge" style={{ color: badge.color, borderColor: `${badge.color}60`, background: `${badge.color}15` }}>
+            → Routed to {badge.label}
+          </span>
+          <div>
+            {result?.error
+              ? `Error: ${result.error}`
+              : result?.show_inline
+                ? String(result?.response || "No response available")
                 : result?.task_id
                   ? `Mission ${result.task_id} created${result?.requires_approval ? " · approval required" : ""}`
                   : String(result?.message || "Command accepted")}
-            </div>
           </div>
-        )}
-      </div>
-      <style>{`
-        @keyframes cbPulse {
-          0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.8); }
-          70% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
-          100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
-        }
-      `}</style>
+        </div>
+      ) : null}
     </div>
   );
 }

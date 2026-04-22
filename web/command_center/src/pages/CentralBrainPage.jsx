@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/client.js";
+import { showToastDedup } from "../lib/toastDedup.js";
 
 const SUGGESTIONS = [
   "📊 Stock analysis",
@@ -10,9 +11,9 @@ const SUGGESTIONS = [
 
 function routeBadge(payload) {
   const r = String(payload?.routing || "").toUpperCase();
-  if (r === "MISSION") return "→ Research OS";
-  if (r === "ACTION") return "→ Action";
-  return "→ Chat";
+  if (r === "MISSION") return "🔬 Research OS";
+  if (r === "ACTION") return "⚡ Agentic OS";
+  return "🧠 Chat";
 }
 
 function routeKey(payload) {
@@ -28,6 +29,7 @@ export default function CentralBrainPage() {
   const [proactiveAlerts, setProactiveAlerts] = useState([]);
   const [alertsOpen, setAlertsOpen] = useState(true);
   const [alertsDismissed, setAlertsDismissed] = useState(false);
+  const [expandedByIndex, setExpandedByIndex] = useState({});
   const listRef = useRef(null);
 
   const alertsCount = proactiveAlerts.length;
@@ -48,7 +50,7 @@ export default function CentralBrainPage() {
 
   useEffect(() => {
     if (!listRef.current) return;
-    listRef.current.scrollTop = listRef.current.scrollHeight;
+    listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [chat, thinking]);
 
   useEffect(() => {
@@ -89,38 +91,32 @@ export default function CentralBrainPage() {
   const visibleAlerts = useMemo(() => (alertsDismissed ? [] : proactiveAlerts), [alertsDismissed, proactiveAlerts]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 140px)", maxWidth: 800, margin: "0 auto", width: "100%" }}>
-      <style>{`
-        .cb-fade-in { animation: cbFadeIn .24s ease both; }
-        @keyframes cbFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-        .cb-thinking-dot { animation: cbBlink 1s infinite; }
-        .cb-thinking-dot:nth-child(2){ animation-delay:.2s; }
-        .cb-thinking-dot:nth-child(3){ animation-delay:.4s; }
-        @keyframes cbBlink { 0%,80%,100%{ opacity:.25 } 40%{ opacity:1 } }
-      `}</style>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--cc-border,#e5e7eb)", paddingBottom: 10, marginBottom: 10 }}>
-        <div style={{ fontWeight: 700, fontSize: 18 }}>🧠 THIRAMAI</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
-          <span style={{ color: "#1D9E75", fontWeight: 600 }}>● Live</span>
-          <span style={{ color: "var(--cc-muted,#6b7280)" }}>[alerts: {alertsCount}]</span>
+    <div className="cb-page">
+      <div className="cb-topbar">
+        <div className="cb-title">🧠 THIRAMAI</div>
+        <div className="cb-status">
+          <span className="cb-live">● Live</span>
+          <span>[alerts: {alertsCount}]</span>
         </div>
       </div>
 
       {visibleAlerts.length > 0 ? (
-        <div style={{ marginBottom: 10 }}>
+        <div className="cb-alert-wrap">
           <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setAlertsOpen((v) => !v)}>
             {alertsOpen ? "Hide Alerts" : "Show Alerts"} ({visibleAlerts.length})
           </button>
-          <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setAlertsDismissed(true)} style={{ marginLeft: 8 }}>
+          <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setAlertsDismissed(true)}>
             Dismiss
           </button>
           {alertsOpen ? (
-            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+            <div className="cb-alert-grid">
               {visibleAlerts.map((a, i) => {
                 const critical = String(a?.severity || "").toLowerCase() === "critical";
                 return (
-                  <div key={`${a?.type || "alert"}_${i}`} style={{ padding: "8px 10px", borderRadius: 10, fontSize: 12, border: `1px solid ${critical ? "#DC2626" : "#D97706"}`, background: critical ? "#FEE2E2" : "#FEF3C7" }}>
+                  <div
+                    key={`${a?.type || "alert"}_${i}`}
+                    className={`cb-alert-item ${critical ? "critical" : "warning"}`}
+                  >
                     <strong>{String(a?.type || "alert").toUpperCase()}</strong> — {a?.message}
                   </div>
                 );
@@ -130,33 +126,61 @@ export default function CentralBrainPage() {
         </div>
       ) : null}
 
-      <div ref={listRef} style={{ flex: 1, overflowY: "auto", paddingBottom: 12 }}>
+      <div ref={listRef} className="cb-message-container">
         {chat.length === 0 ? (
-          <div style={{ minHeight: 320, display: "grid", placeItems: "center", textAlign: "center", color: "var(--cc-muted,#6b7280)", padding: 20 }}>
-            <div>
-              <div style={{ fontSize: 44, marginBottom: 8 }}>⚡</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: "var(--cc-text,#111827)" }}>நான் Thiramai — உங்கள் Sovereign AI</div>
-              <div style={{ marginTop: 8 }}>Personal · Business · Stock · Research · Agentic</div>
-              <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                {SUGGESTIONS.map((s) => (
-                  <button key={s} type="button" className="cc-btn cc-btn-secondary" onClick={() => triggerGlobalCommand(s)}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <div style={{ marginTop: 12, fontSize: 13 }}>நான் Thiramai. என்ன செய்யட்டும்?</div>
+          <div className="cb-welcome">
+            <div className="cb-welcome-icon">⚡</div>
+            <div className="cb-welcome-title">நான் Thiramai</div>
+            <div className="cb-welcome-subtitle">உங்கள் Sovereign AI Assistant</div>
+            <div className="cb-welcome-subtitle">Personal · Business · Stock · Research · Agentic</div>
+            <div className="cb-suggestion-grid">
+              {SUGGESTIONS.map((s) => (
+                <button key={s} type="button" className="cb-suggestion-chip" onClick={() => triggerGlobalCommand(s)}>
+                  {s}
+                </button>
+              ))}
             </div>
           </div>
         ) : (
           chat.map((m, idx) => {
             const user = m.role === "user";
+            const words = String(m.content || "").trim().split(/\s+/).filter(Boolean);
+            const shouldClamp = words.length > 500;
+            const expanded = !!expandedByIndex[idx];
+            const displayText = shouldClamp && !expanded ? `${words.slice(0, 500).join(" ")}...` : m.content;
+
             return (
-              <div key={`${m.timestamp}_${idx}`} className="cb-fade-in" style={{ display: "flex", justifyContent: user ? "flex-end" : "flex-start", marginBottom: 10 }}>
-                <div style={{ maxWidth: "82%", background: user ? "#2563EB" : "#111827", color: "#fff", borderRadius: 14, padding: "10px 12px" }}>
-                  <div style={{ fontSize: 14, whiteSpace: "pre-wrap" }}>{m.content}</div>
-                  <div style={{ marginTop: 6, opacity: 0.8, fontSize: 11, display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <span>{user ? "You" : routeBadge({ routing: m.routing })}</span>
+              <div key={`${m.timestamp}_${idx}`} className={`cb-message-row ${user ? "user" : "bot"}`}>
+                {!user ? <div className="cb-routing-badge">{routeBadge({ routing: m.routing })}</div> : null}
+                <div className={`cb-bubble ${user ? "user" : "bot"}`}>
+                  <div>{displayText}</div>
+                  {shouldClamp ? (
+                    <button
+                      type="button"
+                      className="cb-toggle"
+                      onClick={() => setExpandedByIndex((prev) => ({ ...prev, [idx]: !expanded }))}
+                    >
+                      {expanded ? "Show less" : "Show more"}
+                    </button>
+                  ) : null}
+                  <div className="cb-meta">
                     <span>{new Date(m.timestamp).toLocaleTimeString()}</span>
+                    {!user ? (
+                      <button
+                        type="button"
+                        className="cb-copy-btn"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(String(m.content || ""));
+                            showToastDedup({ type: "success", message: "Copied!" });
+                          } catch {
+                            showToastDedup({ type: "error", message: "Copy failed" });
+                          }
+                        }}
+                      >
+                        📋
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -165,8 +189,8 @@ export default function CentralBrainPage() {
         )}
 
         {thinking ? (
-          <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 10 }}>
-            <div style={{ background: "#111827", color: "#fff", borderRadius: 14, padding: "10px 12px", fontSize: 14 }}>
+          <div className="cb-message-row bot">
+            <div className="cb-bubble bot cb-thinking">
               Thiramai is thinking
               <span className="cb-thinking-dot">.</span>
               <span className="cb-thinking-dot">.</span>
@@ -175,7 +199,6 @@ export default function CentralBrainPage() {
           </div>
         ) : null}
       </div>
-
     </div>
   );
 }
