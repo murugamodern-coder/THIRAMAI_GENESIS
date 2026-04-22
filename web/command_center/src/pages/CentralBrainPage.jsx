@@ -24,7 +24,6 @@ function routeKey(payload) {
 
 export default function CentralBrainPage() {
   const [chat, setChat] = useState([]);
-  const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [proactiveAlerts, setProactiveAlerts] = useState([]);
   const [alertsOpen, setAlertsOpen] = useState(true);
@@ -81,32 +80,10 @@ export default function CentralBrainPage() {
     };
   }, []);
 
-  async function submit(textOverride) {
-    const command = String(textOverride ?? input).trim();
+  function triggerGlobalCommand(text) {
+    const command = String(text || "").trim();
     if (!command || thinking) return;
-    setInput("");
-    setChat((prev) => [...prev, { role: "user", content: command, routing: "CHAT", timestamp: Date.now() }]);
-    setThinking(true);
-    try {
-      const resp = await api.post("/api/orchestrator/command", { command, source: "central_brain_chat" });
-      const payload = resp.data || {};
-      setChat((prev) => [
-        ...prev,
-        {
-          role: "thiramai",
-          content: String(payload?.response || payload?.message || "Command accepted"),
-          routing: routeKey(payload),
-          timestamp: Date.now(),
-        },
-      ]);
-    } catch (e) {
-      setChat((prev) => [
-        ...prev,
-        { role: "thiramai", content: String(e?.response?.data?.detail || e?.message || "Command failed"), routing: "CHAT", timestamp: Date.now() },
-      ]);
-    } finally {
-      setThinking(false);
-    }
+    window.dispatchEvent(new CustomEvent("thiramai-command-request", { detail: { command, source: "central_brain_suggestion" } }));
   }
 
   const visibleAlerts = useMemo(() => (alertsDismissed ? [] : proactiveAlerts), [alertsDismissed, proactiveAlerts]);
@@ -162,7 +139,7 @@ export default function CentralBrainPage() {
               <div style={{ marginTop: 8 }}>Personal · Business · Stock · Research · Agentic</div>
               <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} type="button" className="cc-btn cc-btn-secondary" onClick={() => submit(s)}>
+                  <button key={s} type="button" className="cc-btn cc-btn-secondary" onClick={() => triggerGlobalCommand(s)}>
                     {s}
                   </button>
                 ))}
@@ -199,23 +176,6 @@ export default function CentralBrainPage() {
         ) : null}
       </div>
 
-      <div style={{ position: "sticky", bottom: 0, background: "var(--cc-bg,#fff)", paddingTop: 8 }}>
-        <div style={{ display: "flex", gap: 8, border: "1px solid var(--cc-border,#e5e7eb)", borderRadius: 14, padding: 8, background: "var(--cc-surface,#fff)" }}>
-          <span style={{ fontSize: 18, lineHeight: "38px" }}>⚡</span>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit();
-            }}
-            placeholder="Type command or /"
-            style={{ flex: 1, border: "none", outline: "none", background: "transparent", minHeight: 42 }}
-          />
-          <button type="button" className="cc-btn cc-btn-primary" onClick={() => submit()} disabled={thinking}>
-            {thinking ? "..." : "Run →"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
