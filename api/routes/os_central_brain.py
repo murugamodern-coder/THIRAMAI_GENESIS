@@ -16,8 +16,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from pydantic import BaseModel, Field
 from fastapi.responses import StreamingResponse
+from sqlalchemy import text
 
 from api.dependencies import CurrentUser, get_current_user, try_resolve_current_user_from_access_token
+from core.database import get_session_factory
 from services.health_checker import OSHealthChecker
 
 _log_agent = logging.getLogger("thiramai.api.agent")
@@ -172,6 +174,98 @@ class OrchestratorCommandBody(BaseModel):
     source: str = Field("global_bar", max_length=128)
 
 
+class VaultSaveBody(BaseModel):
+    project_name: str = Field(..., min_length=1, max_length=255)
+    content: str = Field(..., min_length=1, max_length=200000)
+    category: str = Field("general", max_length=64)
+    tags: list[str] = Field(default_factory=list)
+
+
+def _ensure_project_vault_table() -> None:
+    factory = get_session_factory()
+    if factory is None:
+        raise HTTPException(status_code=503, detail="Database not configured")
+    with factory() as session:
+        try:
+            session.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS project_vault (
+                        id BIGSERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        organization_id BIGINT NOT NULL,
+                        project_name VARCHAR(255) NOT NULL,
+                        content TEXT NOT NULL,
+                        category VARCHAR(64) NOT NULL DEFAULT 'general',
+                        tags TEXT NOT NULL DEFAULT '',
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+        except Exception:
+            session.rollback()
+            session.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS project_vault (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        organization_id INTEGER NOT NULL,
+                        project_name TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        category TEXT NOT NULL DEFAULT 'general',
+                        tags TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+        session.commit()
+
+
+def _search_project_vault(*, user_id: int, query: str, limit: int = 5) -> list[dict[str, Any]]:
+    q = (query or "").strip()
+    if not q:
+        return []
+    factory = get_session_factory()
+    if factory is None:
+        return []
+    like = f"%{q.lower()}%"
+    sql = text(
+        """
+        SELECT id, project_name, content, category, tags, created_at, updated_at
+        FROM project_vault
+        WHERE user_id = :user_id
+          AND (
+            LOWER(project_name) LIKE :like
+            OR LOWER(content) LIKE :like
+            OR LOWER(tags) LIKE :like
+          )
+        ORDER BY updated_at DESC
+        LIMIT :lim
+        """
+    )
+    with factory() as session:
+        rows = session.execute(sql, {"user_id": int(user_id), "like": like, "lim": int(limit)}).mappings().all()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        out.append(
+            {
+                "vault_id": int(r["id"]),
+                "project_name": str(r["project_name"] or ""),
+                "content": str(r["content"] or ""),
+                "category": str(r["category"] or "general"),
+                "tags": [x for x in str(r["tags"] or "").split(",") if x],
+                "created_at": str(r["created_at"]) if r.get("created_at") is not None else None,
+                "updated_at": str(r["updated_at"]) if r.get("updated_at") is not None else None,
+            }
+        )
+    return out
+
+
 def _classify_three_level_route(command_text: str) -> tuple[str, str, str]:
     t = (command_text or "").strip().lower()
     chat_keywords = (
@@ -232,6 +326,71 @@ def _classify_os_key(command_text: str) -> str:
     return "agentic"
 
 
+@router.post("/api/brain/vault/save", summary="Save Project Vault memory entry")
+async def save_project_vault_entry(
+    body: VaultSaveBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    _ensure_project_vault_table()
+    factory = get_session_factory()
+    if factory is None:
+        raise HTTPException(status_code=503, detail="Database not configured")
+    tags_csv = ",".join(
+        sorted(
+            {
+                str(t).strip()
+                for t in (body.tags or [])
+                if str(t).strip()
+            }
+        )
+    )
+    sql = text(
+        """
+        INSERT INTO project_vault (user_id, organization_id, project_name, content, category, tags, created_at, updated_at)
+        VALUES (:user_id, :organization_id, :project_name, :content, :category, :tags, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id
+        """
+    )
+    params = {
+        "user_id": _uid(user),
+        "organization_id": int(user.organization_id),
+        "project_name": body.project_name.strip(),
+        "content": body.content.strip(),
+        "category": (body.category or "general").strip() or "general",
+        "tags": tags_csv,
+    }
+    with factory() as session:
+        vault_id: int | None = None
+        try:
+            row = session.execute(sql, params).first()
+            vault_id = int(row[0]) if row else None
+        except Exception:
+            session.rollback()
+            session.execute(
+                text(
+                    """
+                    INSERT INTO project_vault (user_id, organization_id, project_name, content, category, tags, created_at, updated_at)
+                    VALUES (:user_id, :organization_id, :project_name, :content, :category, :tags, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """
+                ),
+                params,
+            )
+            row2 = session.execute(text("SELECT id FROM project_vault ORDER BY id DESC LIMIT 1")).first()
+            vault_id = int(row2[0]) if row2 else None
+        session.commit()
+    return {"ok": True, "vault_id": vault_id}
+
+
+@router.get("/api/brain/vault/search", summary="Search Project Vault entries")
+async def search_project_vault(
+    q: str = Query(..., min_length=1, max_length=512),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    _ensure_project_vault_table()
+    items = _search_project_vault(user_id=_uid(user), query=q, limit=50)
+    return {"ok": True, "items": items}
+
+
 @router.post("/api/orchestrator/command", summary="Global command router -> orchestrator plan")
 async def post_orchestrator_command(
     request: Request,
@@ -247,10 +406,21 @@ async def post_orchestrator_command(
     corr = (request.headers.get("X-Correlation-ID") or "").strip() or str(uuid.uuid4())
 
     if routing == "CHAT":
+        _ensure_project_vault_table()
+        vault_hits = _search_project_vault(user_id=_uid(user), query=command, limit=4)
+        vault_context = "\n\n".join(
+            [
+                f"[{i+1}] {h.get('project_name','')}\nCategory: {h.get('category','general')}\nTags: {', '.join(h.get('tags') or [])}\n{str(h.get('content') or '')[:1400]}"
+                for i, h in enumerate(vault_hits)
+            ]
+        )
         response_text = await asyncio.to_thread(
             lambda: long_llm_sync(
-                "You are THIRAMAI Central Brain. Give a concise, accurate instant answer in plain text.",
-                command,
+                "You are THIRAMAI Central Brain. Give a concise, accurate instant answer in plain text. Use project vault context when relevant.",
+                (
+                    f"User query:\n{command}\n\n"
+                    f"Project vault context (may be empty):\n{vault_context or 'No matching vault context found.'}"
+                ),
                 prefer_gemini=False,
             )
         )
@@ -260,6 +430,11 @@ async def post_orchestrator_command(
             "routed_to": routed_to,
             "response": str(response_text or "No response available right now."),
             "suggested_route": suggested_route,
+            "show_inline": True,
+            "vault_matches": [
+                {"vault_id": h.get("vault_id"), "project_name": h.get("project_name"), "category": h.get("category")}
+                for h in vault_hits
+            ],
             "os_key": "chat",
             "task_id": None,
             "requires_approval": False,

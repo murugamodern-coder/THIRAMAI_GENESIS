@@ -56,17 +56,19 @@ export default function GlobalCommandBar() {
       const resp = await api.post("/api/orchestrator/command", { command, source: "global_bar" });
       const payload = resp.data || { message: "Command accepted" };
       setResult(payload);
-      const routedOs = inferOsKey(payload);
-      const nextRoute = routedOs === "stock"
-        ? "/os/stock"
-        : routedOs === "research"
-          ? "/os/research"
-          : routedOs === "business"
-            ? "/dashboard/inventory"
-            : routedOs === "personal"
-              ? "/personal"
-              : "/os/agentic-platform";
-      navigate(nextRoute);
+      if (!payload?.show_inline) {
+        const routedOs = inferOsKey(payload);
+        const nextRoute = routedOs === "stock"
+          ? "/os/stock"
+          : routedOs === "research"
+            ? "/os/research"
+            : routedOs === "business"
+              ? "/dashboard/inventory"
+              : routedOs === "personal"
+                ? "/personal"
+                : "/os/agentic-platform";
+        navigate(nextRoute);
+      }
     } catch (err) {
       setResult({ error: err?.response?.data?.detail || err?.message || "Command failed" });
     } finally {
@@ -131,6 +133,8 @@ export default function GlobalCommandBar() {
             <div style={{ color: "#374151" }}>
               {result?.error
                 ? `Error: ${result.error}`
+                : result?.show_inline
+                  ? String(result?.response || "No response available")
                 : result?.task_id
                   ? `Mission ${result.task_id} created${result?.requires_approval ? " · approval required" : ""}`
                   : String(result?.message || "Command accepted")}
