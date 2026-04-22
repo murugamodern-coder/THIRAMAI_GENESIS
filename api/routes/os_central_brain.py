@@ -9,6 +9,7 @@ import asyncio
 from collections import deque
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -173,6 +174,10 @@ class AgentApproveBody(BaseModel):
 class OrchestratorCommandBody(BaseModel):
     command: str = Field(..., min_length=1, max_length=16000)
     source: str = Field("global_bar", max_length=128)
+    attachment: dict[str, Any] | None = Field(
+        None,
+        description="Optional single attachment payload: {name, type, data(base64)}",
+    )
 
 
 class VaultSaveBody(BaseModel):
@@ -529,11 +534,67 @@ async def post_orchestrator_command(
 ) -> dict[str, Any]:
     from services.orchestrator import create_plan_from_command
     from services.research_common import long_llm_sync
+    from groq import Groq
 
     command = body.command.strip()
+    attachment = body.attachment if isinstance(body.attachment, dict) else None
+    att_type = str((attachment or {}).get("type") or "").strip().lower()
+    att_data = str((attachment or {}).get("data") or "").strip()
     routing, routed_to, suggested_route = _classify_three_level_route(command)
     os_key = "research" if routing == "MISSION" else "agentic" if routing == "ACTION" else "research"
     corr = (request.headers.get("X-Correlation-ID") or "").strip() or str(uuid.uuid4())
+
+    if att_type.startswith("image/") and att_data:
+        proactive_alerts = await _compute_proactive_alerts(user)
+        alerts_count = len(proactive_alerts)
+
+        def _vision_describe_sync() -> str:
+            key = (os.getenv("GROQ_API_KEY") or "").strip()
+            if not key:
+                return "Image analysis unavailable now: GROQ_API_KEY not configured."
+            try:
+                client = Groq(api_key=key)
+                response = client.chat.completions.create(
+                    model="meta-llama/llama-4-scout-17b-16e-instruct",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{att_type};base64,{att_data}",
+                                    },
+                                },
+                                {
+                                    "type": "text",
+                                    "text": command or "இந்த image-ல என்ன இருக்கு? விவரமா சொல்லு.",
+                                },
+                            ],
+                        }
+                    ],
+                    temperature=0.2,
+                    max_tokens=1024,
+                )
+                text_out = (response.choices[0].message.content or "").strip()
+                return text_out or "படத்தைப் பற்றிய தெளிவான விளக்கம் கிடைக்கவில்லை."
+            except Exception as exc:
+                return f"Image analysis failed: {exc}"
+
+        vision_text = await asyncio.to_thread(_vision_describe_sync)
+        decorated = f"{vision_text} (⚠️ {alerts_count} active alerts need attention)"
+        return {
+            "ok": True,
+            "routing": "CHAT",
+            "routed_to": "Groq Vision",
+            "response": decorated,
+            "suggested_route": "/dashboard",
+            "show_inline": True,
+            "alerts_count": alerts_count,
+            "os_key": "chat",
+            "task_id": None,
+            "requires_approval": False,
+        }
 
     if routing == "CHAT":
         _ensure_project_vault_table()
