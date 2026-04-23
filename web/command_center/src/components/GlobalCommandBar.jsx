@@ -8,45 +8,38 @@ function detectLang(text) {
   return tamilRegex.test(text) ? "ta-IN" : "en-IN";
 }
 
-/** Speak assistant response via Web Speech API (Tamil / Indian English voices when available). */
-function speakThiramaiResponse(text, options = {}) {
+/** Active MP3 playback from ``POST /api/brain/tts`` (stopped via ``stopSpeechOutput``). */
+let _thiramaiHtmlAudio = null;
+
+function speakWithBrowserSynth(cleanText, lang, options = {}) {
   const { onSpeakingChange } = options;
   if (typeof window === "undefined" || !window.speechSynthesis) return;
 
-  window.speechSynthesis.cancel();
+  try {
+    window.speechSynthesis.cancel();
+  } catch {
+    /* ignore */
+  }
 
-  const cleanText = String(text || "")
-    .replace(/\p{Extended_Pictographic}/gu, "")
-    .replace(/\([\s\S]*?active alerts[\s\S]*?\)/gi, "")
-    .replace(/→.*?OS/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleanText) return;
-
-  const lang = detectLang(cleanText);
   const utterance = new SpeechSynthesisUtterance(cleanText);
   utterance.lang = lang;
   utterance.rate = 0.9;
   utterance.pitch = 1.0;
   utterance.volume = 1.0;
 
-  const pickVoices = () => {
-    const voices = window.speechSynthesis.getVoices() || [];
-    const tamilVoice = voices.find(
-      (v) => v.lang?.toLowerCase().includes("ta") || /tamil/i.test(v.name || ""),
-    );
-    const indianVoice = voices.find(
-      (v) =>
-        v.lang?.includes("en-IN") ||
-        v.lang?.includes("en_IN") ||
-        /india/i.test(v.name || ""),
-    );
-    if (lang.startsWith("ta") && tamilVoice) utterance.voice = tamilVoice;
-    else if (indianVoice) utterance.voice = indianVoice;
-    else if (tamilVoice) utterance.voice = tamilVoice;
-  };
-  pickVoices();
+  const voices = window.speechSynthesis.getVoices() || [];
+  const tamilVoice = voices.find(
+    (v) => v.lang?.toLowerCase().includes("ta") || /tamil/i.test(v.name || ""),
+  );
+  const indianVoice = voices.find(
+    (v) =>
+      v.lang?.includes("en-IN") ||
+      v.lang?.includes("en_IN") ||
+      /india/i.test(v.name || ""),
+  );
+  if (lang.startsWith("ta") && tamilVoice) utterance.voice = tamilVoice;
+  else if (indianVoice) utterance.voice = indianVoice;
+  else if (tamilVoice) utterance.voice = tamilVoice;
 
   utterance.onstart = () => {
     onSpeakingChange?.(true);
@@ -62,6 +55,86 @@ function speakThiramaiResponse(text, options = {}) {
   };
 
   window.speechSynthesis.speak(utterance);
+}
+
+/**
+ * Prefer Google Cloud TTS (``/api/brain/tts``) when server has ``GOOGLE_TTS_API_KEY``;
+ * otherwise Web Speech API.
+ */
+async function speakThiramaiResponse(text, options = {}) {
+  const { onSpeakingChange } = options;
+  if (typeof window === "undefined") return;
+
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {
+    /* ignore */
+  }
+  if (_thiramaiHtmlAudio) {
+    try {
+      _thiramaiHtmlAudio.pause();
+      _thiramaiHtmlAudio.removeAttribute("src");
+      _thiramaiHtmlAudio.load();
+    } catch {
+      /* ignore */
+    }
+    _thiramaiHtmlAudio = null;
+  }
+
+  const cleanText = String(text || "")
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/\([\s\S]*?active alerts[\s\S]*?\)/gi, "")
+    .replace(/→.*?OS/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleanText) return;
+
+  const lang = detectLang(cleanText);
+
+  try {
+    const r = await api.post("/api/brain/tts", {
+      text: cleanText.slice(0, 5000),
+      lang,
+    });
+    const data = r?.data || {};
+    const b64 = data.audio_base64 && String(data.audio_base64).trim();
+    const useGoogle =
+      Boolean(b64) &&
+      data.fallback_browser !== true &&
+      String(data.format || "").toLowerCase() === "mp3" &&
+      data.ok !== false;
+
+    if (useGoogle) {
+      const audio = new Audio(`data:audio/mp3;base64,${b64}`);
+      _thiramaiHtmlAudio = audio;
+      audio.onplay = () => {
+        onSpeakingChange?.(true);
+        window.dispatchEvent(new CustomEvent("thiramai-speaking-start"));
+      };
+      audio.onended = () => {
+        onSpeakingChange?.(false);
+        window.dispatchEvent(new CustomEvent("thiramai-speaking-end"));
+        _thiramaiHtmlAudio = null;
+      };
+      audio.onerror = () => {
+        onSpeakingChange?.(false);
+        window.dispatchEvent(new CustomEvent("thiramai-speaking-end"));
+        _thiramaiHtmlAudio = null;
+        speakWithBrowserSynth(cleanText, lang, options);
+      };
+      try {
+        await audio.play();
+      } catch {
+        speakWithBrowserSynth(cleanText, lang, options);
+      }
+      return;
+    }
+  } catch {
+    /* fall through to browser */
+  }
+
+  speakWithBrowserSynth(cleanText, lang, options);
 }
 
 function inferOsKey(payload) {
@@ -205,7 +278,7 @@ export default function GlobalCommandBar() {
       const payload = ev?.detail?.payload || {};
       const raw = String(payload?.response || payload?.message || "").trim();
       if (!raw) return;
-      speakThiramaiResponse(raw, { onSpeakingChange: setTtsSpeaking });
+      void speakThiramaiResponse(raw, { onSpeakingChange: setTtsSpeaking });
     };
     window.addEventListener("thiramai-chat-response", onResponse);
     return () => window.removeEventListener("thiramai-chat-response", onResponse);
@@ -225,6 +298,16 @@ export default function GlobalCommandBar() {
       window.speechSynthesis?.cancel();
     } catch {
       /* ignore */
+    }
+    if (_thiramaiHtmlAudio) {
+      try {
+        _thiramaiHtmlAudio.pause();
+        _thiramaiHtmlAudio.removeAttribute("src");
+        _thiramaiHtmlAudio.load();
+      } catch {
+        /* ignore */
+      }
+      _thiramaiHtmlAudio = null;
     }
     setTtsSpeaking(false);
     window.dispatchEvent(new CustomEvent("thiramai-speaking-end"));

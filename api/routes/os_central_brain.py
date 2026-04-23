@@ -13,11 +13,14 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from pydantic import BaseModel, Field
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
+
+import httpx
 
 from api.dependencies import CurrentUser, get_current_user, try_resolve_current_user_from_access_token
 from core.redis_cache import get_redis
@@ -27,6 +30,36 @@ from core.stability.circuit_breaker import export_breaker_snapshots
 from services.health_checker import OSHealthChecker
 
 _log_agent = logging.getLogger("thiramai.api.agent")
+
+_THIRAMAI_CHAT_SYSTEM_PROMPT = """
+You are Thiramai, a Tamil AI assistant.
+
+INPUT LANGUAGE RULES:
+- User may type in Tanglish (Tamil written in English letters)
+  Example: "vanakkam", "enna panreenga", "sollu", "nalla irukka"
+- User may type in Tamil script: "வணக்கம்"
+- User may type in English
+
+OUTPUT RULES:
+- ALWAYS respond in Tamil script (தமிழ்)
+- Technical words stay in English:
+  server, deploy, install, database, API, code, error
+- Keep responses conversational and natural
+- Do NOT translate technical terms
+
+EXAMPLES:
+User: "vanakkam, enna panreenga"
+Thiramai: "வணக்கம்! நான் நலமாக இருக்கேன். நீங்கள் எப்படி இருக்கீங்க?"
+
+User: "server la enna error varuthu"
+Thiramai: "server-ல என்ன error வருதுன்னு சொல்லுங்க, நான் fix பண்றேன்."
+
+User: "stock market epdi iruku"
+Thiramai: "இன்றைய stock market-ல Nifty 50 நல்லா இருக்கு..."
+
+User: "pip install pannu"
+Thiramai: "pip install பண்றேன் தலைவா..."
+"""
 
 router = APIRouter(tags=["Central Brain", "Agentic workflow"])
 
@@ -187,6 +220,11 @@ class VaultSaveBody(BaseModel):
     content: str = Field(..., min_length=1, max_length=200000)
     category: str = Field("general", max_length=64)
     tags: list[str] = Field(default_factory=list)
+
+
+class BrainTtsBody(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+    lang: str = Field("ta-IN", max_length=24)
 
 
 def _ensure_project_vault_table() -> None:
@@ -651,6 +689,75 @@ async def get_brain_notifications(user: CurrentUser = Depends(get_current_user))
     return {"ok": True, "notifications": items}
 
 
+def _google_tts_voice_for_lang(lang_raw: str) -> tuple[str, str]:
+    lc = (lang_raw or "ta-IN").strip().lower().replace("_", "-")
+    if lc.startswith("ta"):
+        return "ta-IN", "ta-IN-Standard-A"
+    return "en-IN", "en-IN-Standard-A"
+
+
+@router.post("/api/brain/tts", summary="Synthesize speech (Google Cloud TTS when configured)")
+async def post_brain_tts(
+    body: BrainTtsBody,
+    _user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return MP3 ``audioContent`` base64 when ``GOOGLE_TTS_API_KEY`` is set; otherwise browser TTS fallback."""
+    _ = _user
+    api_key = (os.getenv("GOOGLE_TTS_API_KEY") or "").strip()
+    if not api_key:
+        return {
+            "ok": True,
+            "fallback_browser": True,
+            "format": "browser",
+            "audio_base64": "",
+        }
+
+    lang_code, voice_name = _google_tts_voice_for_lang(body.lang)
+    gcs_payload = {
+        "input": {"text": body.text.strip()[:5000]},
+        "voice": {
+            "languageCode": lang_code,
+            "name": voice_name,
+            "ssmlGender": "FEMALE",
+        },
+        "audioConfig": {
+            "audioEncoding": "MP3",
+            "speakingRate": 0.95,
+            "pitch": 0.0,
+        },
+    }
+    url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={quote_plus(api_key)}"
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(url, json=gcs_payload)
+            resp.raise_for_status()
+            gcs_data = resp.json()
+    except Exception as exc:
+        _log_agent.warning("brain_tts Google Cloud request failed: %s", exc)
+        return {
+            "ok": False,
+            "fallback_browser": True,
+            "format": "browser",
+            "audio_base64": "",
+        }
+
+    audio_b64 = str(gcs_data.get("audioContent") or "").strip()
+    if not audio_b64:
+        return {
+            "ok": False,
+            "fallback_browser": True,
+            "format": "browser",
+            "audio_base64": "",
+        }
+
+    return {
+        "ok": True,
+        "fallback_browser": False,
+        "format": "mp3",
+        "audio_base64": audio_b64,
+    }
+
+
 @router.post("/api/orchestrator/command", summary="Global command router -> orchestrator plan")
 async def post_orchestrator_command(
     request: Request,
@@ -805,12 +912,13 @@ async def post_orchestrator_command(
             if not key:
                 return ""
             sys_content = (
-                "நீ Thiramai, ஒரு Tamil-English AI assistant.\n"
-                "உன்னோட முந்தைய conversation-ஐ நினைவில் வை.\n"
-                "Context-aware-ஆ பதில் சொல்லு.\n"
-                "Short and clear responses பண்ணு.\n\n"
-                f"Project vault context (may be empty):\n{vault_section}\n\n"
-                f"Active proactive alerts count: {alerts_count}"
+                _THIRAMAI_CHAT_SYSTEM_PROMPT.strip()
+                + "\n\nCONVERSATION:\n"
+                + "- Prior turns appear in message history below; stay consistent.\n\n"
+                + "Project vault context (may be empty):\n"
+                + vault_section
+                + "\n\nActive proactive alerts count: "
+                + str(alerts_count)
             )
             msgs = [{"role": "system", "content": sys_content}] + history_messages
             client = Groq(api_key=key)
@@ -826,7 +934,8 @@ async def post_orchestrator_command(
         if not str(response_text or "").strip():
             response_text = await asyncio.to_thread(
                 lambda: long_llm_sync(
-                    "You are THIRAMAI Central Brain. Give a concise, accurate instant answer in plain text. Use project vault context when relevant.",
+                    _THIRAMAI_CHAT_SYSTEM_PROMPT.strip()
+                    + "\n\nFollow INPUT/OUTPUT rules above. Use vault and alerts when relevant.",
                     (
                         f"User query:\n{command}\n\n"
                         f"Project vault context (may be empty):\n{vault_context or 'No matching vault context found.'}\n\n"
