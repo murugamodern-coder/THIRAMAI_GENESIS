@@ -46,6 +46,7 @@ from core.settings import get_settings
 
 import asset_portal
 from api.middleware.ai_payload_limit import AiPayloadLimitMiddleware
+from api.middleware.auth_context import AuthContextMiddleware
 from api.middleware.correlation import CorrelationIdMiddleware
 from api.middleware.request_logging import RequestLoggingMiddleware
 from api.openapi_metadata import OPENAPI_DESCRIPTION, OPENAPI_TAGS
@@ -223,6 +224,8 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CsrfOriginMiddleware)
 # JSON request lines (THIRAMAI_LOG_JSON=1); inside CorrelationId so correlation_id is on request.state.
 app.add_middleware(RequestLoggingMiddleware)
+# Best-effort JWT principal on request.state.current_user for decorator-style permission guards.
+app.add_middleware(AuthContextMiddleware)
 # Stable correlation id for policy audit + client tracing (echoes X-Correlation-ID).
 app.add_middleware(CorrelationIdMiddleware)
 

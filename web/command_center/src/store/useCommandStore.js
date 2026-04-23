@@ -5,7 +5,7 @@ import { inferRole } from "../lib/rbac.js";
 export const useCommandStore = create((set) => ({
   token: typeof localStorage !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null,
   me: null,
-  role: "VIEWER",
+  role: "FAMILY",
   orgs: [],
   setToken: (t) => {
     setToken(t);
@@ -13,7 +13,7 @@ export const useCommandStore = create((set) => ({
   },
   logout: () => {
     setToken(null);
-    set({ token: null, me: null, role: "VIEWER", orgs: [] });
+    set({ token: null, me: null, role: "FAMILY", orgs: [] });
   },
   setMe: (me) => set({ me, role: inferRole(me) }),
   setOrgs: (orgs) => set({ orgs }),
@@ -21,8 +21,8 @@ export const useCommandStore = create((set) => ({
 
 export function getCurrentRole() {
   try {
-    return useCommandStore.getState().role || "VIEWER";
+    return useCommandStore.getState().role || "FAMILY";
   } catch {
-    return "VIEWER";
+    return "FAMILY";
   }
 }

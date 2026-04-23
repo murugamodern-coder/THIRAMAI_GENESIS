@@ -2,12 +2,15 @@
   "name": "THIRAMAI Command Center",
   "short_name": "THIRAMAI",
   "description": "AI command center for business, personal OS, and Jarvis assistant.",
-  "start_url": "/static/command_center/index.html",
+  "id": "/static/command_center/",
+  "start_url": "/static/command_center/#/",
   "scope": "/static/command_center/",
   "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay"],
   "orientation": "portrait-primary",
   "background_color": "#0f1117",
   "theme_color": "#2563eb",
+  "categories": ["business", "productivity", "utilities"],
   "icons": [
     {
       "src": "/static/command_center/thiramai-icon-192.png",

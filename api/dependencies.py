@@ -9,6 +9,7 @@ their level is <= the worst (highest number) among the named roles — i.e. owne
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 from collections.abc import Callable
 from typing import Annotated
@@ -24,9 +25,10 @@ from sqlalchemy.orm import Session
 
 from core.auth import decode_access_token, token_subject_user_id
 from core.database import get_session_factory, set_current_org_id, tenant_session_scope
+from core.permission_engine import has_permission
 from core.production_safety import is_production_environment
 from core.db.models import Organization, Role, User
-from core.rbac import Permission, user_has_permission
+from core.rbac import Permission
 from services.membership_service import first_active_membership, membership_for_organization
 
 # Bearer scheme: auto_error=False so we can support dev bypass without a header.
@@ -380,23 +382,102 @@ def require_exact_role(role_name: str) -> Callable[..., CurrentUser]:
     return _dep
 
 
-def require_permission(*permissions: Permission) -> Callable[..., CurrentUser]:
+def _normalize_permission_values(*permissions: Permission | str) -> tuple[str, ...]:
+    out: list[str] = []
+    for p in permissions:
+        if isinstance(p, Permission):
+            out.append(p.value)
+        else:
+            raw = str(p or "").strip()
+            if raw:
+                out.append(raw)
+    vals = tuple(dict.fromkeys(out))
+    if not vals:
+        raise ValueError("require_permission needs at least one permission")
+    return vals
+
+
+def require_permission(*permissions: Permission | str) -> Callable[..., CurrentUser]:
     """
     Require the caller's role to include at least one of the given permissions.
 
     Prefer this for resource-specific checks; use ``require_roles`` for coarse hierarchy gates.
-    """
 
-    perms = tuple(permissions)
-    if not perms:
-        raise ValueError("require_permission needs at least one Permission")
+    Supports two styles:
+    - FastAPI dependency: ``Depends(require_permission(Permission.INVENTORY_READ))``
+    - Decorator style: ``@require_permission("view_business")`` (expects route function to receive
+      ``user``/``_user``/``current_user`` or ``request`` with ``request.state.current_user`` set).
+    """
+    perms = _normalize_permission_values(*permissions)
+
+    def _check_user(user: CurrentUser) -> None:
+        ok = any(has_permission(user, p) for p in perms)
+        if ok:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing permission: one of {list(perms)}",
+        )
+
+    def _extract_user_for_decorator(args: tuple[object, ...], kwargs: dict[str, object]) -> CurrentUser | None:
+        for key in ("user", "_user", "current_user"):
+            candidate = kwargs.get(key)
+            if isinstance(candidate, CurrentUser):
+                return candidate
+        req = kwargs.get("request")
+        if isinstance(req, Request):
+            candidate = getattr(req.state, "current_user", None)
+            if isinstance(candidate, CurrentUser):
+                return candidate
+        for a in args:
+            if isinstance(a, Request):
+                candidate = getattr(a.state, "current_user", None)
+                if isinstance(candidate, CurrentUser):
+                    return candidate
+            if isinstance(a, CurrentUser):
+                return a
+        return None
 
     async def _dep(user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
-        ok = any(user_has_permission(role_name=user.role_name, permission=p.value) for p in perms)
-        if not ok:
+        # Decorator mode: @require_permission("view_business")
+        if callable(user) and not isinstance(user, CurrentUser):
+            fn = user
+
+            if inspect.iscoroutinefunction(fn):
+                async def _wrapped_async(*args, **kwargs):
+                    principal = _extract_user_for_decorator(args, kwargs)
+                    if principal is None:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Not authenticated",
+                        )
+                    _check_user(principal)
+                    return await fn(*args, **kwargs)
+                return _wrapped_async  # type: ignore[return-value]
+
+            def _wrapped_sync(*args, **kwargs):
+                principal = _extract_user_for_decorator(args, kwargs)
+                if principal is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Not authenticated",
+                    )
+                _check_user(principal)
+                return fn(*args, **kwargs)
+            return _wrapped_sync  # type: ignore[return-value]
+
+        if not isinstance(user, CurrentUser):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        try:
+            _check_user(user)
+        except HTTPException:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Missing permission: one of {[p.value for p in perms]}",
+                detail=f"Missing permission: one of {list(perms)}",
             )
         return user
 

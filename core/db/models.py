@@ -184,6 +184,13 @@ class Role(Base):
     organization: Mapped["Organization"] = relationship(back_populates="roles")
     memberships: Mapped[list["UserOrganizationMembership"]] = relationship(back_populates="role")
     permissions: Mapped[list["Permission"]] = relationship(back_populates="role")
+    role_permissions: Mapped[list["RolePermission"]] = relationship(
+        back_populates="role", cascade="all, delete-orphan"
+    )
+    users: Mapped[list["User"]] = relationship(
+        back_populates="role",
+        foreign_keys="User.role_id",
+    )
 
 
 class Permission(Base):
@@ -192,11 +199,45 @@ class Permission(Base):
     __tablename__ = "permissions"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
     resource: Mapped[str] = mapped_column(String(128), nullable=False)
     action: Mapped[str] = mapped_column(String(64), nullable=False)
 
     role: Mapped["Role"] = relationship(back_populates="permissions")
+    role_permissions: Mapped[list["RolePermission"]] = relationship(
+        back_populates="permission", cascade="all, delete-orphan"
+    )
+
+
+class RolePermission(Base):
+    """Extensible many-to-many grants from roles to permission catalog entries."""
+
+    __tablename__ = "role_permissions"
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission_id", name="uq_role_permissions_role_permission"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    role_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("roles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    permission_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("permissions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    role: Mapped["Role"] = relationship(back_populates="role_permissions")
+    permission: Mapped["Permission"] = relationship(back_populates="role_permissions")
 
 
 class User(Base):
@@ -212,9 +253,16 @@ class User(Base):
         primary_key=True,
         autoincrement=True,
     )
+    name: Mapped[str] = mapped_column(String(160), nullable=False, default="", server_default="")
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("roles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -341,6 +389,10 @@ class User(Base):
     )
     runtime_configs: Mapped[list["UserRuntimeConfig"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+    role: Mapped[Optional["Role"]] = relationship(
+        back_populates="users",
+        foreign_keys=[role_id],
     )
 
 

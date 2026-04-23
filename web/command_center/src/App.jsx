@@ -41,14 +41,21 @@ import WeeklyReviewPage from "./pages/personal/WeeklyReviewPage.jsx";
 import TodayPage from "./pages/TodayPage.jsx";
 import CopilotPage from "./pages/CopilotPage.jsx";
 import ResearchPage from "./pages/ResearchPage.jsx";
-import CentralBrainPage from "./pages/CentralBrainPage.jsx";
 import StockOSPage from "./pages/StockOSPage.jsx";
 import AgenticOSPage from "./pages/AgenticOSPage.jsx";
 import { postUsageEvent } from "./api/commandCenterApi.js";
+import { defaultRouteForRole, ROLES } from "./lib/rbac.js";
 
 function Protected({ children }) {
   const token = useCommandStore((s) => s.token);
   return token ? children : <Navigate to="/login" replace />;
+}
+
+function RoleProtected({ allow, children }) {
+  const me = useCommandStore((s) => s.me);
+  const role = useCommandStore((s) => s.role);
+  if (!me) return children;
+  return allow.includes(role) ? children : <Navigate to={defaultRouteForRole(role)} replace />;
 }
 
 function ProtectedRoute({ children }) {
@@ -65,6 +72,10 @@ function LegacyRouteRedirect({ to, from }) {
     }).catch(() => {});
   }, [from, location.pathname, to]);
   return <Navigate to={to} replace />;
+}
+
+function BrainWorkspacePage() {
+  return <div className="text-sm text-slate-300">Jarvis workspace ready. Ask anything to begin.</div>;
 }
 
 export default function App() {
@@ -90,7 +101,9 @@ export default function App() {
         path="/today"
         element={
           <Protected>
-            <ShellLayout />
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
@@ -108,11 +121,13 @@ export default function App() {
         path="/dashboard"
         element={
           <Protected>
-            <ShellLayout />
+            <RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}>
+              <ShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
-        <Route index element={<CentralBrainPage />} />
+        <Route index element={<BrainWorkspacePage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="stocks" element={<LegacyRouteRedirect from="/dashboard/stocks" to="/os/stock" />} />
         <Route path="website-builder" element={<LegacyRouteRedirect from="/dashboard/website-builder" to="/os/agentic-platform" />} />
@@ -125,7 +140,9 @@ export default function App() {
         path="/stock"
         element={
           <Protected>
-            <ShellLayout />
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
@@ -135,7 +152,9 @@ export default function App() {
         path="/research"
         element={
           <Protected>
-            <ShellLayout />
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
@@ -153,7 +172,9 @@ export default function App() {
         path="/os"
         element={
           <Protected>
-            <ShellLayout />
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
@@ -169,7 +190,9 @@ export default function App() {
         path="/analytics"
         element={
           <Protected>
-            <ShellLayout />
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
@@ -179,7 +202,9 @@ export default function App() {
         path="/settings"
         element={
           <Protected>
-            <ShellLayout />
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
@@ -189,30 +214,34 @@ export default function App() {
         path="/business"
         element={
           <ProtectedRoute>
-            <CompanySelectPage />
+            <RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}>
+              <CompanySelectPage />
+            </RoleProtected>
           </ProtectedRoute>
         }
       />
 <Route path="/business/:orgId/accounts" element={
-  <Protected><ChartOfAccountsPage /></Protected>
+  <Protected><RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}><ChartOfAccountsPage /></RoleProtected></Protected>
 } />
 <Route path="/business/:orgId/gst" element={
-  <Protected><GSTPage /></Protected>
+  <Protected><RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}><GSTPage /></RoleProtected></Protected>
 } />
 <Route path="/business/:orgId/purchase-orders" element={
-  <Protected><PurchaseOrdersPage /></Protected>
+  <Protected><RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}><PurchaseOrdersPage /></RoleProtected></Protected>
 } />
 <Route path="/business/:orgId/payroll" element={
-  <Protected><PayrollPage /></Protected>
+  <Protected><RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}><PayrollPage /></RoleProtected></Protected>
 } />
 <Route path="/business/:orgId/reports" element={
-  <Protected><ReportsPage /></Protected>
+  <Protected><RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}><ReportsPage /></RoleProtected></Protected>
 } />
       <Route
         path="/business/:orgId/profile"
         element={
           <Protected>
-            <CompanyProfilePage />
+            <RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}>
+              <CompanyProfilePage />
+            </RoleProtected>
           </Protected>
         }
       />
@@ -220,7 +249,9 @@ export default function App() {
         path="/business/:orgId"
         element={
           <Protected>
-            <BusinessShellLayout />
+            <RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}>
+              <BusinessShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
@@ -236,7 +267,9 @@ export default function App() {
         path="/ai"
         element={
           <Protected>
-            <ShellLayout />
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >
@@ -250,7 +283,9 @@ export default function App() {
         path="/personal"
         element={
           <Protected>
-            <PersonalShellLayout />
+            <RoleProtected allow={[ROLES.OWNER, ROLES.FAMILY]}>
+              <PersonalShellLayout />
+            </RoleProtected>
           </Protected>
         }
       >

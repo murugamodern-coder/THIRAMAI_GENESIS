@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 
+import "./styles/tailwind.css";
 import "./styles/cc-theme.css";
 import App from "./App.jsx";
 import ToastHost from "./components/ToastHost.jsx";
@@ -18,6 +19,18 @@ if (typeof window !== "undefined" && ccHookDebugEnabled()) {
   console.debug("[cc:bootstrap]", {
     hash: window.location.hash,
     ua: navigator.userAgent,
+  });
+}
+
+if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/static/command_center/sw.js", { scope: "/static/command_center/" })
+      .catch((err) => {
+        if (ccHookDebugEnabled()) {
+          console.debug("[cc:pwa] service worker register failed", err);
+        }
+      });
   });
 }
 

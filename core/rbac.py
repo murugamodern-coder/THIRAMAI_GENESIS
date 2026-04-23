@@ -42,6 +42,13 @@ class Permission(str, Enum):
     # System / tenant admin
     TENANT_ADMIN = "tenant.admin"
 
+    # Product-level capabilities (cross-domain)
+    VIEW_PERSONAL = "view_personal"
+    MANAGE_BUSINESS = "manage_business"
+    TRADE_STOCK = "trade_stock"
+    RUN_RESEARCH = "run_research"
+    BUILD_APPS = "build_apps"
+
 
 # Full access for platform / tenant owners
 _ALL = frozenset(p.value for p in Permission)
@@ -58,6 +65,10 @@ _MANAGER = frozenset(
         Permission.PRODUCTION_WRITE.value,
         Permission.AI_QUERY.value,
         Permission.DASHBOARD_READ.value,
+        Permission.VIEW_PERSONAL.value,
+        Permission.MANAGE_BUSINESS.value,
+        Permission.RUN_RESEARCH.value,
+        Permission.BUILD_APPS.value,
     }
 )
 
@@ -69,6 +80,8 @@ _SUPERVISOR = frozenset(
         Permission.PRODUCTION_WRITE.value,
         Permission.DASHBOARD_READ.value,
         Permission.AI_QUERY.value,
+        Permission.VIEW_PERSONAL.value,
+        Permission.RUN_RESEARCH.value,
     }
 )
 
@@ -78,12 +91,14 @@ _WORKER = frozenset(
         Permission.PRODUCTION_READ.value,
         Permission.DASHBOARD_READ.value,
         Permission.AI_QUERY.value,
+        Permission.VIEW_PERSONAL.value,
     }
 )
 
 _CUSTOMER = frozenset(
     {
         Permission.DASHBOARD_READ.value,
+        Permission.VIEW_PERSONAL.value,
     }
 )
 

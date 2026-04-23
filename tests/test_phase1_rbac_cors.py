@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.permission_engine import has_permission
 from core.rbac import Permission, permissions_for_role, user_has_permission
 from core.settings import ThiramaiSettings
 
@@ -38,3 +39,12 @@ def test_cors_explicit_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_permissions_for_role_unknown_empty() -> None:
     assert permissions_for_role("unknown_role_xyz") == frozenset()
+
+
+def test_example_permissions_present_for_owner() -> None:
+    owner = type("U", (), {"role_name": "owner", "organization_id": 1})()
+    assert has_permission(owner, "view_personal")
+    assert has_permission(owner, "manage_business")
+    assert has_permission(owner, "trade_stock")
+    assert has_permission(owner, "run_research")
+    assert has_permission(owner, "build_apps")

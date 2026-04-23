@@ -23,9 +23,11 @@ def attach_domain_routers(app: FastAPI) -> None:
 
     from api.routes.health import router as health_router
     from api.routes.jarvis_bridge import router as jarvis_bridge_router
+    from api.routes.execute import router as execute_router
 
     app.include_router(health_router)
     app.include_router(jarvis_bridge_router)
+    app.include_router(execute_router)
 
     from api.routes.kernel_microkernel import router as kernel_microkernel_router
 
@@ -58,6 +60,7 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(product_growth_router)
 
     from api.routes.ai_chat import router as ai_chat_router
+    from api.routes.business_module import router as business_module_router
     from api.routes.analytics import router as analytics_router
     from api.routes.audit import router as audit_router
     from api.routes.billing import router as billing_router
@@ -92,6 +95,7 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(router_research)
     app.include_router(compliance_hub_router)
     app.include_router(business_depth_router)
+    app.include_router(business_module_router)
     app.include_router(inventory_router)
     app.include_router(production_phase2_router)
     app.include_router(factory_router)

@@ -107,6 +107,64 @@ export default function AIAssistantPanel() {
   const [jarvisOrgId, setJarvisOrgId] = useState("");
   const [orgOptions, setOrgOptions] = useState([]);
   const [agenticPlanMode, setAgenticPlanMode] = useState(false);
+  const [executionState, setExecutionState] = useState(null);
+  const [voiceAutoSend, setVoiceAutoSend] = useState(true);
+  const recognitionRef = useRef(null);
+  const chatScrollRef = useRef(null);
+  const composerRef = useRef(null);
+  const [composerBottomOffset, setComposerBottomOffset] = useState(0);
+  const [composerHeight, setComposerHeight] = useState(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  const startExecutionTracking = useCallback((commandText) => {
+    const cmd = String(commandText || "").trim();
+    if (!cmd) return;
+    setExecutionState({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      command: cmd,
+      status: "running",
+      progress: 0,
+      steps: [
+        { label: "Step 1: Searching...", status: "running" },
+        { label: "Step 2: Analyzing...", status: "pending" },
+        { label: "Step 3: Result ready", status: "pending" },
+      ],
+      finishedAt: null,
+    });
+  }, []);
+
+  const finishExecutionTracking = useCallback((status) => {
+    setExecutionState((prev) => {
+      if (!prev) return prev;
+      const ok = status === "success";
+      return {
+        ...prev,
+        status: ok ? "success" : "error",
+        progress: ok ? 100 : Math.max(prev.progress, 66),
+        steps: prev.steps.map((s, idx) => {
+          if (idx < 2) return { ...s, status: "done" };
+          return { ...s, status: ok ? "done" : "error" };
+        }),
+        finishedAt: Date.now(),
+      };
+    });
+  }, []);
+
+  const speakText = useCallback(
+    (text) => {
+      const line = String(text || "").trim();
+      if (!speakReplies || !line || typeof window === "undefined" || !window.speechSynthesis) return;
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(line.slice(0, 2000));
+        utterance.lang = tamilVoice ? "ta-IN" : "en-IN";
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        /* ignore speech errors */
+      }
+    },
+    [speakReplies, tamilVoice],
+  );
 
   useEffect(() => {
     const st = location.state;
@@ -182,6 +240,7 @@ export default function AIAssistantPanel() {
         setInsights([]);
         setProposals([]);
         setChatMessages((prev) => [...prev, { role: "user", text: m, ts: Date.now() }]);
+        startExecutionTracking(m);
         try {
           const corr = ensureAgentCorrelationId("thiramai_cc_agent_thread");
           const path = location.pathname || "";
@@ -209,10 +268,12 @@ export default function AIAssistantPanel() {
             ...prev,
             { role: "assistant", text: summary, ts: Date.now(), agentPlan: pdata },
           ]);
+          finishExecutionTracking("success");
           showToastDedup({ type: "success", message: "Agent plan ready — approve steps in the workflow panel." });
         } catch (e) {
           const msg = e?.response?.data?.detail || e?.message || "Agent command failed";
           setError(msg);
+          finishExecutionTracking("error");
           showToastDedup({ type: "error", message: String(msg) });
         } finally {
           setLoading(false);
@@ -226,6 +287,7 @@ export default function AIAssistantPanel() {
         setInsights([]);
         setProposals([]);
         setChatMessages((prev) => [...prev, { role: "user", text: m, ts: Date.now() }]);
+        startExecutionTracking(m);
       }
       if (isPartialPending) {
         setAgentHint(partialReject ? "Removing proposal…" : "Executing selected action…");
@@ -243,6 +305,7 @@ export default function AIAssistantPanel() {
         });
         if (data?.error && !data?.narrative) {
           setError(String(data.error));
+          finishExecutionTracking("error");
           showToastDedup({ type: "error", message: String(data.error) });
           return;
         }
@@ -267,6 +330,7 @@ export default function AIAssistantPanel() {
               needsConfirmation: true,
             },
           ]);
+          finishExecutionTracking("success");
           showToastDedup({ type: "info", message: "Review and confirm Jarvis actions" });
           return;
         }
@@ -279,39 +343,35 @@ export default function AIAssistantPanel() {
             ...prev,
             { role: "assistant", text: txt, ts: Date.now(), toolResults: data.tool_results },
           ]);
+          finishExecutionTracking("success");
           showToastDedup({ type: "success", message: "Jarvis completed" });
           setInsights([]);
-          const line = txt;
-          if (speakReplies && line && typeof window !== "undefined" && window.speechSynthesis) {
-            try {
-              window.speechSynthesis.cancel();
-              const u = new SpeechSynthesisUtterance(line.slice(0, 2000));
-              u.lang = tamilVoice ? "ta-IN" : "en-IN";
-              window.speechSynthesis.speak(u);
-            } catch {
-              /* ignore */
-            }
-          }
+          speakText(txt);
           return;
         }
 
         const parsed = safeParseInsights(data) || safeParseInsights(txt);
         if (parsed && parsed.length > 0) {
           setInsights(parsed);
+          finishExecutionTracking("success");
           showToastDedup({ type: "success", message: "Insights generated" });
+          speakText(txt || "Insights generated.");
         } else {
           setInsights([]);
+          finishExecutionTracking("success");
           showToastDedup({
             type: "warning",
             message: "No structured insights returned",
             actionLabel: "Load example",
             onAction: () => setInsights(AI_MOCK_INSIGHTS),
           });
+          speakText(txt || "No structured insights were returned.");
         }
       } catch (e) {
         const d = e?.response?.data?.detail;
         const msg = typeof d === "string" ? d : e?.message || "Request failed";
         setError(msg);
+        finishExecutionTracking("error");
         showToastDedup({
           type: "error",
           message: "AI request failed",
@@ -328,11 +388,12 @@ export default function AIAssistantPanel() {
       safeParseInsights,
       agentMode,
       pendingId,
-      speakReplies,
-      tamilVoice,
       jarvisOrgId,
       agenticPlanMode,
       location.pathname,
+      startExecutionTracking,
+      finishExecutionTracking,
+      speakText,
     ],
   );
 
@@ -398,6 +459,25 @@ export default function AIAssistantPanel() {
     return () => window.removeEventListener("thiramai-global-command", handler);
   }, [send]);
 
+  useEffect(() => {
+    if (!loading) return undefined;
+    const timer = setInterval(() => {
+      setExecutionState((prev) => {
+        if (!prev || prev.status !== "running") return prev;
+        const steps = [...prev.steps];
+        const runningIdx = steps.findIndex((s) => s.status === "running");
+        if (runningIdx === -1) return prev;
+        if (runningIdx < steps.length - 2) {
+          steps[runningIdx] = { ...steps[runningIdx], status: "done" };
+          steps[runningIdx + 1] = { ...steps[runningIdx + 1], status: "running" };
+          return { ...prev, steps, progress: Math.min(90, prev.progress + 33) };
+        }
+        return { ...prev, progress: Math.min(95, prev.progress + 5) };
+      });
+    }, 900);
+    return () => clearInterval(timer);
+  }, [loading]);
+
   const startVoice = useCallback(() => {
     if (typeof window === "undefined") return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -405,23 +485,120 @@ export default function AIAssistantPanel() {
       showToastDedup({ type: "warning", message: "Voice input not supported in this browser" });
       return;
     }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        /* ignore */
+      }
+      recognitionRef.current = null;
+    }
     const rec = new SR();
     rec.lang = tamilVoice ? "ta-IN" : "en-IN";
     rec.continuous = false;
     rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    recognitionRef.current = rec;
     setListening(true);
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
+    rec.onend = () => {
+      recognitionRef.current = null;
+      setListening(false);
+    };
+    rec.onerror = () => {
+      recognitionRef.current = null;
+      setListening(false);
+      showToastDedup({ type: "warning", message: "Voice input failed. Please try again." });
+    };
     rec.onresult = (ev) => {
       const t = ev.results?.[0]?.[0]?.transcript;
-      if (t) setMessage((prev) => `${(prev || "").trim()} ${t}`.trim());
+      const spokenText = String(t || "").trim();
+      if (!spokenText) return;
+      if (voiceAutoSend && !loading) {
+        setMessage(spokenText);
+        send({ textOverride: spokenText });
+      } else {
+        setMessage((prev) => `${(prev || "").trim()} ${spokenText}`.trim());
+      }
     };
     try {
       rec.start();
     } catch {
       setListening(false);
+      recognitionRef.current = null;
     }
-  }, [tamilVoice]);
+  }, [tamilVoice, voiceAutoSend, loading, send]);
+
+  const stopVoice = useCallback(() => {
+    const rec = recognitionRef.current;
+    if (!rec) return;
+    try {
+      rec.stop();
+    } catch {
+      /* ignore */
+    }
+    recognitionRef.current = null;
+    setListening(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      try {
+        recognitionRef.current?.stop?.();
+      } catch {
+        /* ignore */
+      }
+      recognitionRef.current = null;
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const updateMobile = () => setIsMobileViewport(window.innerWidth < 768);
+    const updateKeyboardOffset = () => {
+      const vv = window.visualViewport;
+      if (!vv || window.innerWidth >= 768) {
+        setComposerBottomOffset(0);
+        return;
+      }
+      const keyboard = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setComposerBottomOffset(keyboard);
+    };
+    updateMobile();
+    updateKeyboardOffset();
+    window.addEventListener("resize", updateMobile);
+    window.addEventListener("resize", updateKeyboardOffset);
+    window.visualViewport?.addEventListener("resize", updateKeyboardOffset);
+    window.visualViewport?.addEventListener("scroll", updateKeyboardOffset);
+    return () => {
+      window.removeEventListener("resize", updateMobile);
+      window.removeEventListener("resize", updateKeyboardOffset);
+      window.visualViewport?.removeEventListener("resize", updateKeyboardOffset);
+      window.visualViewport?.removeEventListener("scroll", updateKeyboardOffset);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const el = composerRef.current;
+    if (!el) return undefined;
+    const updateHeight = () => setComposerHeight(Math.ceil(el.getBoundingClientRect().height));
+    updateHeight();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(updateHeight);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    });
+  }, [chatMessages, loading, pendingId, executionState?.status, executionState?.progress]);
 
   const onRunAction = useCallback(async (action, insightId) => {
       const key = `${insightId || "insight"}__${action?.type || "action"}__${JSON.stringify(action?.payload || {})}`;
@@ -465,7 +642,7 @@ export default function AIAssistantPanel() {
   const orgRows = Array.isArray(orgOptions) ? orgOptions : [];
 
   return (
-    <div className="cc-card" style={{ position: "sticky", top: 24 }}>
+    <div className="cc-card pb-40 md:pb-0 lg:sticky lg:top-6">
       <h2>Decision engine</h2>
       <p className="cc-muted" style={{ marginTop: -8, marginBottom: 16 }}>
         Ask for insights, or enable <strong>Jarvis</strong> to create tasks, log expenses, schedule meetings, and more
@@ -521,20 +698,81 @@ export default function AIAssistantPanel() {
         <input type="checkbox" checked={tamilVoice} onChange={(e) => setTamilVoice(e.target.checked)} />
         <span>Tamil voice input / TTS (ta-IN)</span>
       </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "pointer" }}>
+        <input type="checkbox" checked={voiceAutoSend} onChange={(e) => setVoiceAutoSend(e.target.checked)} />
+        <span>Auto-send command after voice capture</span>
+      </label>
       <div
+        ref={chatScrollRef}
+        className="mb-3 flex max-h-[55vh] flex-col gap-2 overflow-y-auto rounded-xl border border-slate-700/60 bg-slate-100/95 p-2 md:max-h-72"
         style={{
-          maxHeight: 240,
-          overflowY: "auto",
-          marginBottom: 12,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          padding: 8,
-          borderRadius: 10,
-          border: "1px solid var(--cc-border, #e5e7eb)",
-          background: "#fafafa",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          scrollBehavior: "smooth",
+          paddingBottom: isMobileViewport ? composerHeight + 12 : 8,
         }}
       >
+        {executionState ? (
+          <div
+            style={{
+              border: "1px solid #e5e7eb",
+              borderRadius: 12,
+              padding: "10px 12px",
+              background: "#fff",
+              marginBottom: 8,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>Execution tracking</div>
+              <div className="cc-muted" style={{ fontSize: 11 }}>
+                {executionState.status === "running"
+                  ? "Running"
+                  : executionState.status === "success"
+                    ? "Completed"
+                    : "Failed"}
+              </div>
+            </div>
+            <div
+              className="cc-muted"
+              style={{
+                fontSize: 12,
+                marginBottom: 8,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {executionState.command}
+            </div>
+            <div style={{ height: 6, background: "#e2e8f0", borderRadius: 999, marginBottom: 8 }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${Math.max(0, Math.min(100, executionState.progress || 0))}%`,
+                  borderRadius: 999,
+                  transition: "width 250ms ease",
+                  background: executionState.status === "error" ? "#ef4444" : "#2563eb",
+                }}
+              />
+            </div>
+            <div style={{ display: "grid", gap: 4 }}>
+              {executionState.steps.map((s, idx) => (
+                <div key={`${executionState.id}_${idx}`} style={{ fontSize: 12, color: "#334155" }}>
+                  <span style={{ marginRight: 6 }}>
+                    {s.status === "done"
+                      ? "[done]"
+                      : s.status === "running"
+                        ? "[...]"
+                        : s.status === "error"
+                          ? "[x]"
+                          : "[ ]"}
+                  </span>
+                  {s.label}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {chatMessages.length === 0 ? (
           <div className="cc-muted" style={{ fontSize: 13 }}>
             Chat appears here (WhatsApp-style). Enable Jarvis for tools and confirmations.
@@ -576,7 +814,7 @@ export default function AIAssistantPanel() {
           </div>
         ) : null}
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+      <div className="mb-3 hidden flex-wrap gap-2 sm:flex">
         {[
           ["Today Brief", "Call get_today_brief and summarize my day in 5 bullets.", true],
           ["Check Stock", "Call get_stock_status and list low-stock alerts.", true],
@@ -588,7 +826,7 @@ export default function AIAssistantPanel() {
           <button
             type="button"
             key={label}
-            className="cc-btn cc-btn-secondary"
+            className="cc-btn cc-btn-secondary min-h-11 px-4"
             disabled={loading}
             onClick={() => runQuick(q, am)}
           >
@@ -596,20 +834,76 @@ export default function AIAssistantPanel() {
           </button>
         ))}
       </div>
-      <textarea
-        className="cc-textarea"
-        placeholder='Try: "Review inventory risks and pending approvals. Return JSON insights."'
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
+      <div
+        ref={composerRef}
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-800 bg-slate-950/95 p-3 backdrop-blur md:static md:z-auto md:border-0 md:bg-transparent md:p-0"
+        style={{
+          bottom: isMobileViewport ? `max(env(safe-area-inset-bottom), ${composerBottomOffset}px)` : undefined,
         }}
-      />
-      {agentHint ? (
-        <p className="cc-muted" style={{ marginBottom: 8, fontSize: 13 }}>
-          {loading && pendingId ? "Executing tools…" : agentHint}
-        </p>
-      ) : null}
+      >
+        <textarea
+          className="cc-textarea mb-2 min-h-24 md:min-h-28"
+          placeholder='Try: "Review inventory risks and pending approvals. Return JSON insights."'
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
+          }}
+          onFocus={() => {
+            const el = chatScrollRef.current;
+            if (!el) return;
+            requestAnimationFrame(() => {
+              el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+            });
+          }}
+        />
+        {agentHint ? (
+          <p className="cc-muted mb-2 text-xs md:text-sm">
+            {loading && pendingId ? "Executing tools…" : agentHint}
+          </p>
+        ) : null}
+        <div className="mt-1 flex flex-wrap items-center gap-2 md:mt-3 md:gap-3">
+          <button type="button" className="cc-btn cc-btn-primary min-h-11 px-5" disabled={loading} onClick={() => send({})}>
+            {loading ? "Running…" : "Send"}
+          </button>
+          <button
+            type="button"
+            className="cc-btn cc-btn-secondary min-h-11 px-4"
+            disabled={loading}
+            onClick={listening ? stopVoice : startVoice}
+            title="Voice input (Web Speech API)"
+          >
+            {listening ? "Stop listening" : "Voice"}
+          </button>
+          <button type="button" className="cc-btn cc-btn-secondary min-h-11 px-4" disabled={loading} onClick={doUndo}>
+            Undo
+          </button>
+          {pendingId ? (
+            <button
+              type="button"
+              className="cc-btn cc-btn-primary min-h-11 px-4"
+              disabled={loading}
+              onClick={() => send({ confirmPending: true })}
+            >
+              {loading ? "Working…" : "Confirm"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="cc-btn cc-btn-secondary hidden min-h-11 px-4 sm:inline-flex"
+            disabled={loading}
+            onClick={() => {
+              setError(null);
+              setRaw("");
+              setInsights(AI_MOCK_INSIGHTS);
+              showToastDedup({ type: "info", message: "Loaded example insights" });
+            }}
+          >
+            Load example
+          </button>
+          <span className="cc-muted hidden text-xs md:inline">Ctrl+Enter to send</span>
+        </div>
+      </div>
       {pendingId && proposals.length > 0 ? (
         <div className="cc-card" style={{ marginBottom: 12, background: "rgba(37, 99, 235, 0.06)" }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Proposed actions</div>
@@ -629,7 +923,7 @@ export default function AIAssistantPanel() {
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
                     type="button"
-                    className="cc-btn cc-btn-primary"
+                    className="cc-btn cc-btn-primary min-h-11 px-4"
                     disabled={loading}
                     onClick={() => confirmProposalAt(p.index ?? i)}
                   >
@@ -637,7 +931,7 @@ export default function AIAssistantPanel() {
                   </button>
                   <button
                     type="button"
-                    className="cc-btn cc-btn-secondary"
+                    className="cc-btn cc-btn-secondary min-h-11 px-4"
                     disabled={loading}
                     onClick={() => rejectProposalAt(p.index ?? i)}
                   >
@@ -649,47 +943,6 @@ export default function AIAssistantPanel() {
           </div>
         </div>
       ) : null}
-      <div style={{ marginTop: 16, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-        <button type="button" className="cc-btn cc-btn-primary" disabled={loading} onClick={() => send({})}>
-          {loading ? "Running…" : "Send"}
-        </button>
-        <button
-          type="button"
-          className="cc-btn cc-btn-secondary"
-          disabled={loading || listening}
-          onClick={startVoice}
-          title="Voice input (Web Speech API)"
-        >
-          {listening ? "Listening…" : "Voice"}
-        </button>
-        <button type="button" className="cc-btn cc-btn-secondary" disabled={loading} onClick={doUndo}>
-          Undo last action
-        </button>
-        {pendingId ? (
-          <button
-            type="button"
-            className="cc-btn cc-btn-primary"
-            disabled={loading}
-            onClick={() => send({ confirmPending: true })}
-          >
-            {loading ? "Working…" : "Confirm actions"}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="cc-btn cc-btn-secondary"
-          disabled={loading}
-          onClick={() => {
-            setError(null);
-            setRaw("");
-            setInsights(AI_MOCK_INSIGHTS);
-            showToastDedup({ type: "info", message: "Loaded example insights" });
-          }}
-        >
-          Load example
-        </button>
-        <span className="cc-muted">Ctrl+Enter to send</span>
-      </div>
       {error && <p className="cc-error">{error}</p>}
 
       <div style={{ marginTop: 16 }}>

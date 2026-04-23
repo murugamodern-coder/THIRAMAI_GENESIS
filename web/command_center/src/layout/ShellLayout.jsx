@@ -1,367 +1,153 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
-import api from "../api/client.js";
-import {
-  fetchAuthMe,
-  fetchMyOrganizations,
-  switchOrganization,
-} from "../api/commandCenterApi.js";
-import BuildFooter from "../components/BuildFooter.jsx";
-import IncidentBanner from "../components/IncidentBanner.jsx";
-import MobileBottomNav from "../components/MobileBottomNav.jsx";
-import QuickActionsFAB from "../components/QuickActionsFAB.jsx";
-import { isFeatureEnabled } from "../lib/featureFlags.js";
-import { isOnboardingDone } from "../lib/onboarding.js";
+import { fetchAuthMe } from "../api/commandCenterApi.js";
+import AIAssistantPanel from "../components/dashboard/AIAssistantPanel.jsx";
+import { visibleNavForRole } from "../lib/navigationVisibility.js";
 import { useCommandStore } from "../store/useCommandStore.js";
-import { useTheme } from "../context/ThemeContext.jsx";
-import Avatar from "../components/ui/Avatar.jsx";
-import Badge from "../components/ui/Badge.jsx";
-import GlobalCommandBar from "../components/GlobalCommandBar.jsx";
 
 export default function ShellLayout() {
   const navigate = useNavigate();
-  const location = useLocation();
   const token = useCommandStore((s) => s.token);
-  const me = useCommandStore((s) => s.me);
   const role = useCommandStore((s) => s.role);
-  const orgs = useCommandStore((s) => s.orgs);
   const setMe = useCommandStore((s) => s.setMe);
-  const setOrgs = useCommandStore((s) => s.setOrgs);
-  const setToken = useCommandStore((s) => s.setToken);
   const logout = useCommandStore((s) => s.logout);
-  const { theme, toggleTheme } = useTheme();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [logDrawerOpen, setLogDrawerOpen] = useState(false);
-  const [systemLogs, setSystemLogs] = useState([]);
-  const logsWsRef = useRef(null);
-  const lastOrgSwitchAt = useRef(0);
-  const notifWrapRef = useRef(null);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [notifItems, setNotifItems] = useState([]);
-
-  const loadNotifications = useCallback(async () => {
-    try {
-      const r = await api.get("/api/brain/notifications");
-      const list = Array.isArray(r.data?.notifications) ? r.data.notifications : [];
-      setNotifItems(list);
-    } catch {
-      setNotifItems([]);
-    }
-  }, []);
-
-  const pathSeg = (location.pathname || "/").replace(/^\/+/, "");
-  const breadcrumbs = !pathSeg ? ["Home"] : pathSeg.split("/").map((s) => s.replace(/-/g, " "));
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [profile, list] = await Promise.all([
-          fetchAuthMe().catch(() => null),
-          fetchMyOrganizations().catch(() => []),
-        ]);
-        if (cancelled) return;
+    fetchAuthMe()
+      .then((profile) => {
         if (profile) setMe(profile);
-        setOrgs(Array.isArray(list) ? list : []);
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token, setMe, setOrgs]);
+      })
+      .catch(() => {});
+  }, [token, setMe]);
 
-  useEffect(() => {
-    if (!me?.id || me.id <= 0) return;
-    if (!isOnboardingDone(me.id)) {
-      navigate("/onboarding", { replace: true });
-    }
-  }, [me, navigate]);
+  const visibleNav = useMemo(() => {
+    return visibleNavForRole(role);
+  }, [role]);
 
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    if (!token) return undefined;
-    loadNotifications();
-    const id = setInterval(loadNotifications, 120000);
-    return () => clearInterval(id);
-  }, [token, loadNotifications]);
-
-  useEffect(() => {
-    if (!notifOpen) return undefined;
-    function onDoc(ev) {
-      if (notifWrapRef.current && !notifWrapRef.current.contains(ev.target)) {
-        setNotifOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [notifOpen]);
-
-  useEffect(() => {
-    if (!logDrawerOpen || !token) return undefined;
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const wsUrl = `${protocol}://${window.location.host}/ws/system/logs`;
-    const ws = new WebSocket(wsUrl);
-    logsWsRef.current = ws;
-    ws.onopen = () => {
-      try {
-        ws.send(JSON.stringify({ token }));
-      } catch {
-        // ignore
-      }
-    };
-    ws.onmessage = (evt) => {
-      try {
-        const payload = JSON.parse(evt.data || "{}");
-        if (payload?.type !== "log" || !payload?.entry) return;
-        setSystemLogs((prev) => [...prev.slice(-199), payload.entry]);
-      } catch {
-        // ignore malformed frames
-      }
-    };
-    ws.onerror = () => {
-      setSystemLogs((prev) => [...prev.slice(-199), { ts: new Date().toISOString(), level: "ERROR", message: "System log websocket error" }]);
-    };
-    return () => {
-      try {
-        ws.close();
-      } catch {
-        // ignore
-      }
-    };
-  }, [logDrawerOpen, token]);
-
-  const orgRows = Array.isArray(orgs) ? orgs : [];
-  const selectableOrgs = orgRows.filter((row) => row?.organization?.id != null);
-  const notifCount = notifItems.length;
-
-  async function onOrgChange(e) {
-    const now = Date.now();
-    if (now - lastOrgSwitchAt.current < 800) return;
-    lastOrgSwitchAt.current = now;
-    const id = Number(e.target.value);
-    const current = selectableOrgs.find((o) => o.is_current)?.organization?.id;
-    if (!id || Number.isNaN(id) || id === current) return;
-    try {
-      const out = await switchOrganization(id);
-      if (out?.access_token) setToken(out.access_token);
-      window.location.hash = "#/today";
-      window.location.reload();
-    } catch {
-      /* toast could go here */
-    }
-  }
+  const onSignOut = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
-    <div
-      className={`cc-shell ${mobileMenuOpen ? "mobile-open" : ""}`}
-      style={{ "--cc-sidebar-width": collapsed ? "88px" : "260px" }}
-    >
-      <IncidentBanner />
-      <aside className={`cc-sidebar ${collapsed ? "is-collapsed" : ""}`} aria-label="Primary navigation">
-        <div className="cc-sidebar__brand">
-          <button type="button" className="cc-btn cc-btn-ghost" aria-label="Toggle sidebar" onClick={() => setCollapsed((v) => !v)}>
-            {collapsed ? "→" : "←"}
-          </button>
-          {!collapsed ? <span className="cc-brand">THIRAMAI</span> : null}
-        </div>
-        <nav className="cc-nav cc-nav--sidebar" aria-label="Primary">
-          <NavLink
-            className={({ isActive }) => (isActive ? "active" : undefined)}
-            end
-            to="/dashboard"
-          >
-            Central Brain
-          </NavLink>
-          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/personal">
-            Personal OS
-          </NavLink>
-          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/os/stock">
-            Stock OS
-          </NavLink>
-          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/os/research">
-            Research OS
-          </NavLink>
-          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/os/agentic-platform">
-            Agentic Platform
-          </NavLink>
-          <NavLink className={({ isActive }) => (isActive ? "active" : undefined)} to="/dashboard/inventory">
-            Business
-          </NavLink>
-        </nav>
-        <div className="cc-sidebar__user">
-          <Avatar name={me?.email || "User"} size={collapsed ? "sm" : "md"} />
-          {!collapsed ? (
-            <div>
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{me?.email || "Signed in"}</p>
-              <p style={{ margin: 0, fontSize: 12 }} className="cc-muted">
-                {role}
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </aside>
+    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-3 backdrop-blur md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen((v) => !v)}
+          className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-100"
+          aria-label="Toggle menu"
+        >
+          Menu
+        </button>
+        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Thiramai</div>
+        <div className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300">{role}</div>
+      </header>
 
-      <div className="cc-shell__content">
-        <header className="cc-topbar">
+      {mobileNavOpen ? (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/70 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 transform border-r border-slate-800 bg-slate-950 p-4 transition-transform md:hidden ${
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Thiramai</div>
           <button
             type="button"
-            className="cc-btn cc-btn-ghost cc-mobile-menu-btn"
-            aria-label="Toggle mobile navigation"
-            onClick={() => setMobileMenuOpen((v) => !v)}
+            onClick={() => setMobileNavOpen(false)}
+            className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-200"
           >
-            ☰
+            Close
           </button>
-          <div className="cc-breadcrumbs" aria-label="Breadcrumb">
-            {breadcrumbs.map((crumb, idx) => (
-              <span key={`${crumb}-${idx}`} className="cc-muted">
-                {idx > 0 ? " / " : ""}
-                {crumb}
-              </span>
-            ))}
-          </div>
-          <label style={{ minWidth: 220 }}>
-            <input
-              className="cc-input"
-              placeholder="Search... (Cmd/Ctrl+K or /)"
-              aria-label="Global search"
-              onFocus={(e) => {
-                e.target.blur();
-                window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
-              }}
-              readOnly
-            />
-          </label>
-          <div className="cc-notif-wrap" ref={notifWrapRef}>
-            <button
-              type="button"
-              className="cc-btn cc-btn-ghost"
-              aria-label="Notifications"
-              aria-expanded={notifOpen}
-              onClick={() => {
-                setNotifOpen((o) => !o);
-                loadNotifications();
-              }}
+        </div>
+        <nav className="space-y-2">
+          {visibleNav.map((item) => (
+            <NavLink
+              key={`m_${item.key}`}
+              to={item.to}
+              end={item.key === "brain"}
+              onClick={() => setMobileNavOpen(false)}
+              className={({ isActive }) =>
+                `block rounded-lg px-4 py-3 text-base transition ${
+                  isActive
+                    ? "bg-slate-800 text-white"
+                    : "text-slate-300 hover:bg-slate-900 hover:text-white"
+                }`
+              }
             >
-              🔔 {notifCount > 0 ? <Badge variant="error" size="sm">{notifCount}</Badge> : null}
-            </button>
-            {notifOpen ? (
-              <div className="cc-notif-dropdown" role="menu">
-                {notifItems.length === 0 ? (
-                  <div className="cc-notif-empty cc-muted">No notifications</div>
-                ) : (
-                  notifItems.map((n, i) => (
-                    <div key={`${n?.time || ""}_${i}`} className="cc-notif-item">
-                      <span className="cc-notif-icon" aria-hidden>
-                        {n?.icon || "•"}
-                      </span>
-                      <div className="cc-notif-body">
-                        <div className="cc-notif-msg">{String(n?.message || "")}</div>
-                        <div className="cc-notif-time cc-muted">
-                          {n?.time ? new Date(n.time).toLocaleString() : ""}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            ) : null}
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="mt-6 space-y-2">
+          <div className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-400">
+            Role: <span className="font-medium text-slate-200">{role}</span>
           </div>
-          <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setLogDrawerOpen((v) => !v)}>
-            Terminal
-          </button>
-          <button type="button" className="cc-btn" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "dark" ? "Light" : "Dark"}
-          </button>
-          {selectableOrgs.length > 0 && (
-            <select
-              className="cc-select"
-              style={{ width: 220 }}
-              data-cc-track="org_switch"
-              value={String(selectableOrgs.find((o) => o.is_current)?.organization?.id ?? selectableOrgs[0]?.organization?.id ?? "")}
-              onChange={onOrgChange}
-              aria-label="Organization switcher"
-            >
-              {selectableOrgs.map((row) => (
-                <option key={row.organization.id} value={row.organization.id}>
-                  {row.organization.name}
-                  {row.is_current ? " (current)" : ""}
-                </option>
-              ))}
-            </select>
-          )}
           <button
             type="button"
-            className="cc-btn"
-            data-cc-track="sign_out"
-            onClick={() => {
-              logout();
-              navigate("/login", { replace: true });
-            }}
+            onClick={onSignOut}
+            className="w-full rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200"
           >
             Sign out
           </button>
-        </header>
-        <main
-          className="cc-main"
-          id="cc-main-content"
-          style={{ overflowY: "auto", minHeight: 0, paddingBottom: 120 }}
-        >
-          <Outlet />
-        </main>
-        <footer className="cc-build-footer" style={{ padding: "6px 16px 10px", borderTop: "1px solid var(--cc-border, #e5e7eb)" }}>
-          <BuildFooter />
-        </footer>
-      </div>
-      {mobileMenuOpen ? (
-        <button
-          type="button"
-          className="cc-sidebar-overlay"
-          aria-label="Close navigation"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      ) : null}
-      <MobileBottomNav />
-      {isFeatureEnabled("QUICK_ACTIONS_FAB") ? <QuickActionsFAB /> : null}
-      <GlobalCommandBar />
-      {logDrawerOpen ? (
-        <aside
-          style={{
-            position: "fixed",
-            top: 0,
-            right: 0,
-            width: "min(460px, 92vw)",
-            height: "100vh",
-            zIndex: 1190,
-            background: "rgba(15, 23, 42, 0.96)",
-            borderLeft: "1px solid rgba(148,163,184,0.3)",
-            boxShadow: "-10px 0 30px rgba(0,0,0,0.35)",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderBottom: "1px solid rgba(148,163,184,0.25)" }}>
-            <strong style={{ color: "#e2e8f0", fontSize: 13 }}>Live Execution Terminal</strong>
-            <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setLogDrawerOpen(false)}>Close</button>
+        </div>
+      </aside>
+
+      <aside className="hidden w-64 shrink-0 border-r border-slate-800 bg-slate-950/90 p-4 md:flex md:flex-col">
+        <div className="mb-6 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Thiramai</div>
+        <nav className="space-y-1">
+          {visibleNav.map((item) => (
+            <NavLink
+              key={item.key}
+              to={item.to}
+              end={item.key === "brain"}
+              className={({ isActive }) =>
+                `block rounded-lg px-3 py-2 text-sm transition ${
+                  isActive
+                    ? "bg-slate-800 text-white"
+                    : "text-slate-300 hover:bg-slate-900 hover:text-white"
+                }`
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="mt-auto space-y-2">
+          <div className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-400">
+            Role: <span className="font-medium text-slate-200">{role}</span>
           </div>
-          <div style={{ overflowY: "auto", padding: 10, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, color: "#cbd5e1" }}>
-            {systemLogs.length === 0 ? <div>No logs yet. Waiting for orchestrator / auto-deploy events...</div> : null}
-            {systemLogs.map((row, idx) => (
-              <div key={`${row.ts || "ts"}_${idx}`} style={{ marginBottom: 8 }}>
-                <div style={{ color: "#94a3b8" }}>[{row.ts || "-"}] [{row.level || "INFO"}] {row.logger || "system"}</div>
-                <div>{row.message || ""}</div>
-              </div>
-            ))}
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="w-full rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+          >
+            Sign out
+          </button>
+        </div>
+      </aside>
+      <main id="cc-main-content" className="flex-1 overflow-y-auto px-2 pb-28 pt-3 sm:px-4 md:p-6">
+        <div className="mx-auto w-full max-w-6xl">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4 lg:col-span-7">
+              <AIAssistantPanel />
+            </section>
+            <section className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40 p-3 sm:p-4 lg:col-span-5">
+              <Outlet />
+            </section>
           </div>
-        </aside>
-      ) : null}
+        </div>
+      </main>
     </div>
   );
 }

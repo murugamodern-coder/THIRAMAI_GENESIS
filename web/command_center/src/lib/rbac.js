@@ -1,7 +1,7 @@
 export const ROLES = Object.freeze({
-  ADMIN: "ADMIN",
-  OPERATOR: "OPERATOR",
-  VIEWER: "VIEWER",
+  OWNER: "OWNER",
+  STAFF: "STAFF",
+  FAMILY: "FAMILY",
 });
 
 export const PERMISSIONS = Object.freeze({
@@ -12,17 +12,19 @@ export const PERMISSIONS = Object.freeze({
 });
 
 export function inferRole(me) {
-  const raw =
+  const raw = (
+    me?.role?.name ||
     me?.role ||
     me?.user_role ||
-    (Array.isArray(me?.roles) ? me.roles[0] : null) ||
-    (me?.is_admin ? "ADMIN" : null) ||
-    null;
+    (Array.isArray(me?.roles) ? me.roles[0]?.name || me.roles[0] : null) ||
+    (me?.is_admin ? "owner" : null) ||
+    ""
+  );
   const v = String(raw || "").toUpperCase();
-  if (v.includes("ADMIN") || v === "OWNER" || v === "MANAGER") return ROLES.ADMIN;
-  if (v.includes("OPERATOR") || v.includes("STAFF")) return ROLES.OPERATOR;
-  if (v.includes("VIEW")) return ROLES.VIEWER;
-  return ROLES.VIEWER;
+  if (v.includes("OWNER") || v.includes("ADMIN") || v.includes("MANAGER")) return ROLES.OWNER;
+  if (v.includes("STAFF") || v.includes("OPERATOR") || v.includes("WORKER")) return ROLES.STAFF;
+  if (v.includes("FAMILY")) return ROLES.FAMILY;
+  return ROLES.FAMILY;
 }
 
 export function can(roleOrMe, permission) {
@@ -31,12 +33,18 @@ export function can(roleOrMe, permission) {
     case PERMISSIONS.VIEW:
       return true;
     case PERMISSIONS.EXECUTE:
-      return role === ROLES.ADMIN || role === ROLES.OPERATOR;
+      return role === ROLES.OWNER || role === ROLES.STAFF;
     case PERMISSIONS.APPROVE:
     case PERMISSIONS.OVERRIDE_AI:
-      return role === ROLES.ADMIN;
+      return role === ROLES.OWNER;
     default:
       return false;
   }
+}
+
+export function defaultRouteForRole(role) {
+  if (role === ROLES.STAFF) return "/dashboard/inventory";
+  if (role === ROLES.FAMILY) return "/personal";
+  return "/dashboard";
 }
 
