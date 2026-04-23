@@ -95,6 +95,13 @@ def _background_agent_enabled() -> bool:
     return get_settings().background_agent_truthy()
 
 
+def _scheduler_autonomous_enabled() -> bool:
+    if _incident_or_degraded():
+        return False
+    raw = (os.getenv("THIRAMAI_SCHEDULER_AUTONOMOUS") or "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 def _cors_allow_origins() -> list[str]:
     """
     Build CORS ``allow_origins`` for ``CORSMiddleware`` (see ``core.settings.ThiramaiSettings``).
@@ -315,6 +322,17 @@ async def _startup_background_agent() -> None:
         start_background_agent()
 
 
+@app.on_event("startup")
+async def _startup_thiramai_scheduler() -> None:
+    if not _scheduler_autonomous_enabled():
+        return
+    from services.scheduler import ThiramaiScheduler
+
+    scheduler = ThiramaiScheduler(app)
+    await scheduler.start()
+    app.state.scheduler = scheduler
+
+
 @app.on_event("shutdown")
 def _shutdown_thiramai() -> None:
     try:
@@ -343,6 +361,13 @@ def _shutdown_thiramai() -> None:
 @app.on_event("shutdown")
 async def _shutdown_background_agent() -> None:
     stop_background_agent()
+
+
+@app.on_event("shutdown")
+async def _shutdown_thiramai_scheduler() -> None:
+    sch = getattr(app.state, "scheduler", None)
+    if sch is not None:
+        await sch.stop()
 
 
 @app.exception_handler(RequestValidationError)

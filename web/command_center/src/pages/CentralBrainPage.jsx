@@ -25,6 +25,8 @@ function routeKey(payload) {
 
 export default function CentralBrainPage() {
   const [chat, setChat] = useState([]);
+  const [morningBrief, setMorningBrief] = useState(null);
+  const [briefOpen, setBriefOpen] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [proactiveAlerts, setProactiveAlerts] = useState([]);
   const [alertsOpen, setAlertsOpen] = useState(true);
@@ -45,6 +47,23 @@ export default function CentralBrainPage() {
       if (!mounted) return;
       setProactiveAlerts([]);
     });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    api
+      .get("/api/brain/morning-brief")
+      .then((r) => {
+        if (!mounted) return;
+        const brief = String(r.data?.brief || "").trim();
+        if (brief) {
+          setMorningBrief({ text: brief, generatedAt: r.data?.generated_at || "" });
+        }
+      })
+      .catch(() => {});
     return () => {
       mounted = false;
     };
@@ -170,6 +189,27 @@ export default function CentralBrainPage() {
       <div ref={listRef} className="cb-message-container">
         {chat.length === 0 ? (
           <div className="cb-welcome">
+            {morningBrief ? (
+              <div className="cb-morning-brief">
+                <button
+                  type="button"
+                  className="cb-morning-brief__toggle"
+                  onClick={() => setBriefOpen((v) => !v)}
+                  aria-expanded={briefOpen}
+                >
+                  <span>🌅 Morning brief</span>
+                  <span className="cb-morning-brief__chev">{briefOpen ? "▼" : "▶"}</span>
+                </button>
+                {briefOpen ? (
+                  <div className="cb-morning-brief__body">
+                    <div className="cb-morning-brief__text">{morningBrief.text}</div>
+                    {morningBrief.generatedAt ? (
+                      <div className="cb-morning-brief__meta">{new Date(morningBrief.generatedAt).toLocaleString()}</div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="cb-welcome-icon">⚡</div>
             <div className="cb-welcome-title">நான் Thiramai</div>
             <div className="cb-welcome-subtitle">உங்கள் Sovereign AI Assistant</div>

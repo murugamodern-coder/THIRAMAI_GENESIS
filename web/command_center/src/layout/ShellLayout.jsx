@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
+import api from "../api/client.js";
 import {
   fetchAuthMe,
   fetchMyOrganizations,
@@ -36,6 +37,19 @@ export default function ShellLayout() {
   const [systemLogs, setSystemLogs] = useState([]);
   const logsWsRef = useRef(null);
   const lastOrgSwitchAt = useRef(0);
+  const notifWrapRef = useRef(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifItems, setNotifItems] = useState([]);
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      const r = await api.get("/api/brain/notifications");
+      const list = Array.isArray(r.data?.notifications) ? r.data.notifications : [];
+      setNotifItems(list);
+    } catch {
+      setNotifItems([]);
+    }
+  }, []);
 
   const pathSeg = (location.pathname || "/").replace(/^\/+/, "");
   const breadcrumbs = !pathSeg ? ["Home"] : pathSeg.split("/").map((s) => s.replace(/-/g, " "));
@@ -73,6 +87,24 @@ export default function ShellLayout() {
   }, [location.pathname]);
 
   useEffect(() => {
+    if (!token) return undefined;
+    loadNotifications();
+    const id = setInterval(loadNotifications, 120000);
+    return () => clearInterval(id);
+  }, [token, loadNotifications]);
+
+  useEffect(() => {
+    if (!notifOpen) return undefined;
+    function onDoc(ev) {
+      if (notifWrapRef.current && !notifWrapRef.current.contains(ev.target)) {
+        setNotifOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [notifOpen]);
+
+  useEffect(() => {
     if (!logDrawerOpen || !token) return undefined;
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const wsUrl = `${protocol}://${window.location.host}/ws/system/logs`;
@@ -108,7 +140,7 @@ export default function ShellLayout() {
 
   const orgRows = Array.isArray(orgs) ? orgs : [];
   const selectableOrgs = orgRows.filter((row) => row?.organization?.id != null);
-  const notifCount = 3;
+  const notifCount = notifItems.length;
 
   async function onOrgChange(e) {
     const now = Date.now();
@@ -207,9 +239,41 @@ export default function ShellLayout() {
               readOnly
             />
           </label>
-          <button type="button" className="cc-btn cc-btn-ghost" aria-label="Notifications">
-            🔔 {notifCount > 0 ? <Badge variant="error" size="sm">{notifCount}</Badge> : null}
-          </button>
+          <div className="cc-notif-wrap" ref={notifWrapRef}>
+            <button
+              type="button"
+              className="cc-btn cc-btn-ghost"
+              aria-label="Notifications"
+              aria-expanded={notifOpen}
+              onClick={() => {
+                setNotifOpen((o) => !o);
+                loadNotifications();
+              }}
+            >
+              🔔 {notifCount > 0 ? <Badge variant="error" size="sm">{notifCount}</Badge> : null}
+            </button>
+            {notifOpen ? (
+              <div className="cc-notif-dropdown" role="menu">
+                {notifItems.length === 0 ? (
+                  <div className="cc-notif-empty cc-muted">No notifications</div>
+                ) : (
+                  notifItems.map((n, i) => (
+                    <div key={`${n?.time || ""}_${i}`} className="cc-notif-item">
+                      <span className="cc-notif-icon" aria-hidden>
+                        {n?.icon || "•"}
+                      </span>
+                      <div className="cc-notif-body">
+                        <div className="cc-notif-msg">{String(n?.message || "")}</div>
+                        <div className="cc-notif-time cc-muted">
+                          {n?.time ? new Date(n.time).toLocaleString() : ""}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
           <button type="button" className="cc-btn cc-btn-ghost" onClick={() => setLogDrawerOpen((v) => !v)}>
             Terminal
           </button>

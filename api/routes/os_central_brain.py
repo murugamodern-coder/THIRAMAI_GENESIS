@@ -602,6 +602,55 @@ async def delete_brain_chat_history(user: CurrentUser = Depends(get_current_user
     return {"ok": True, "cleared": True}
 
 
+async def _collect_brain_notifications(org_id: int) -> list[dict[str, Any]]:
+    """Aggregate Redis-backed notifications for the active organization."""
+    redis_client = await get_redis()
+    out: list[dict[str, Any]] = []
+    if redis_client is None:
+        return out
+    stock_key = f"thiramai:stock_alert:{org_id}"
+    stock_rows = await redis_client.lrange(stock_key, 0, 24)
+    for raw in stock_rows:
+        try:
+            row = json.loads(raw)
+            if isinstance(row, dict):
+                out.append(row)
+        except (json.JSONDecodeError, TypeError):
+            out.append({"icon": "📊", "message": str(raw), "time": "", "type": "stock"})
+    task_rows = await redis_client.lrange(f"thiramai:task_reminders:{org_id}", 0, 19)
+    for raw in task_rows:
+        try:
+            row = json.loads(raw)
+            if isinstance(row, dict):
+                out.append(row)
+        except (json.JSONDecodeError, TypeError):
+            continue
+    hc = await redis_client.get("thiramai:last_health_check")
+    if hc:
+        out.append(
+            {
+                "icon": "💚",
+                "message": "Autonomous scheduler heartbeat OK",
+                "time": str(hc),
+                "type": "system",
+            }
+        )
+    return out
+
+
+@router.get("/api/brain/morning-brief", summary="Today's morning brief (Redis or on-demand)")
+async def get_brain_morning_brief(user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    from services.scheduler import fetch_or_generate_morning_brief
+
+    return await fetch_or_generate_morning_brief(int(user.organization_id))
+
+
+@router.get("/api/brain/notifications", summary="Pending brain notifications (stock, tasks, system)")
+async def get_brain_notifications(user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    items = await _collect_brain_notifications(int(user.organization_id))
+    return {"ok": True, "notifications": items}
+
+
 @router.post("/api/orchestrator/command", summary="Global command router -> orchestrator plan")
 async def post_orchestrator_command(
     request: Request,
