@@ -20,7 +20,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 
 from api.dependencies import CurrentUser, get_current_user, try_resolve_current_user_from_access_token
+from core.redis_cache import get_redis
 from core.database import get_session_factory
+from services.conversation_memory import ConversationMemory
 from core.stability.circuit_breaker import export_breaker_snapshots
 from services.health_checker import OSHealthChecker
 
@@ -584,6 +586,22 @@ async def get_proactive_alerts(
     return {"alerts": alerts}
 
 
+@router.get("/api/brain/history", summary="Central Brain chat history (Redis, same tenant)")
+async def get_brain_chat_history(user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    redis_client = await get_redis()
+    memory = ConversationMemory(redis_client, _uid(user), int(user.organization_id))
+    messages = await memory.get_history(limit=20)
+    return {"ok": True, "messages": messages}
+
+
+@router.delete("/api/brain/history", summary="Clear Central Brain chat history for current user/org")
+async def delete_brain_chat_history(user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    redis_client = await get_redis()
+    memory = ConversationMemory(redis_client, _uid(user), int(user.organization_id))
+    await memory.clear()
+    return {"ok": True, "cleared": True}
+
+
 @router.post("/api/orchestrator/command", summary="Global command router -> orchestrator plan")
 async def post_orchestrator_command(
     request: Request,
@@ -595,6 +613,9 @@ async def post_orchestrator_command(
     from groq import Groq
 
     command = body.command.strip()
+    redis_client = await get_redis()
+    memory = ConversationMemory(redis_client, _uid(user), int(user.organization_id))
+    await memory.add_message("user", command)
     attachment = body.attachment if isinstance(body.attachment, dict) else None
     att_type = str((attachment or {}).get("type") or "").strip().lower()
     att_data = str((attachment or {}).get("data") or "").strip()
@@ -640,6 +661,7 @@ async def post_orchestrator_command(
                 return f"Image analysis failed: {exc}"
 
         vision_text = await asyncio.to_thread(_vision_describe_sync)
+        await memory.add_message("thiramai", vision_text, routing="CHAT")
         decorated = f"{vision_text} (⚠️ {alerts_count} active alerts need attention)"
         return {
             "ok": True,
@@ -721,18 +743,51 @@ async def post_orchestrator_command(
         )
         proactive_alerts = await _compute_proactive_alerts(user)
         alerts_count = len(proactive_alerts)
-        response_text = await asyncio.to_thread(
-            lambda: long_llm_sync(
-                "You are THIRAMAI Central Brain. Give a concise, accurate instant answer in plain text. Use project vault context when relevant.",
-                (
-                    f"User query:\n{command}\n\n"
-                    f"Project vault context (may be empty):\n{vault_context or 'No matching vault context found.'}\n\n"
-                    f"Active proactive alerts count: {alerts_count}"
-                ),
-                prefer_gemini=False,
+
+        hist_raw = await memory.get_history(limit=10)
+        history_messages = memory.format_for_llm(hist_raw)
+        if redis_client is None:
+            history_messages = [{"role": "user", "content": command}]
+
+        vault_section = vault_context or "No matching vault context found."
+
+        def _groq_chat_with_history_sync() -> str:
+            key = (os.getenv("GROQ_API_KEY") or "").strip()
+            if not key:
+                return ""
+            sys_content = (
+                "நீ Thiramai, ஒரு Tamil-English AI assistant.\n"
+                "உன்னோட முந்தைய conversation-ஐ நினைவில் வை.\n"
+                "Context-aware-ஆ பதில் சொல்லு.\n"
+                "Short and clear responses பண்ணு.\n\n"
+                f"Project vault context (may be empty):\n{vault_section}\n\n"
+                f"Active proactive alerts count: {alerts_count}"
             )
-        )
+            msgs = [{"role": "system", "content": sys_content}] + history_messages
+            client = Groq(api_key=key)
+            chat = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=msgs,
+                max_tokens=500,
+                temperature=0.35,
+            )
+            return (chat.choices[0].message.content or "").strip()
+
+        response_text = await asyncio.to_thread(_groq_chat_with_history_sync)
+        if not str(response_text or "").strip():
+            response_text = await asyncio.to_thread(
+                lambda: long_llm_sync(
+                    "You are THIRAMAI Central Brain. Give a concise, accurate instant answer in plain text. Use project vault context when relevant.",
+                    (
+                        f"User query:\n{command}\n\n"
+                        f"Project vault context (may be empty):\n{vault_context or 'No matching vault context found.'}\n\n"
+                        f"Active proactive alerts count: {alerts_count}"
+                    ),
+                    prefer_gemini=False,
+                )
+            )
         base_response = str(response_text or "No response available right now.")
+        await memory.add_message("thiramai", base_response, routing="CHAT")
         decorated = f"{base_response} (⚠️ {alerts_count} active alerts need attention)"
         return {
             "ok": True,

@@ -51,6 +51,30 @@ export default function CentralBrainPage() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+    api
+      .get("/api/brain/history")
+      .then((r) => {
+        if (!mounted) return;
+        const rows = Array.isArray(r.data?.messages) ? r.data.messages : [];
+        if (rows.length > 0) {
+          setChat(
+            rows.map((m) => ({
+              role: m.role === "user" ? "user" : "thiramai",
+              content: String(m.content || ""),
+              routing: m.routing || "CHAT",
+              timestamp: m.timestamp ? Date.parse(m.timestamp) || Date.now() : Date.now(),
+            })),
+          );
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, thinking]);
 
@@ -97,6 +121,22 @@ export default function CentralBrainPage() {
         <div className="cb-title">🧠 THIRAMAI</div>
         <div className="cb-status">
           <span className="cb-live">● Live</span>
+          <button
+            type="button"
+            className="cc-btn cc-btn-ghost cb-clear-chat"
+            title="Clear chat"
+            aria-label="Clear chat history"
+            onClick={async () => {
+              try {
+                await api.delete("/api/brain/history");
+                setChat([]);
+              } catch {
+                showToastDedup({ type: "error", message: "Could not clear chat history" });
+              }
+            }}
+          >
+            🗑️
+          </button>
           <span>[alerts: {alertsCount}]</span>
         </div>
       </div>
