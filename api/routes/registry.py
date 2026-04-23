@@ -111,5 +111,9 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(life_os_router)
 
     from api.routes.os_central_brain import router as os_central_brain_router
+    from api.routes.code_agent import router as code_agent_router
+    from api.routes.code_agent import websites_router as code_agent_websites_router
 
+    app.include_router(code_agent_router, prefix="/api/agent")
+    app.include_router(code_agent_websites_router, prefix="/api")
     app.include_router(os_central_brain_router)

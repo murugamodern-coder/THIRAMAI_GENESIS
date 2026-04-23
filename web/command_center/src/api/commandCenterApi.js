@@ -706,3 +706,44 @@ export async function streamAgentPlan(taskId, onEvent, signal) {
     }
   }
 }
+
+/** Thiramai Code Agent (`/api/agent/*`, `/api/websites/list`). */
+export async function postCodeAgentGenerate(payload) {
+  const { data } = await api.post("/api/agent/code/generate", payload);
+  return data;
+}
+
+export async function postCodeAgentTest(taskId) {
+  const { data } = await api.post("/api/agent/code/test", { task_id: taskId });
+  return data;
+}
+
+export async function postCodeAgentDeploy(payload) {
+  const { data } = await api.post("/api/agent/code/deploy", payload);
+  return data;
+}
+
+export async function fetchCodeAgentTasks() {
+  const { data } = await api.get("/api/agent/code/tasks");
+  return data;
+}
+
+export async function fetchCodeAgentTask(taskId) {
+  const { data } = await api.get(`/api/agent/code/tasks/${encodeURIComponent(taskId)}`);
+  return data;
+}
+
+export async function postSelfHealAnalyze(errorLog) {
+  const { data } = await api.post("/api/agent/self-heal", { error_log: errorLog });
+  return data;
+}
+
+export async function postSelfHealApply(payload) {
+  const { data } = await api.post("/api/agent/self-heal/apply", payload);
+  return data;
+}
+
+export async function fetchWebsitesList() {
+  const { data } = await api.get("/api/websites/list");
+  return data;
+}
