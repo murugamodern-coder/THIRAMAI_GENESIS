@@ -12,7 +12,6 @@
     "dev": "vite --host 127.0.0.1 --port 5173"
   },
   "dependencies": {
-    "@monaco-editor/react": "^4.7.0",
     "@sentry/react": "^8.55.1",
     "@sentry/vite-plugin": "^5.2.0",
     "axios": "^1.7.9",

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import Editor from "@monaco-editor/react";
 
 import api from "../api/client.js";
 import {
@@ -17,13 +16,6 @@ import {
 import { showToastDedup } from "../lib/toastDedup.js";
 
 const GEN_STEPS = ["🤔 Analyzing task...", "✍️ Writing code...", "🔍 Checking syntax...", "✅ Ready!"];
-
-function monacoLanguage(lang) {
-  if (lang === "react") return "javascript";
-  if (lang === "typescript") return "typescript";
-  if (lang === "javascript") return "javascript";
-  return "python";
-}
 
 function escapeHtml(s) {
   return String(s || "")
@@ -394,21 +386,29 @@ export default function AgenticOSPage() {
               }}
             >
               {editorTab === "code" ? (
-                <Editor
-                  height="400px"
-                  language={monacoLanguage(language)}
+                <textarea
                   value={generatedCode}
-                  onChange={(value) => setGeneratedCode(value ?? "")}
-                  theme="vs-dark"
-                  loading={<div className="cc-muted" style={{ padding: 24 }}>Loading editor…</div>}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 14,
-                    lineNumbers: "on",
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    wordWrap: "on",
+                  onChange={(e) => setGeneratedCode(e.target.value)}
+                  style={{
+                    width: "100%",
+                    height: "400px",
+                    backgroundColor: "#1e1e2e",
+                    color: "#cdd6f4",
+                    fontFamily: "Consolas, Monaco, monospace",
+                    fontSize: "14px",
+                    padding: "16px",
+                    border: "1px solid #313244",
+                    borderRadius: "8px",
+                    resize: "vertical",
+                    lineHeight: "1.6",
+                    outline: "none",
+                    whiteSpace: "pre",
+                    overflowX: "auto",
+                    tabSize: 4,
+                    boxSizing: "border-box",
                   }}
+                  placeholder="// Generated code will appear here..."
+                  spellCheck={false}
                 />
               ) : null}
               {editorTab === "output" ? (
