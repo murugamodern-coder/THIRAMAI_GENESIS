@@ -713,6 +713,11 @@ export async function postCodeAgentGenerate(payload) {
   return data;
 }
 
+export async function postCodeAgentSave(payload) {
+  const { data } = await api.post("/api/agent/code/save", payload);
+  return data;
+}
+
 export async function postCodeAgentTest(taskId) {
   const { data } = await api.post("/api/agent/code/test", { task_id: taskId });
   return data;

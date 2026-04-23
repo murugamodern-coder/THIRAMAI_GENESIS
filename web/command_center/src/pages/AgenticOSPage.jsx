@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import Editor from "@monaco-editor/react";
 
 import api from "../api/client.js";
 import {
@@ -8,6 +9,7 @@ import {
   fetchWebsitesList,
   postCodeAgentDeploy,
   postCodeAgentGenerate,
+  postCodeAgentSave,
   postCodeAgentTest,
   postSelfHealAnalyze,
   postSelfHealApply,
@@ -15,6 +17,21 @@ import {
 import { showToastDedup } from "../lib/toastDedup.js";
 
 const GEN_STEPS = ["🤔 Analyzing task...", "✍️ Writing code...", "🔍 Checking syntax...", "✅ Ready!"];
+
+function monacoLanguage(lang) {
+  if (lang === "react") return "javascript";
+  if (lang === "typescript") return "typescript";
+  if (lang === "javascript") return "javascript";
+  return "python";
+}
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 function CardSection({ title, subtitle, children }) {
   return (
@@ -41,6 +58,8 @@ export default function AgenticOSPage() {
   const [genStep, setGenStep] = useState(0);
   const genTimerRef = useRef(null);
   const [lastGen, setLastGen] = useState(null);
+  const [generatedCode, setGeneratedCode] = useState("");
+  const [editorTab, setEditorTab] = useState("code");
 
   const [testBusy, setTestBusy] = useState(false);
   const [testOut, setTestOut] = useState(null);
@@ -120,6 +139,8 @@ export default function AgenticOSPage() {
     if (!t || genBusy) return;
     setGenBusy(true);
     setLastGen(null);
+    setGeneratedCode("");
+    setEditorTab("code");
     setTestOut(null);
     setGenStep(0);
     if (genTimerRef.current) window.clearInterval(genTimerRef.current);
@@ -134,6 +155,8 @@ export default function AgenticOSPage() {
         context: context.trim(),
       });
       setLastGen(data);
+      setGeneratedCode(String(data?.code ?? ""));
+      setEditorTab("code");
       setGenStep(GEN_STEPS.length - 1);
       showToastDedup({ type: "success", message: data?.syntax_ok ? "Code generated" : "Generated (syntax issues)" });
       await loadTasks();
@@ -150,14 +173,26 @@ export default function AgenticOSPage() {
     }
   }
 
+  async function syncEditorToServer() {
+    const id = lastGen?.task_id;
+    if (!id) return null;
+    const saveRes = await postCodeAgentSave({ task_id: id, code: generatedCode });
+    setLastGen((prev) =>
+      prev && prev.task_id === id ? { ...prev, syntax_ok: saveRes.syntax_ok, syntax_error: saveRes.syntax_error } : prev,
+    );
+    return saveRes;
+  }
+
   async function runTest() {
     const id = lastGen?.task_id;
     if (!id || testBusy) return;
     setTestBusy(true);
     setTestOut(null);
     try {
+      await syncEditorToServer();
       const data = await postCodeAgentTest(id);
       setTestOut(data);
+      setEditorTab("output");
       await loadTasks();
       showToastDedup({ type: data?.ok ? "success" : "warning", message: data?.ok ? "Run finished" : "Run reported errors" });
     } catch (e) {
@@ -172,6 +207,7 @@ export default function AgenticOSPage() {
     if (!id || deployBusy) return;
     setDeployBusy(true);
     try {
+      await syncEditorToServer();
       await postCodeAgentDeploy({
         task_id: id,
         target_path: deployPath.trim(),
@@ -242,7 +278,26 @@ export default function AgenticOSPage() {
     setTask(text);
   }
 
-  const codePreview = lastGen?.preview || lastGen?.code || "";
+  const outputText = useMemo(() => {
+    if (!testOut) return "";
+    const parts = [];
+    if (testOut.output) parts.push(String(testOut.output));
+    if (testOut.errors) parts.push(String(testOut.errors));
+    if (!parts.length) return JSON.stringify(testOut, null, 2);
+    return parts.join("\n---\n");
+  }, [testOut]);
+
+  const previewSrcDoc = useMemo(() => {
+    const c = (generatedCode || "").trim();
+    if (!c) {
+      return "<!DOCTYPE html><html><head><meta charset='utf-8'/></head><body><p>Generate code to preview.</p></body></html>";
+    }
+    if (/^<!DOCTYPE/i.test(c) || /^<html/i.test(c)) {
+      return c;
+    }
+    const body = `<p style="font:13px system-ui;color:#64748b">Snippet preview (escaped). For live DOM, generate a full document starting with <code>&lt;!DOCTYPE html&gt;</code>.</p><pre style="font:12px monospace;white-space:pre-wrap;word-break:break-word">${escapeHtml(generatedCode)}</pre>`;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Preview</title></head><body style="margin:12px">${body}</body></html>`;
+  }, [generatedCode]);
 
   return (
     <div className="agentic-os-page" style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -299,28 +354,119 @@ export default function AgenticOSPage() {
             <div className="cc-muted" style={{ fontSize: 12, marginBottom: 8 }}>
               OUTPUT {lastGen.syntax_ok ? <span style={{ color: "#10b981" }}>✅ Syntax OK</span> : <span style={{ color: "#f59e0b" }}>⚠ Syntax issues</span>}
             </div>
-            <pre
+            <div
+              role="tablist"
               style={{
-                margin: 0,
-                padding: 14,
-                borderRadius: 12,
-                background: "var(--cc-surface-2, rgba(0,0,0,0.04))",
-                border: "1px solid var(--cc-border, #e5e7eb)",
-                fontSize: 12,
-                overflow: "auto",
-                maxHeight: 360,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
+                display: "flex",
+                gap: 6,
+                marginBottom: 10,
+                flexWrap: "wrap",
               }}
             >
-              {codePreview || "—"}
-            </pre>
+              {[
+                ["code", "📝 Code"],
+                ["output", "▶ Output"],
+                ["preview", "👁 Preview"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={editorTab === id}
+                  className="cc-btn cc-btn-ghost"
+                  style={{
+                    fontWeight: editorTab === id ? 700 : 500,
+                    borderBottom: editorTab === id ? "2px solid var(--cc-accent, #2563eb)" : "2px solid transparent",
+                    borderRadius: 8,
+                  }}
+                  onClick={() => setEditorTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div
+              style={{
+                borderRadius: 12,
+                border: "1px solid var(--cc-border, #e5e7eb)",
+                overflow: "hidden",
+                background: "#1e1e1e",
+              }}
+            >
+              {editorTab === "code" ? (
+                <Editor
+                  height="400px"
+                  language={monacoLanguage(language)}
+                  value={generatedCode}
+                  onChange={(value) => setGeneratedCode(value ?? "")}
+                  theme="vs-dark"
+                  loading={<div className="cc-muted" style={{ padding: 24 }}>Loading editor…</div>}
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 14,
+                    lineNumbers: "on",
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    wordWrap: "on",
+                  }}
+                />
+              ) : null}
+              {editorTab === "output" ? (
+                <pre
+                  style={{
+                    margin: 0,
+                    minHeight: 400,
+                    padding: 16,
+                    fontSize: 13,
+                    color: testOut?.ok === false ? "#fecaca" : "#e2e8f0",
+                    background: "#0f172a",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    overflow: "auto",
+                  }}
+                >
+                  {outputText || "Run ▶ Test to capture stdout/stderr."}
+                </pre>
+              ) : null}
+              {editorTab === "preview" ? (
+                language === "python" ? (
+                  <pre
+                    style={{
+                      margin: 0,
+                      minHeight: 400,
+                      padding: 16,
+                      fontSize: 13,
+                      color: "#e2e8f0",
+                      background: "#0f172a",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      overflow: "auto",
+                    }}
+                  >
+                    {outputText || "Python preview shows the same as Output — run Test first."}
+                  </pre>
+                ) : (
+                  <iframe
+                    title="Live preview"
+                    sandbox="allow-scripts allow-same-origin"
+                    srcDoc={previewSrcDoc}
+                    style={{
+                      width: "100%",
+                      minHeight: 400,
+                      border: "none",
+                      background: "#fff",
+                    }}
+                  />
+                )
+              ) : null}
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12, alignItems: "center" }}>
               <button type="button" className="cc-btn cc-btn-ghost" disabled={testBusy || !lastGen.task_id} onClick={() => runTest()}>
                 {testBusy ? "Running…" : "▶ Test"}
               </button>
               <span className="cc-muted" style={{ fontSize: 12 }}>
-                Deploy needs <code>THIRAMAI_CODE_AGENT_DEPLOY_TOKEN</code> (paste below).
+                Test &amp; deploy use the <strong>edited</strong> buffer (saved to the agent temp file first). Deploy needs{" "}
+                <code>THIRAMAI_CODE_AGENT_DEPLOY_TOKEN</code>.
               </span>
             </div>
             <div style={{ display: "grid", gap: 8, marginTop: 12, maxWidth: 520 }}>
@@ -337,21 +483,6 @@ export default function AgenticOSPage() {
                 {deployBusy ? "Deploying…" : "🚀 Deploy"}
               </button>
             </div>
-            {testOut ? (
-              <pre
-                style={{
-                  marginTop: 12,
-                  padding: 12,
-                  borderRadius: 10,
-                  fontSize: 12,
-                  background: testOut.ok ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)",
-                  maxHeight: 200,
-                  overflow: "auto",
-                }}
-              >
-                {testOut.output || testOut.errors || JSON.stringify(testOut, null, 2)}
-              </pre>
-            ) : null}
           </div>
         ) : null}
       </CardSection>

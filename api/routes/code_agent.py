@@ -217,6 +217,33 @@ async def code_generate(body: GenerateBody, user: CurrentUser = Depends(get_curr
     }
 
 
+class SaveBody(BaseModel):
+    task_id: str = Field(..., min_length=8, max_length=64)
+    code: str = Field(..., min_length=1, max_length=200_000)
+
+
+@router.post("/code/save", summary="Overwrite task artifact on disk + re-run syntax check")
+async def code_save(body: SaveBody, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    rec = _TASKS.get(body.task_id.strip())
+    if not rec or int(rec.get("user_id") or 0) != int(user.id):
+        raise HTTPException(status_code=404, detail="task not found")
+    path = Path(rec["file_path"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    code = body.code
+    path.write_text(code, encoding="utf-8")
+    lang_norm = str(rec.get("lang_norm") or "python")
+    syntax_ok, syn_err = _syntax_check(path, lang_norm)
+    rec["code"] = code
+    rec["syntax_ok"] = syntax_ok
+    rec["syntax_error"] = syn_err if not syntax_ok else None
+    rec["status"] = "edited" if syntax_ok else "syntax_error"
+    return {
+        "ok": True,
+        "syntax_ok": syntax_ok,
+        "syntax_error": syn_err if not syntax_ok else None,
+    }
+
+
 class TestBody(BaseModel):
     task_id: str = Field(..., min_length=8, max_length=64)
 
