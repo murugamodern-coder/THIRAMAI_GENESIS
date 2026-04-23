@@ -106,7 +106,29 @@ def get_live_price(symbol: str, *, exchange_suffix: str = "NS") -> dict[str, Any
                 last = nlp
         if last is None:
             return {"ok": False, "error": f"no price for {sym}"}
-        out = {"ok": True, "symbol": sym, "last": round(float(last), 4), "currency": "INR"}
+        prev_close = None
+        change_pct = None
+        change_amount = None
+        try:
+            df_d = yf.download(sym, period="10d", interval="1d", progress=False, threads=False)
+            if df_d is not None and not df_d.empty and "Close" in df_d.columns:
+                cl = df_d["Close"].dropna()
+                if len(cl) >= 2:
+                    prev_close = float(cl.iloc[-2])
+                    change_amount = round(float(last) - prev_close, 4)
+                    if prev_close:
+                        change_pct = round((float(last) - prev_close) / prev_close * 100.0, 2)
+        except Exception:
+            pass
+        out = {
+            "ok": True,
+            "symbol": sym,
+            "last": round(float(last), 4),
+            "currency": "INR",
+            "previous_close": prev_close,
+            "change_pct": change_pct,
+            "change_amount": change_amount,
+        }
         _cache_set(key, out)
         return {**out, "cached": False}
     except Exception as exc:
@@ -114,7 +136,32 @@ def get_live_price(symbol: str, *, exchange_suffix: str = "NS") -> dict[str, Any
         if (exchange_suffix or "NS").strip().upper() in ("NS", "NSE", ""):
             nlp = _nsepython_last_price(sym)
             if nlp is not None:
-                out = {"ok": True, "symbol": sym, "last": round(float(nlp), 4), "currency": "INR"}
+                last = float(nlp)
+                prev_close = None
+                change_pct = None
+                change_amount = None
+                try:
+                    import yfinance as yf
+
+                    df_d = yf.download(sym, period="10d", interval="1d", progress=False, threads=False)
+                    if df_d is not None and not df_d.empty and "Close" in df_d.columns:
+                        cl = df_d["Close"].dropna()
+                        if len(cl) >= 2:
+                            prev_close = float(cl.iloc[-2])
+                            change_amount = round(last - prev_close, 4)
+                            if prev_close:
+                                change_pct = round((last - prev_close) / prev_close * 100.0, 2)
+                except Exception:
+                    pass
+                out = {
+                    "ok": True,
+                    "symbol": sym,
+                    "last": round(last, 4),
+                    "currency": "INR",
+                    "previous_close": prev_close,
+                    "change_pct": change_pct,
+                    "change_amount": change_amount,
+                }
                 _cache_set(key, {k: v for k, v in out.items()})
                 return {**out, "cached": False, "source": "nsepython"}
         return {"ok": False, "error": str(exc)}
