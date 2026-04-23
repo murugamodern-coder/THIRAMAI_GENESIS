@@ -3,6 +3,67 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/client.js";
 import { showToastDedup } from "../lib/toastDedup.js";
 
+function detectLang(text) {
+  const tamilRegex = /[\u0B80-\u0BFF]/;
+  return tamilRegex.test(text) ? "ta-IN" : "en-IN";
+}
+
+/** Speak assistant response via Web Speech API (Tamil / Indian English voices when available). */
+function speakThiramaiResponse(text, options = {}) {
+  const { onSpeakingChange } = options;
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+
+  window.speechSynthesis.cancel();
+
+  const cleanText = String(text || "")
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/\([\s\S]*?active alerts[\s\S]*?\)/gi, "")
+    .replace(/→.*?OS/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleanText) return;
+
+  const lang = detectLang(cleanText);
+  const utterance = new SpeechSynthesisUtterance(cleanText);
+  utterance.lang = lang;
+  utterance.rate = 0.9;
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+
+  const pickVoices = () => {
+    const voices = window.speechSynthesis.getVoices() || [];
+    const tamilVoice = voices.find(
+      (v) => v.lang?.toLowerCase().includes("ta") || /tamil/i.test(v.name || ""),
+    );
+    const indianVoice = voices.find(
+      (v) =>
+        v.lang?.includes("en-IN") ||
+        v.lang?.includes("en_IN") ||
+        /india/i.test(v.name || ""),
+    );
+    if (lang.startsWith("ta") && tamilVoice) utterance.voice = tamilVoice;
+    else if (indianVoice) utterance.voice = indianVoice;
+    else if (tamilVoice) utterance.voice = tamilVoice;
+  };
+  pickVoices();
+
+  utterance.onstart = () => {
+    onSpeakingChange?.(true);
+    window.dispatchEvent(new CustomEvent("thiramai-speaking-start"));
+  };
+  utterance.onend = () => {
+    onSpeakingChange?.(false);
+    window.dispatchEvent(new CustomEvent("thiramai-speaking-end"));
+  };
+  utterance.onerror = () => {
+    onSpeakingChange?.(false);
+    window.dispatchEvent(new CustomEvent("thiramai-speaking-end"));
+  };
+
+  window.speechSynthesis.speak(utterance);
+}
+
 function inferOsKey(payload) {
   const direct = payload?.os_key || payload?.handled_by || payload?.os;
   if (typeof direct === "string" && direct.trim()) return direct.trim().toLowerCase();
@@ -24,6 +85,10 @@ export default function GlobalCommandBar() {
   const [busy, setBusy] = useState(false);
   const [attachment, setAttachment] = useState(null);
   const [listening, setListening] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(
+    () => typeof localStorage !== "undefined" && localStorage.getItem("thiramai_tts_enabled") !== "false",
+  );
+  const [ttsSpeaking, setTtsSpeaking] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const isMobile = useMemo(() => window.matchMedia?.("(max-width: 768px)")?.matches, []);
   const MAX_SIZE = 10 * 1024 * 1024;
@@ -120,6 +185,50 @@ export default function GlobalCommandBar() {
       window.removeEventListener("paste", onPaste);
     };
   }, []);
+
+  useEffect(() => {
+    const warmVoices = () => {
+      try {
+        window.speechSynthesis?.getVoices();
+      } catch {
+        /* ignore */
+      }
+    };
+    warmVoices();
+    window.speechSynthesis?.addEventListener?.("voiceschanged", warmVoices);
+    return () => window.speechSynthesis?.removeEventListener?.("voiceschanged", warmVoices);
+  }, []);
+
+  useEffect(() => {
+    const onResponse = (ev) => {
+      if (!ttsEnabled) return;
+      const payload = ev?.detail?.payload || {};
+      const raw = String(payload?.response || payload?.message || "").trim();
+      if (!raw) return;
+      speakThiramaiResponse(raw, { onSpeakingChange: setTtsSpeaking });
+    };
+    window.addEventListener("thiramai-chat-response", onResponse);
+    return () => window.removeEventListener("thiramai-chat-response", onResponse);
+  }, [ttsEnabled]);
+
+  function toggleTTS() {
+    const newVal = !ttsEnabled;
+    setTtsEnabled(newVal);
+    localStorage.setItem("thiramai_tts_enabled", newVal ? "true" : "false");
+    if (!newVal) {
+      stopSpeechOutput();
+    }
+  }
+
+  function stopSpeechOutput() {
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {
+      /* ignore */
+    }
+    setTtsSpeaking(false);
+    window.dispatchEvent(new CustomEvent("thiramai-speaking-end"));
+  }
 
   function stopVoice() {
     try {
@@ -240,10 +349,21 @@ export default function GlobalCommandBar() {
         <button type="button" className={`cc-command-icon cc-mic-btn ${listening ? "is-listening" : ""}`} disabled={busy} onClick={toggleVoice} title="Voice (Chrome only)">
           <span className="cc-mic-glyph">🎤</span>
         </button>
+        <button
+          type="button"
+          className={`cc-command-icon cc-tts-btn ${ttsEnabled ? "is-on" : "is-muted"} ${ttsSpeaking ? "is-speaking" : ""}`}
+          disabled={busy}
+          onClick={toggleTTS}
+          title={ttsEnabled ? "Turn voice output off" : "Turn voice output on"}
+          aria-pressed={ttsEnabled}
+        >
+          🔊
+        </button>
         {listening ? <span className="cc-mic-listening-text">Listening...</span> : null}
         {isMobile ? (
           <button type="button" className="cc-command-icon" disabled={busy} onClick={() => cameraInputRef.current?.click()} title="Camera">📷</button>
         ) : null}
+        <span className="cc-command-toolbar-divider" aria-hidden />
         <textarea
           ref={inputRef}
           value={value}
@@ -259,6 +379,17 @@ export default function GlobalCommandBar() {
           disabled={busy}
           rows={1}
         />
+        {ttsSpeaking ? (
+          <button
+            type="button"
+            className="cc-command-icon cc-command-stop"
+            onClick={stopSpeechOutput}
+            title="Stop speaking"
+            aria-label="Stop speaking"
+          >
+            ⏹️
+          </button>
+        ) : null}
         <button onClick={() => executeSubmit(value, "global_bar")} disabled={busy || !canSend} className={`cc-command-run ${canSend ? "has-content" : ""}`}>
           {busy ? "…" : "➤"}
         </button>

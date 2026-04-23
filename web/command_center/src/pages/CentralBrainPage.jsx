@@ -35,8 +35,16 @@ export default function CentralBrainPage() {
   const [copiedByIndex, setCopiedByIndex] = useState({});
   const listRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const [speaking, setSpeaking] = useState(false);
 
   const alertsCount = proactiveAlerts.length;
+
+  const lastBotMessageIndex = useMemo(() => {
+    for (let i = chat.length - 1; i >= 0; i -= 1) {
+      if (chat[i]?.role !== "user") return i;
+    }
+    return -1;
+  }, [chat]);
 
   useEffect(() => {
     let mounted = true;
@@ -96,6 +104,17 @@ export default function CentralBrainPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, thinking]);
+
+  useEffect(() => {
+    const onSpeakStart = () => setSpeaking(true);
+    const onSpeakEnd = () => setSpeaking(false);
+    window.addEventListener("thiramai-speaking-start", onSpeakStart);
+    window.addEventListener("thiramai-speaking-end", onSpeakEnd);
+    return () => {
+      window.removeEventListener("thiramai-speaking-start", onSpeakStart);
+      window.removeEventListener("thiramai-speaking-end", onSpeakEnd);
+    };
+  }, []);
 
   useEffect(() => {
     const onUser = (ev) => {
@@ -230,27 +249,41 @@ export default function CentralBrainPage() {
             const expanded = !!expandedByIndex[idx];
             const displayText = shouldClamp && !expanded ? `${words.slice(0, 500).join(" ")}...` : m.content;
 
+            const bubbleInner = (
+              <>
+                <div>{displayText}</div>
+                {shouldClamp ? (
+                  <button
+                    type="button"
+                    className="cb-toggle"
+                    onClick={() => setExpandedByIndex((prev) => ({ ...prev, [idx]: !expanded }))}
+                  >
+                    {expanded ? "Show less" : "Show more"}
+                  </button>
+                ) : null}
+                <div className="cb-meta">
+                  <span>{new Date(m.timestamp).toLocaleTimeString()}</span>
+                </div>
+              </>
+            );
+
             return (
               <div key={`${m.timestamp}_${idx}`} className={`cb-message-row ${user ? "user" : "bot"}`}>
                 {!user ? <div className="cb-routing-badge">{routeBadge({ routing: m.routing })}</div> : null}
-                <div className={`cb-bubble ${user ? "user" : "bot"}`}>
-                  <div>{displayText}</div>
-                  {shouldClamp ? (
-                    <button
-                      type="button"
-                      className="cb-toggle"
-                      onClick={() => setExpandedByIndex((prev) => ({ ...prev, [idx]: !expanded }))}
-                    >
-                      {expanded ? "Show less" : "Show more"}
-                    </button>
-                  ) : null}
-                  <div className="cb-meta">
-                    <span>{new Date(m.timestamp).toLocaleTimeString()}</span>
-                    {!user ? (
-                      null
+                {user ? (
+                  <div className="cb-bubble user">{bubbleInner}</div>
+                ) : (
+                  <div className="cb-bot-bubble-row">
+                    <div className="cb-bubble bot">{bubbleInner}</div>
+                    {speaking && idx === lastBotMessageIndex ? (
+                      <div className="speaking-indicator" aria-hidden title="Speaking">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
                     ) : null}
                   </div>
-                </div>
+                )}
                 {!user ? (
                   <div className="cb-action-bar">
                     <button
