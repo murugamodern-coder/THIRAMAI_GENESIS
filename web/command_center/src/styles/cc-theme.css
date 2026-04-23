@@ -1046,6 +1046,47 @@ table.cc-table {
   font-weight: 600;
 }
 
+.cb-os-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cb-os-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  cursor: help;
+}
+
+.cb-os-dot--healthy {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.cb-os-dot--degraded {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.cb-os-dot--offline {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.cb-os-dot--unknown {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--cc-muted);
+}
+
 .cb-alert-wrap {
   display: flex;
   gap: 8px;

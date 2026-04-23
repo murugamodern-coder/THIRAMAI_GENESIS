@@ -27,7 +27,6 @@ from core.redis_cache import get_redis
 from core.database import get_engine, get_session_factory
 from services.conversation_memory import ConversationMemory
 from core.stability.circuit_breaker import export_breaker_snapshots
-from services.health_checker import OSHealthChecker
 from services.worker_heartbeat import redis_ping_ok
 
 _log_agent = logging.getLogger("thiramai.api.agent")
@@ -67,7 +66,6 @@ router = APIRouter(tags=["Central Brain", "Agentic workflow"])
 _ALLOWED = frozenset({"personal", "business", "stock", "research", "agentic"})
 _SYSTEM_LOG_RING: deque[dict[str, Any]] = deque(maxlen=400)
 _SYSTEM_LOG_HANDLER_ATTACHED = False
-_HEALTH_CHECKER = OSHealthChecker()
 
 _OS_MODULE_LABELS: dict[str, tuple[str, list[str]]] = {
     "personal": ("Personal OS", ["scheduling", "memory", "habits", "automation"]),
@@ -597,21 +595,22 @@ async def _compute_proactive_alerts(user: CurrentUser) -> list[dict[str, Any]]:
     alerts: list[dict[str, Any]] = []
     uid = _uid(user)
 
-    # a) Any OS unhealthy/degraded/offline.
+    # a) Platform deps (DB/Redis) shared by all OS tiles — same logic as GET /api/os/*/status.
     unhealthy: list[str] = []
+    core = _platform_os_status_core()
+    platform_st = str(core.get("aggregate_status") or "offline")
     for os_key in sorted(_ALLOWED):
-        try:
-            h = await _HEALTH_CHECKER.check_os(os_key, user_id=uid)
-            st = str(h.get("status") or "offline")
-            if st != "healthy":
-                unhealthy.append(f"{os_key}:{st}")
-        except Exception:
-            unhealthy.append(f"{os_key}:offline")
+        if platform_st != "healthy":
+            unhealthy.append(f"{os_key}:{platform_st}")
     if unhealthy:
+        detail = str(core.get("degraded_reason") or "").strip()
+        msg = f"{len(unhealthy)} OS module(s) {platform_st}"
+        if detail:
+            msg += f" ({detail})"
         alerts.append(
             {
                 "type": "os_health",
-                "message": f"{len(unhealthy)} OS module(s) degraded/offline ({', '.join(unhealthy[:3])}{'...' if len(unhealthy) > 3 else ''})",
+                "message": msg,
                 "severity": "critical",
                 "action_route": "/dashboard",
             }

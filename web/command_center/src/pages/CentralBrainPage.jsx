@@ -23,6 +23,17 @@ function routeKey(payload) {
   return "CHAT";
 }
 
+/** Same keys as backend ``_ALLOWED`` — parallel fetch uses authenticated ``api`` (JWT like ``/api/brain/proactive``). */
+const OS_HEALTH_KEYS = ["personal", "business", "stock", "research", "agentic"];
+
+function normalizeOsHealthPayload(data) {
+  const raw = data?.health?.status ?? data?.status;
+  let st = typeof raw === "string" ? raw.toLowerCase() : "";
+  if (st === "active") st = "healthy";
+  if (st === "healthy" || st === "degraded" || st === "offline") return st;
+  return "offline";
+}
+
 export default function CentralBrainPage() {
   const [chat, setChat] = useState([]);
   const [morningBrief, setMorningBrief] = useState(null);
@@ -36,6 +47,8 @@ export default function CentralBrainPage() {
   const listRef = useRef(null);
   const messagesEndRef = useRef(null);
   const [speaking, setSpeaking] = useState(false);
+  /** ``key -> healthy|degraded|offline`` — populated via ``api.get`` so Authorization bearer matches proactive alerts. */
+  const [osHealthByKey, setOsHealthByKey] = useState({});
 
   const alertsCount = proactiveAlerts.length;
 
@@ -54,6 +67,26 @@ export default function CentralBrainPage() {
     }).catch(() => {
       if (!mounted) return;
       setProactiveAlerts([]);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.allSettled(OS_HEALTH_KEYS.map((k) => api.get(`/api/os/${k}/status`))).then((results) => {
+      if (!mounted) return;
+      const next = {};
+      results.forEach((res, i) => {
+        const k = OS_HEALTH_KEYS[i];
+        if (res.status === "fulfilled") {
+          next[k] = normalizeOsHealthPayload(res.value?.data);
+        } else {
+          next[k] = "offline";
+        }
+      });
+      setOsHealthByKey(next);
     });
     return () => {
       mounted = false;
@@ -159,6 +192,18 @@ export default function CentralBrainPage() {
         <div className="cb-title">🧠 THIRAMAI</div>
         <div className="cb-status">
           <span className="cb-live">● Live</span>
+          <span className="cb-os-health" title="OS module health (DB/Redis — authenticated)">
+            {OS_HEALTH_KEYS.map((k) => {
+              const st = osHealthByKey[k];
+              const cls = st ? `cb-os-dot cb-os-dot--${st}` : "cb-os-dot cb-os-dot--unknown";
+              const letter = k === "agentic" ? "A" : k[0].toUpperCase();
+              return (
+                <abbr key={k} className={cls} title={`${k}: ${st || "loading"}`}>
+                  {letter}
+                </abbr>
+              );
+            })}
+          </span>
           <button
             type="button"
             className="cc-btn cc-btn-ghost cb-clear-chat"
