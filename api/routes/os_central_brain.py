@@ -272,7 +272,65 @@ def _search_project_vault(*, user_id: int, query: str, limit: int = 5) -> list[d
     return out
 
 
+def _is_tool_like_command(command_text: str) -> bool:
+    """Heuristic: route obvious tool requests to ACTION so Groq can pick shell/file/git/docker tools."""
+    t = (command_text or "").strip().lower()
+    needles = (
+        "pip install",
+        "pip list",
+        "python -m ",
+        "read file",
+        "read the file",
+        "show file",
+        "contents of ",
+        "cat ",
+        "git status",
+        "git log",
+        "git diff",
+        "restart server",
+        "restart the server",
+        "restart web",
+        "restart worker",
+        "docker restart",
+        "compose restart",
+    )
+    return any(n in t for n in needles)
+
+
+def _groq_select_agent_tool(command: str) -> dict[str, Any] | None:
+    """Parse natural language into a single tool invocation via Groq JSON."""
+    from services.research_common import groq_json_object_sync
+
+    user_prompt = f"""User command: {command}
+Available tools: shell, file_read, file_write, git, docker_restart
+Which tool should I use? Return JSON:
+{{"tool": "shell", "params": {{"command": "pip install fpdf"}}}}"""
+    system = (
+        "You route the user command to one autonomous server tool when it clearly matches. "
+        "Return ONLY a JSON object with keys "
+        '`tool` (shell|file_read|file_write|git|docker_restart|none) and '
+        '`params` (object). '
+        'For shell use params.command and optional params.timeout (seconds). '
+        'For file_read use params.path. '
+        'For file_write use params.path and params.content — prefer tool none unless the user supplied full content. '
+        'For git use params.action as status|log|diff. '
+        'For docker_restart use params.service as web or worker-jobs. '
+        "Use tool none when the request is not a single clear tool call."
+    )
+    data = groq_json_object_sync(system=system, user_content=user_prompt, max_tokens=512)
+    if not isinstance(data, dict):
+        return None
+    tool = str(data.get("tool") or "").strip().lower()
+    if tool in ("none", "null", ""):
+        return None
+    raw_params = data.get("params")
+    params: dict[str, Any] = raw_params if isinstance(raw_params, dict) else {}
+    return {"tool": tool.replace("-", "_"), "params": params}
+
+
 def _classify_three_level_route(command_text: str) -> tuple[str, str, str]:
+    if _is_tool_like_command(command_text):
+        return "ACTION", "AgenticOS", "/os/agentic-platform"
     t = (command_text or "").strip().lower()
     chat_keywords = (
         "என்ன",
@@ -595,6 +653,62 @@ async def post_orchestrator_command(
             "task_id": None,
             "requires_approval": False,
         }
+
+    if routing == "ACTION":
+        picked = await asyncio.to_thread(_groq_select_agent_tool, command)
+        if picked and picked.get("tool"):
+            from api.routes.agent_tools import dispatch_agent_tool
+
+            exec_result = dispatch_agent_tool(
+                user=user,
+                request=request,
+                tool=str(picked.get("tool") or ""),
+                params=dict(picked.get("params") or {}),
+            )
+            hard_fail = bool(exec_result.get("detail")) and "output" not in exec_result and "content" not in exec_result
+            if hard_fail:
+                err = str(exec_result.get("detail") or "Tool execution failed.")
+                return {
+                    "ok": False,
+                    "routing": routing,
+                    "routed_to": "Thiramai Tools",
+                    "response": err[:8000],
+                    "suggested_route": suggested_route,
+                    "show_inline": True,
+                    "tool_result": exec_result,
+                    "os_key": "agentic",
+                    "task_id": None,
+                    "requires_approval": False,
+                }
+
+            text_out = ""
+            if "output" in exec_result:
+                text_out = str(exec_result.get("output") or "")
+            elif "content" in exec_result:
+                c = str(exec_result.get("content") or "")
+                text_out = c[:4000] + (" …" if len(c) > 4000 else "")
+            elif exec_result.get("restarted"):
+                text_out = "Service restart completed."
+            elif exec_result.get("written"):
+                text_out = "File written successfully."
+            else:
+                text_out = json.dumps(exec_result, default=str)[:12000]
+            proactive_alerts = await _compute_proactive_alerts(user)
+            alerts_count = len(proactive_alerts)
+            decorated = f"{text_out}\n\n(⚠️ {alerts_count} active alerts need attention)"
+            return {
+                "ok": True,
+                "routing": routing,
+                "routed_to": "Thiramai Tools",
+                "response": decorated,
+                "suggested_route": suggested_route,
+                "show_inline": True,
+                "tool_result": exec_result,
+                "alerts_count": alerts_count,
+                "os_key": "agentic",
+                "task_id": None,
+                "requires_approval": False,
+            }
 
     if routing == "CHAT":
         _ensure_project_vault_table()

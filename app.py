@@ -51,6 +51,7 @@ from api.middleware.request_logging import RequestLoggingMiddleware
 from api.openapi_metadata import OPENAPI_DESCRIPTION, OPENAPI_TAGS
 from api.dependencies import CurrentUser, get_current_user
 from api.routes.auth import router as auth_router, seed_default_roles_on_startup
+from api.routes.agent_tools import router as tools_router
 from api.routes.registry import attach_domain_routers
 from core.exceptions import ThiramaiAppError
 from core.observability import ensure_thiramai_logging
@@ -196,6 +197,7 @@ class CommandCenterStaticNoStoreMiddleware(BaseHTTPMiddleware):
 
 # Auth: POST /auth/register, /auth/login, GET /auth/me (see api/routes/auth.py).
 app.include_router(auth_router)
+app.include_router(tools_router, prefix="/api/tools")
 
 attach_domain_routers(app)
 
