@@ -1,212 +1,392 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   createInventoryItem,
-  fetchInventoryAlerts,
+  deleteInventoryItem,
   fetchInventoryList,
   updateInventoryItem,
 } from "../api/commandCenterApi.js";
-import Button from "../components/ui/Button.jsx";
-import Card from "../components/ui/Card.jsx";
-import Input from "../components/ui/Input.jsx";
-import Table from "../components/ui/Table.jsx";
-import EmptyState from "../components/ui/EmptyState.jsx";
+
+const PAGE_SIZE = 20;
+const EMPTY_FORM = {
+  sku: "",
+  name: "",
+  category: "",
+  stock: 0,
+  min_stock: 0,
+  price: "",
+  description: "",
+};
+
+function toUiItem(row) {
+  const stock = Number(row?.quantity ?? row?.stock ?? 0);
+  const minStock = Number(row?.reorder_point ?? row?.min_stock ?? 0);
+  const price = Number(row?.unit_price ?? row?.price ?? 0);
+  return {
+    id: row?.id,
+    sku: String(row?.sku ?? row?.sku_name ?? ""),
+    name: String(row?.name ?? row?.sku_name ?? "Untitled item"),
+    category: String(row?.category ?? "General"),
+    stock: Number.isFinite(stock) ? stock : 0,
+    min_stock: Number.isFinite(minStock) ? minStock : 0,
+    price: Number.isFinite(price) ? price : 0,
+    description: String(row?.description ?? ""),
+    raw: row,
+  };
+}
+
+function stockStatus(item) {
+  if (item.stock <= 0) return { label: "Out of Stock", className: "bg-red-500/15 text-red-300 border-red-500/30" };
+  if (item.stock <= item.min_stock) return { label: "Low Stock", className: "bg-amber-500/15 text-amber-300 border-amber-500/30" };
+  return { label: "In Stock", className: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" };
+}
+
+function StatCard({ label, value, danger = false }) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={`mt-2 text-2xl font-semibold ${danger ? "text-red-300" : "text-slate-100"}`}>{value}</div>
+    </div>
+  );
+}
+
+function InventorySkeleton() {
+  return Array.from({ length: 8 }).map((_, idx) => (
+    <tr key={`sk_${idx}`} className="animate-pulse border-b border-slate-800">
+      {Array.from({ length: 8 }).map((__, cIdx) => (
+        <td key={`sk_${idx}_${cIdx}`} className="px-4 py-3">
+          <div className="h-4 rounded bg-slate-800" />
+        </td>
+      ))}
+    </tr>
+  ));
+}
 
 export default function InventoryPage() {
   const [items, setItems] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [err, setErr] = useState(null);
-  const [form, setForm] = useState({
-    sku_name: "",
-    location: "",
-    quantity: "0",
-    unit_price: "",
-    reorder_point: "",
-  });
-  const [editQty, setEditQty] = useState({});
-  const [query, setQuery] = useState("");
-  const [stockFilter, setStockFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [categoryDraft, setCategoryDraft] = useState("all");
+  const [stockDraft, setStockDraft] = useState("all");
+  const [filters, setFilters] = useState({ search: "", category: "all", stock: "all" });
+  const [page, setPage] = useState(1);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setErr(null);
+  const loadInventory = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      const [list, al] = await Promise.all([
-        fetchInventoryList(),
-        fetchInventoryAlerts().catch(() => ({ items: [] })),
-      ]);
-      setItems(list?.items || []);
-      setAlerts(al?.items || []);
+      const data = await fetchInventoryList();
+      const rows = Array.isArray(data?.items) ? data.items : Array.isArray(data?.inventory) ? data.inventory : [];
+      setItems(rows.map(toUiItem));
     } catch (e) {
       const d = e?.response?.data?.detail;
-      setErr(typeof d === "string" ? d : e?.message || "Load failed");
+      setError(typeof d === "string" ? d : "Unable to load inventory");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadInventory();
+  }, [loadInventory]);
 
-  async function addItem(e) {
+  const categories = useMemo(() => {
+    const set = new Set(items.map((x) => x.category).filter(Boolean));
+    return ["all", ...Array.from(set)];
+  }, [items]);
+
+  const filtered = useMemo(() => {
+    return items.filter((item) => {
+      const q = filters.search.trim().toLowerCase();
+      if (q) {
+        const hay = `${item.sku} ${item.name}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filters.category !== "all" && item.category !== filters.category) return false;
+      if (filters.stock === "out" && item.stock !== 0) return false;
+      if (filters.stock === "low" && !(item.stock > 0 && item.stock <= item.min_stock)) return false;
+      if (filters.stock === "in" && !(item.stock > item.min_stock)) return false;
+      return true;
+    });
+  }, [items, filters]);
+
+  const paged = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
+
+  const stats = useMemo(() => {
+    const total = items.length;
+    const low = items.filter((x) => x.stock > 0 && x.stock <= x.min_stock).length;
+    const out = items.filter((x) => x.stock <= 0).length;
+    const value = items.reduce((acc, x) => acc + x.stock * x.price, 0);
+    return { total, low, out, value };
+  }, [items]);
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setModalOpen(true);
+  };
+
+  const openEdit = (item) => {
+    setEditingId(item.id);
+    setForm({
+      sku: item.sku,
+      name: item.name,
+      category: item.category,
+      stock: item.stock,
+      min_stock: item.min_stock,
+      price: item.price,
+      description: item.description,
+    });
+    setModalOpen(true);
+  };
+
+  const submitForm = async (e) => {
     e.preventDefault();
-    setErr(null);
+    setSaving(true);
+    setError("");
+    const payload = {
+      sku_name: String(form.sku || form.name || "").trim(),
+      name: String(form.name || "").trim(),
+      category: String(form.category || "General").trim(),
+      quantity: Number(form.stock) || 0,
+      reorder_point: Number(form.min_stock) || 0,
+      unit_price: form.price === "" ? null : Number(form.price) || 0,
+      description: String(form.description || "").trim(),
+    };
     try {
-      await createInventoryItem({
-        sku_name: form.sku_name.trim(),
-        location: form.location.trim(),
-        quantity: Number(form.quantity) || 0,
-        unit_price: form.unit_price ? Number(form.unit_price) : null,
-        reorder_point: form.reorder_point ? Number(form.reorder_point) : null,
-      });
-      setForm({ sku_name: "", location: "", quantity: "0", unit_price: "", reorder_point: "" });
-      await load();
+      if (editingId) await updateInventoryItem(editingId, payload);
+      else await createInventoryItem(payload);
+      setModalOpen(false);
+      await loadInventory();
+    } catch (e2) {
+      const d = e2?.response?.data?.detail;
+      setError(typeof d === "string" ? d : "Unable to save item");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDelete = async (item) => {
+    if (!window.confirm(`Delete ${item.name}?`)) return;
+    setError("");
+    try {
+      await deleteInventoryItem(item.id);
+      await loadInventory();
     } catch (e) {
       const d = e?.response?.data?.detail;
-      setErr(typeof d === "string" ? d : "Create failed");
+      setError(typeof d === "string" ? d : "Unable to delete item");
     }
-  }
+  };
 
-  async function saveQty(id) {
-    const raw = editQty[id];
-    if (raw === undefined) return;
-    setErr(null);
-    try {
-      await updateInventoryItem(id, { quantity: Number(raw) });
-      setEditQty((prev) => {
-        const n = { ...prev };
-        delete n[id];
-        return n;
-      });
-      await load();
-    } catch (e) {
-      const d = e?.response?.data?.detail;
-      setErr(typeof d === "string" ? d : "Update failed");
-    }
-  }
-
-  const filteredItems = (items ?? []).filter((row) => {
-    const byQuery = query.trim()
-      ? String(row?.sku_name || "").toLowerCase().includes(query.trim().toLowerCase())
-      : true;
-    if (!byQuery) return false;
-    if (stockFilter === "low") return Number(row?.quantity) <= Number(row?.reorder_point ?? 0);
-    if (stockFilter === "healthy") return Number(row?.quantity) > Number(row?.reorder_point ?? 0);
-    return true;
-  });
+  const exportCsv = () => {
+    const header = ["SKU", "Name", "Category", "Stock", "Min Stock", "Price"];
+    const rows = filtered.map((x) => [x.sku, x.name, x.category, x.stock, x.min_stock, x.price]);
+    const csv = [header, ...rows]
+      .map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "inventory_export.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
-    <div>
-      <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 16px" }}>Inventory</h1>
-      {err && <p className="cc-error">{err}</p>}
-
-      <Card title="Search and filters" subtitle="Use category/status filters and bulk actions">
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Input variant="search" placeholder="Search SKU..." value={query} onChange={(e) => setQuery(e.target.value)} />
-          <select className="cc-select" value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
-            <option value="all">All stock levels</option>
-            <option value="low">Low stock</option>
-            <option value="healthy">Healthy stock</option>
-          </select>
-          <Button variant="secondary" size="sm">Bulk export</Button>
-          <Button variant="secondary" size="sm">Bulk update</Button>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <h1 className="text-2xl font-semibold text-slate-100">📦 Inventory</h1>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={openCreate} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500">
+            + Add Item
+          </button>
+          <button type="button" onClick={exportCsv} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">
+            📤 Bulk Export
+          </button>
+          <button type="button" onClick={() => setModalOpen(true)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">
+            🔄 Bulk Update
+          </button>
         </div>
-      </Card>
+      </div>
 
-      <Card title="Low stock">
-        <h2>Low stock</h2>
-        {alerts.length === 0 ? (
-          <p className="cc-muted">No low-stock SKUs for current threshold.</p>
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {alerts.slice(0, 20).map((a, i) => (
-              <li key={i} style={{ marginBottom: 4 }}>
-                <strong>{a.sku_name}</strong> — qty {a.quantity} @ {a.location || "—"}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+        <input
+          className="min-w-[220px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+          placeholder="🔍 Search SKU/name..."
+          value={searchDraft}
+          onChange={(e) => setSearchDraft(e.target.value)}
+        />
+        <select
+          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+          value={categoryDraft}
+          onChange={(e) => setCategoryDraft(e.target.value)}
+        >
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>
+              {cat === "all" ? "All Categories" : cat}
+            </option>
+          ))}
+        </select>
+        <select
+          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+          value={stockDraft}
+          onChange={(e) => setStockDraft(e.target.value)}
+        >
+          <option value="all">All Stock Levels</option>
+          <option value="in">In Stock</option>
+          <option value="low">Low Stock</option>
+          <option value="out">Out of Stock</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => setFilters({ search: searchDraft, category: categoryDraft, stock: stockDraft })}
+          className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-white"
+        >
+          Apply filters
+        </button>
+      </div>
 
-      <Card title="Add item">
-        <h2>Add item</h2>
-        <form onSubmit={addItem} style={{ display: "grid", gap: 10, maxWidth: 480 }}>
-          <input
-            className="cc-input"
-            placeholder="SKU / name"
-            value={form.sku_name}
-            onChange={(e) => setForm((f) => ({ ...f, sku_name: e.target.value }))}
-            required
-          />
-          <input
-            className="cc-input"
-            placeholder="Location"
-            value={form.location}
-            onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-          />
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              className="cc-input"
-              type="number"
-              step="any"
-              placeholder="Quantity"
-              value={form.quantity}
-              onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-            />
-            <input
-              className="cc-input"
-              type="number"
-              step="any"
-              placeholder="Unit price (optional)"
-              value={form.unit_price}
-              onChange={(e) => setForm((f) => ({ ...f, unit_price: e.target.value }))}
-            />
-            <input
-              className="cc-input"
-              type="number"
-              step="any"
-              placeholder="Reorder point"
-              value={form.reorder_point}
-              onChange={(e) => setForm((f) => ({ ...f, reorder_point: e.target.value }))}
-            />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Total Items" value={stats.total} />
+        <StatCard label="Low Stock" value={stats.low} danger={stats.low > 0} />
+        <StatCard label="Out of Stock" value={stats.out} danger={stats.out > 0} />
+        <StatCard label="Total Value" value={`₹${stats.value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
+      </div>
+
+      {error ? (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+          <div className="mb-2 font-medium">Unable to load inventory</div>
+          <button type="button" onClick={loadInventory} className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white">
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50">
+        <table className="min-w-full divide-y divide-slate-800 text-sm">
+          <thead className="bg-slate-900">
+            <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
+              {["SKU", "Name", "Category", "Stock", "Min Stock", "Price", "Status", "Actions"].map((h) => (
+                <th key={h} className="px-4 py-3 font-medium">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800 text-slate-200">
+            {loading ? (
+              <InventorySkeleton />
+            ) : paged.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                  No inventory items found.
+                </td>
+              </tr>
+            ) : (
+              paged.map((item) => {
+                const status = stockStatus(item);
+                return (
+                  <tr key={item.id}>
+                    <td className="px-4 py-3">{item.sku || "-"}</td>
+                    <td className="px-4 py-3">{item.name}</td>
+                    <td className="px-4 py-3">{item.category || "-"}</td>
+                    <td className="px-4 py-3">{item.stock}</td>
+                    <td className="px-4 py-3">{item.min_stock}</td>
+                    <td className="px-4 py-3">₹{Number(item.price || 0).toLocaleString("en-IN")}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.className}`}>
+                        {status.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => openEdit(item)} className="rounded-md border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800">
+                          Edit ✏️
+                        </button>
+                        <button type="button" onClick={() => onDelete(item)} className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10">
+                          Delete 🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-slate-400">
+          Showing {(page - 1) * PAGE_SIZE + (paged.length ? 1 : 0)}-{(page - 1) * PAGE_SIZE + paged.length} of {filtered.length}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-xs disabled:opacity-40"
+          >
+            Prev
+          </button>
+          <div className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300">
+            Page {page} / {pageCount}
           </div>
-          <Button type="submit" variant="primary" size="md">Add</Button>
-        </form>
-      </Card>
+          <button
+            type="button"
+            disabled={page >= pageCount}
+            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-xs disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
 
-      <Card title="Stock table">
-        <h2>Stock</h2>
-        {filteredItems.length === 0 ? (
-          <EmptyState title="No inventory items" description="Try adjusting filters or adding an item." />
-        ) : (
-          <Table
-            rows={filteredItems}
-            columns={[
-              { key: "sku_name", label: "SKU" },
-              { key: "location", label: "Location", render: (r) => r.location || "—" },
-              { key: "quantity", label: "Qty" },
-              { key: "reorder_point", label: "Reorder", render: (r) => r.reorder_point ?? "—" },
-              {
-                key: "actions",
-                label: "Quick edit",
-                render: (row) => (
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input
-                      className="cc-input"
-                      style={{ width: 100 }}
-                      type="number"
-                      step="any"
-                      placeholder={String(row.quantity)}
-                      value={editQty[row.id] ?? ""}
-                      onChange={(e) => setEditQty((q) => ({ ...q, [row.id]: e.target.value }))}
-                    />
-                    <Button variant="secondary" size="sm" onClick={() => saveQty(row.id)}>Save</Button>
-                  </div>
-                ),
-              },
-            ]}
-          />
-        )}
-      </Card>
-      <Button variant="primary" className="cc-fab-main" aria-label="Add inventory item">+</Button>
+      {modalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-slate-800 bg-slate-900 p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-100">{editingId ? "Edit Item" : "Add Item"}</h2>
+              <button type="button" className="text-slate-400 hover:text-slate-200" onClick={() => setModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={submitForm} className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="SKU" value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} required />
+              <input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
+              <input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Category" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} />
+              <input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" placeholder="Stock" value={form.stock} onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))} />
+              <input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" placeholder="Min Stock" value={form.min_stock} onChange={(e) => setForm((f) => ({ ...f, min_stock: e.target.value }))} />
+              <input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" step="0.01" placeholder="Price" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} />
+              <textarea className="md:col-span-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" rows={3} placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+              <div className="md:col-span-2 mt-2 flex justify-end gap-2">
+                <button type="button" className="rounded-lg border border-slate-700 px-4 py-2 text-sm" onClick={() => setModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+                  {saving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

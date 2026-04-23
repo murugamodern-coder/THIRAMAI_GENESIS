@@ -210,6 +210,11 @@ export async function updateInventoryItem(itemId, payload) {
   return data;
 }
 
+export async function deleteInventoryItem(itemId) {
+  const { data } = await api.delete(`/inventory/item/${itemId}`);
+  return data;
+}
+
 export async function fetchInvoices(limit = 200) {
   const { data } = await api.get("/billing/invoices", { params: { limit } });
   return data;
