@@ -3068,3 +3068,126 @@ button {
     min-height: 44px;
   }
 }
+
+/* Command Center — presence + feedback motion */
+@keyframes cc-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cc-msg-enter {
+  animation: cc-fade-rise 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes cc-shell-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.2);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.cc-shell-pulse {
+  animation: cc-shell-pulse 0.88s ease-out 1 both;
+}
+
+@keyframes cc-critical-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(244, 63, 94, 0.06);
+  }
+}
+
+.cc-insight-critical {
+  border-radius: 0.75rem;
+  animation: cc-critical-pulse 2.4s ease-in-out infinite;
+}
+
+/* Glance cards — one-shot sync after data / command (no layout change) */
+@keyframes cc-glance-build {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+  45% {
+    box-shadow: 0 0 22px 0 rgba(52, 211, 153, 0.16);
+  }
+}
+
+.cc-glance-build {
+  animation: cc-glance-build 1s cubic-bezier(0.22, 1, 0.36, 1) 1 both;
+}
+
+/* Slightly deeper breath on large deltas — still restrained */
+.cc-glance-intense.cc-glance-build {
+  animation-duration: 1.22s;
+  animation-timing-function: cubic-bezier(0.18, 0.9, 0.32, 1);
+}
+
+.cc-glance-intense.cc-glance-stress {
+  animation-duration: 1.18s;
+}
+
+.cc-glance-intense.cc-glance-release,
+.cc-glance-intense.cc-glance-fade {
+  animation-duration: 1.1s;
+}
+
+@keyframes cc-glance-fade {
+  0%,
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.86;
+    filter: brightness(0.9);
+  }
+}
+
+.cc-glance-fade {
+  animation: cc-glance-fade 0.95s ease-out 1 both;
+}
+
+@keyframes cc-glance-stress {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+  50% {
+    box-shadow: 0 0 18px 0 rgba(251, 191, 36, 0.14);
+  }
+}
+
+.cc-glance-stress {
+  animation: cc-glance-stress 1s ease-out 1 both;
+}
+
+@keyframes cc-glance-release {
+  0%,
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.9;
+    filter: brightness(0.94);
+  }
+}
+
+.cc-glance-release {
+  animation: cc-glance-release 0.95s ease-out 1 both;
+}
