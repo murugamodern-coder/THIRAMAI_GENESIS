@@ -183,7 +183,7 @@ export default function IntegrationsPage() {
           {logs.map((l) => (
             <div key={l.id} className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-sm">
               <div className="text-slate-100">
-                {l.channel} -> {l.recipient}{" "}
+                {l.channel} -{">"} {l.recipient}{" "}
                 <span className={l.status === "success" ? "text-emerald-300" : "text-red-300"}>{l.status}</span>
               </div>
               <div className="mt-1 text-xs text-slate-400">

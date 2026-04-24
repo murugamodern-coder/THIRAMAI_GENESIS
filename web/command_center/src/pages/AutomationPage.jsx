@@ -288,7 +288,7 @@ export default function AutomationPage() {
                   <div>
                     <div className="text-sm font-medium text-slate-100">{r.name}</div>
                     <div className="text-xs text-slate-400">
-                      {r.trigger_type} -> {r.action_type} ({r.enabled ? "enabled" : "disabled"})
+                      {r.trigger_type} -{">"} {r.action_type} ({r.enabled ? "enabled" : "disabled"})
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -345,7 +345,7 @@ export default function AutomationPage() {
           {logs.map((l) => (
             <div key={l.id} className="rounded-lg border border-slate-700 bg-slate-950/40 p-3">
               <div className="text-sm text-slate-100">
-                {l.trigger_type} -> <span className="text-blue-300">{l.action_taken}</span>
+                {l.trigger_type} -{">"} <span className="text-blue-300">{l.action_taken}</span>
               </div>
               <div className="mt-1 text-xs text-slate-400">
                 rule_id: {l.rule_id || "n/a"} | mission_id: {l?.action_result_json?.mission_id || "n/a"} | {l.created_at || ""}

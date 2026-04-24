@@ -92,7 +92,7 @@ export default function MoneyLoopPage() {
     <div className="space-y-5">
       <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <h1 className="text-xl font-semibold text-slate-100">Money Loop</h1>
-        <p className="mt-1 text-sm text-slate-400">Continuous opportunity -> mission -> execution -> learning loop.</p>
+        <p className="mt-1 text-sm text-slate-400">Continuous opportunity -{">"} mission -{">"} execution -{">"} learning loop.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
