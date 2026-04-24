@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/client.js";
+import BrainResponseBlock from "../components/BrainResponseBlock.jsx";
 import { showToastDedup } from "../lib/toastDedup.js";
 
 const SUGGESTIONS = [
@@ -11,6 +12,7 @@ const SUGGESTIONS = [
 
 function routeBadge(payload) {
   const r = String(payload?.routing || "").toUpperCase();
+  if (r === "BRAIN") return "🧠 Brain";
   if (r === "MISSION") return "🔬 Research OS";
   if (r === "ACTION") return "⚡ Agentic OS";
   return "🧠 Chat";
@@ -18,6 +20,7 @@ function routeBadge(payload) {
 
 function routeKey(payload) {
   const r = String(payload?.routing || "").toUpperCase();
+  if (r === "BRAIN") return "BRAIN";
   if (r === "MISSION") return "MISSION";
   if (r === "ACTION") return "ACTION";
   return "CHAT";
@@ -158,9 +161,19 @@ export default function CentralBrainPage() {
     };
     const onResponse = (ev) => {
       const payload = ev?.detail?.payload || {};
+      const brain = payload?.brain && typeof payload.brain === "object" ? payload.brain : null;
       const content = String(payload?.response || payload?.message || "").trim();
-      if (!content) return;
-      setChat((prev) => [...prev, { role: "thiramai", content, routing: routeKey(payload), timestamp: Date.now() }]);
+      if (!content && !brain) return;
+      setChat((prev) => [
+        ...prev,
+        {
+          role: "thiramai",
+          content: content || "",
+          brain,
+          routing: routeKey(payload),
+          timestamp: Date.now(),
+        },
+      ]);
       setThinking(false);
     };
     const onError = (ev) => {
@@ -290,11 +303,20 @@ export default function CentralBrainPage() {
           chat.map((m, idx) => {
             const user = m.role === "user";
             const words = String(m.content || "").trim().split(/\s+/).filter(Boolean);
-            const shouldClamp = words.length > 500;
+            const shouldClamp = !m.brain && words.length > 500;
             const expanded = !!expandedByIndex[idx];
-            const displayText = shouldClamp && !expanded ? `${words.slice(0, 500).join(" ")}...` : m.content;
+            const displayText =
+              shouldClamp && !expanded ? `${words.slice(0, 500).join(" ")}...` : String(m.content || "");
 
-            const bubbleInner = (
+            const bubbleInner = m.brain ? (
+              <>
+                {m.content ? <p className="cb-brain-summary text-slate-200">{m.content}</p> : null}
+                <BrainResponseBlock brain={m.brain} className="!border-slate-700/60 !bg-slate-900/40" />
+                <div className="cb-meta">
+                  <span>{new Date(m.timestamp).toLocaleTimeString()}</span>
+                </div>
+              </>
+            ) : (
               <>
                 <div>{displayText}</div>
                 {shouldClamp ? (
@@ -336,7 +358,9 @@ export default function CentralBrainPage() {
                       className="cb-copy-action"
                       onClick={async () => {
                         try {
-                          await navigator.clipboard.writeText(String(m.content || ""));
+                          await navigator.clipboard.writeText(
+                          m.brain ? `${String(m.content || "").trim()}\n\n${JSON.stringify(m.brain, null, 2)}` : String(m.content || ""),
+                        );
                           setCopiedByIndex((prev) => ({ ...prev, [idx]: true }));
                           showToastDedup({ type: "success", message: "Copied!" });
                           setTimeout(() => {

@@ -8,7 +8,26 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Index, Integer, JSON, LargeBinary, Numeric, PrimaryKeyConstraint, SmallInteger, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    LargeBinary,
+    Numeric,
+    PrimaryKeyConstraint,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -70,6 +89,15 @@ class Organization(Base):
     operational_expenses: Mapped[list["OperationalExpense"]] = relationship(back_populates="organization")
     compliance_cases: Mapped[list["ComplianceCase"]] = relationship(back_populates="organization")
     comms_inbox: Mapped[list["CommsInbox"]] = relationship(back_populates="organization")
+    domain_dominion_profiles: Mapped[list["DomainDominionProfile"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
+    domain_revenue_ledger: Mapped[list["DomainRevenueLedger"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
+    decision_intelligence_sessions: Mapped[list["DecisionIntelligenceSession"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
     notifications: Mapped[list["Notification"]] = relationship(back_populates="organization")
     factory_billing_hold_row: Mapped[Optional["FactoryBillingHold"]] = relationship(
         back_populates="organization", uselist=False
@@ -109,6 +137,9 @@ class Organization(Base):
         back_populates="organization", cascade="all, delete-orphan"
     )
     business_tasks: Mapped[list["BusinessTask"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
+    research_projects: Mapped[list["ResearchProject"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
     supplier_payments: Mapped[list["SupplierPayment"]] = relationship(
@@ -329,6 +360,27 @@ class User(Base):
     research_projects: Mapped[list["ResearchProject"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    action_execution_runs: Mapped[list["ActionExecutionRun"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    execution_memory_entries: Mapped[list["ExecutionMemoryEntry"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    continuity_goals: Mapped[list["ContinuityGoal"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    continuity_user_settings: Mapped[list["ContinuityUserSettings"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    domain_dominion_profiles: Mapped[list["DomainDominionProfile"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    domain_revenue_ledger: Mapped[list["DomainRevenueLedger"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    decision_intelligence_sessions: Mapped[list["DecisionIntelligenceSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     personal_budgets: Mapped[list["PersonalBudget"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -390,10 +442,1248 @@ class User(Base):
     runtime_configs: Mapped[list["UserRuntimeConfig"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    conversations: Mapped[list["Conversation"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    missions: Mapped[list["Mission"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    automation_rules: Mapped[list["AutomationRule"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    automation_logs: Mapped[list["AutomationLog"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    integrations_rows: Mapped[list["Integration"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    integration_message_logs: Mapped[list["IntegrationMessageLog"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    opportunities_rows: Mapped[list["Opportunity"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    strategy_profiles: Mapped[list["StrategyProfile"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    strategy_experiments: Mapped[list["StrategyExperiment"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    real_world_executions: Mapped[list["RealWorldExecution"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    negotiation_deals: Mapped[list["NegotiationDeal"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    guardrails: Mapped[list["Guardrail"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    execution_audit_logs: Mapped[list["ExecutionAuditLog"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    money_loop_configs: Mapped[list["MoneyLoopConfig"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     role: Mapped[Optional["Role"]] = relationship(
         back_populates="users",
         foreign_keys=[role_id],
     )
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (Index("ix_conversations_user_created", "user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="New conversation")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="conversations")
+    messages: Mapped[list["ConversationMessage"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan"
+    )
+
+
+class ConversationMessage(Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+        sa.CheckConstraint("role in ('user','assistant')", name="ck_messages_role"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    conversation_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+
+
+class Mission(Base):
+    __tablename__ = "missions"
+    __table_args__ = (
+        Index("ix_missions_user_created", "user_id", "created_at"),
+        sa.CheckConstraint("status in ('planned','running','completed')", name="ck_missions_status"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="planned")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="missions")
+    steps: Mapped[list["MissionStep"]] = relationship(
+        back_populates="mission", cascade="all, delete-orphan"
+    )
+
+
+class MissionStep(Base):
+    __tablename__ = "mission_steps"
+    __table_args__ = (
+        Index("ix_mission_steps_mission_order", "mission_id", "step_order"),
+        sa.CheckConstraint("status in ('pending','running','done','failed')", name="ck_mission_steps_status"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    mission_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("missions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    result_json: Mapped[dict[str, Any]] = mapped_column(
+        "result",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    mission: Mapped["Mission"] = relationship(back_populates="steps")
+
+
+class ContinuityGoal(Base):
+    """Long-term autonomous goals (persist across sessions; driven by continuity tick)."""
+
+    __tablename__ = "continuity_goals"
+    __table_args__ = (
+        Index("ix_continuity_goals_user_status", "user_id", "status"),
+        sa.CheckConstraint(
+            "status in ('active','paused','completed','cancelled','interrupted','waiting_action')",
+            name="ck_continuity_goals_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    objective: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    progress_pct: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    steps_completed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_steps_est: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    remaining_actions_json: Mapped[dict[str, Any]] = mapped_column(
+        "remaining_actions_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    completed_steps_json: Mapped[dict[str, Any]] = mapped_column(
+        "completed_steps_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    meta_json: Mapped[dict[str, Any]] = mapped_column(
+        "meta_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="continuity_goals")
+    action_runs: Mapped[list["ActionExecutionRun"]] = relationship(back_populates="continuity_goal")
+
+
+class ContinuityUserSettings(Base):
+    """Per user+org autonomy level and budgets for the continuity engine."""
+
+    __tablename__ = "continuity_user_settings"
+    __table_args__ = (UniqueConstraint("user_id", "organization_id", name="uq_continuity_settings_user_org"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    autonomy_level: Mapped[str] = mapped_column(String(32), nullable=False, default="assist")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    time_budget_minutes_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    capital_budget: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    effort_budget: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    allow_auto_batch_medium: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_tick_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    runs_today: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    meta_json: Mapped[dict[str, Any]] = mapped_column(
+        "meta_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="continuity_user_settings")
+
+
+class DomainDominionProfile(Base):
+    """Per user+org: active vertical focus, aggregated knowledge, and weekly review cursor."""
+
+    __tablename__ = "domain_dominion_profiles"
+    __table_args__ = (UniqueConstraint("user_id", "organization_id", name="uq_domain_dominion_user_org"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    active_domain: Mapped[str] = mapped_column(String(64), nullable=False, default="business")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    knowledge_json: Mapped[dict[str, Any]] = mapped_column(
+        "knowledge_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    meta_json: Mapped[dict[str, Any]] = mapped_column(
+        "meta_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    last_weekly_review_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="domain_dominion_profiles")
+    organization: Mapped["Organization"] = relationship(
+        "Organization",
+        back_populates="domain_dominion_profiles",  # type: ignore[assignment]
+    )
+    revenue_events: Mapped[list["DomainRevenueLedger"]] = relationship(back_populates="domain_profile")
+
+
+class DomainRevenueLedger(Base):
+    """Income, cost, and adjustment lines for domain P&L tracking (supplements LearningLog revenue)."""
+
+    __tablename__ = "domain_revenue_ledger"
+    __table_args__ = (Index("ix_domain_revenue_user_created", "user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profile_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("domain_dominion_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    domain: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    event_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    ref_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    ref_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), nullable=True, index=True
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    meta_json: Mapped[dict[str, Any]] = mapped_column(
+        "meta_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    user: Mapped["User"] = relationship(back_populates="domain_revenue_ledger")
+    organization: Mapped["Organization"] = relationship(
+        "Organization", back_populates="domain_revenue_ledger"  # type: ignore[assignment]
+    )
+    domain_profile: Mapped[Optional[DomainDominionProfile]] = relationship(
+        "DomainDominionProfile", back_populates="revenue_events"
+    )
+
+
+class DecisionIntelligenceSession(Base):
+    """
+    Multi-option decision support: aggressive / balanced / safe with stored selection and outcome for learning.
+    """
+
+    __tablename__ = "decision_intelligence_sessions"
+    __table_args__ = (
+        Index("ix_decision_intel_user_created", "user_id", "created_at"),
+        sa.CheckConstraint(
+            "status in ('draft','selected','closed')",
+            name="ck_decision_intel_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    decision_brief: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    context_json: Mapped[dict[str, Any]] = mapped_column(
+        "context_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    options_json: Mapped[dict[str, Any]] = mapped_column(
+        "options_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    recommendation_json: Mapped[dict[str, Any]] = mapped_column(
+        "recommendation_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    selected_option: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    result_json: Mapped[dict[str, Any]] = mapped_column(
+        "result_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="decision_intelligence_sessions")
+    organization: Mapped["Organization"] = relationship(
+        "Organization", back_populates="decision_intelligence_sessions"  # type: ignore[assignment]
+    )
+
+
+class ActionExecutionRun(Base):
+    """Persisted multi-step real-action plan (search → analyze → decide → act) with confirmation gates."""
+
+    __tablename__ = "action_execution_runs"
+    __table_args__ = (
+        Index("ix_action_execution_runs_user_created", "user_id", "created_at"),
+        Index("ix_action_execution_runs_user_status", "user_id", "status"),
+        sa.CheckConstraint(
+            "status in ('planned','awaiting_confirmation','running','completed','failed','cancelled')",
+            name="ck_action_execution_runs_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_command: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="planned")
+    continuity_goal_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("continuity_goals.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    meta_json: Mapped[dict[str, Any]] = mapped_column(
+        "meta_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="action_execution_runs")
+    continuity_goal: Mapped[Optional["ContinuityGoal"]] = relationship(back_populates="action_runs")
+    steps: Mapped[list["ActionExecutionStep"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="ActionExecutionStep.step_order"
+    )
+
+
+class ActionExecutionStep(Base):
+    __tablename__ = "action_execution_steps"
+    __table_args__ = (
+        Index("ix_action_execution_steps_run_order", "run_id", "step_order"),
+        sa.CheckConstraint(
+            "phase in ('search','analyze','decide','act')",
+            name="ck_action_execution_steps_phase",
+        ),
+        sa.CheckConstraint(
+            "risk_level in ('low','medium','high')",
+            name="ck_action_execution_steps_risk_level",
+        ),
+        sa.CheckConstraint(
+            "status in ('pending','awaiting_confirmation','blocked','running','done','failed','skipped')",
+            name="ck_action_execution_steps_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    run_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("action_execution_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    phase: Mapped[str] = mapped_column(String(16), nullable=False)
+    step_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    payload_json: Mapped[dict[str, Any]] = mapped_column(
+        "payload_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    result_json: Mapped[dict[str, Any]] = mapped_column(
+        "result_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    explicit_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    run: Mapped["ActionExecutionRun"] = relationship(back_populates="steps")
+
+
+class ExecutionMemoryEntry(Base):
+    """Outcome memory for action layer (what worked / failed) keyed by fingerprint."""
+
+    __tablename__ = "execution_memory_entries"
+    __table_args__ = (Index("ix_execution_memory_user_fp", "user_id", "fingerprint"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    step_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    summary: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    detail_json: Mapped[dict[str, Any]] = mapped_column(
+        "detail_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="execution_memory_entries")
+
+
+class AutomationRule(Base):
+    __tablename__ = "automation_rules"
+    __table_args__ = (
+        Index("ix_automation_rules_user_enabled", "user_id", "enabled"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    trigger_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    condition_json: Mapped[dict[str, Any]] = mapped_column(
+        "condition_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    action_config_json: Mapped[dict[str, Any]] = mapped_column(
+        "action_config_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="automation_rules")
+
+
+class AutomationLog(Base):
+    __tablename__ = "automation_logs"
+    __table_args__ = (Index("ix_automation_logs_user_created", "user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rule_id: Mapped[int | None] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("automation_rules.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    trigger_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_json: Mapped[dict[str, Any]] = mapped_column(
+        "event_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    action_taken: Mapped[str] = mapped_column(String(64), nullable=False)
+    action_result_json: Mapped[dict[str, Any]] = mapped_column(
+        "action_result_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="automation_logs")
+
+
+class Integration(Base):
+    __tablename__ = "integrations"
+    __table_args__ = (Index("ix_integrations_user_type", "user_id", "type"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    config_json: Mapped[dict[str, Any]] = mapped_column(
+        "config_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="integrations_rows")
+
+
+class IntegrationMessageLog(Base):
+    __tablename__ = "integration_message_logs"
+    __table_args__ = (
+        Index("ix_integration_message_logs_user_created", "user_id", "created_at"),
+        Index("ix_integration_message_logs_integration", "integration_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    integration_id: Mapped[int | None] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("integrations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(300), nullable=False)
+    subject: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="success")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="integration_message_logs")
+
+
+class Opportunity(Base):
+    __tablename__ = "opportunities"
+    __table_args__ = (
+        Index("ix_opportunities_user_status_created", "user_id", "status", "created_at"),
+        sa.CheckConstraint("status in ('new','approved','executed','rejected')", name="ck_opportunities_status"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    expected_profit: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    risk_level: Mapped[str] = mapped_column(String(32), nullable=False, default="medium")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="new")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="opportunities_rows")
+    profit_logs: Mapped[list["OpportunityProfitLog"]] = relationship(
+        back_populates="opportunity", cascade="all, delete-orphan"
+    )
+
+
+class OpportunityProfitLog(Base):
+    __tablename__ = "opportunity_profit_logs"
+    __table_args__ = (Index("ix_opp_profit_logs_opp_created", "opportunity_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    opportunity_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("opportunities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profit_loss_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    note: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    opportunity: Mapped["Opportunity"] = relationship(back_populates="profit_logs")
+
+
+class StrategyProfile(Base):
+    __tablename__ = "strategy_profiles"
+    __table_args__ = (
+        Index("ix_strategy_profiles_user_domain", "user_id", "domain"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    domain: Mapped[str] = mapped_column(String(32), nullable=False)
+    parameters_json: Mapped[dict[str, Any]] = mapped_column(
+        "parameters_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    performance_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="strategy_profiles")
+
+
+class StrategyExperiment(Base):
+    """Persistent experiment row per strategy: hypothesis, execution, outcome (feeds learning + strategy profiles)."""
+
+    __tablename__ = "strategy_experiments"
+    __table_args__ = (
+        Index("ix_strategy_experiments_user_group_created", "user_id", "experiment_group", "created_at"),
+        Index("ix_strategy_experiments_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    strategy_id: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    experiment_group: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    strategy_snapshot_json: Mapped[dict[str, Any]] = mapped_column(
+        "strategy_snapshot_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    hypothesis: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    execution_json: Mapped[dict[str, Any]] = mapped_column(
+        "execution_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    result_json: Mapped[dict[str, Any]] = mapped_column(
+        "result_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
+    success: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    learning_log_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("learning_logs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    user: Mapped["User"] = relationship(back_populates="strategy_experiments")
+    learning_log: Mapped[Optional["LearningLog"]] = relationship(foreign_keys=[learning_log_id])
+
+
+class RealWorldExecution(Base):
+    """Long-running real-world action: API success is not enough — track until verified outcome."""
+
+    __tablename__ = "real_world_executions"
+    __table_args__ = (
+        Index("ix_rwe_user_state_created", "user_id", "state", "created_at"),
+        sa.CheckConstraint(
+            "state in ('initiated','in_progress','completed','failed')",
+            name="ck_rwe_state",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False, default="general")
+    label: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="initiated")
+    expected_outcome_json: Mapped[dict[str, Any]] = mapped_column(
+        "expected_outcome_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    actual_outcome_json: Mapped[dict[str, Any]] = mapped_column(
+        "actual_outcome_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    api_succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    outcome_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    outcome_assessment: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    verification_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    meta_json: Mapped[dict[str, Any]] = mapped_column(
+        "meta_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="real_world_executions")
+
+
+class NegotiationDeal(Base):
+    """Per-deal negotiation memory and status (message loop)."""
+
+    __tablename__ = "negotiation_deals"
+    __table_args__ = (
+        Index("ix_negdeals_user_status", "user_id", "status"),
+        sa.CheckConstraint(
+            "status in ('open','negotiating','closed','lost')",
+            name="ck_negdeal_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    context_json: Mapped[dict[str, Any]] = mapped_column(
+        "context_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    messages_json: Mapped[Any] = mapped_column(
+        "messages_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=list,
+    )
+    last_analysis_json: Mapped[dict[str, Any]] = mapped_column(
+        "last_analysis_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="negotiation_deals")
+
+
+class Guardrail(Base):
+    __tablename__ = "guardrails"
+    __table_args__ = (
+        Index("ix_guardrails_user_domain_enabled", "user_id", "domain", "enabled"),
+        UniqueConstraint("user_id", "rule_name", "domain", name="uq_guardrails_user_rule_domain"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rule_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    domain: Mapped[str] = mapped_column(String(32), nullable=False)
+    condition_json: Mapped[dict[str, Any]] = mapped_column(
+        "condition_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    action_limit_json: Mapped[dict[str, Any]] = mapped_column(
+        "action_limit_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="guardrails")
+
+
+class ExecutionAuditLog(Base):
+    __tablename__ = "execution_audit_logs"
+    __table_args__ = (
+        Index("ix_execution_audit_logs_user_created", "user_id", "created_at"),
+        Index("ix_execution_audit_logs_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(
+        "payload_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    execution_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    reasoning_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    why_action_taken: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_influenced_json: Mapped[dict[str, Any]] = mapped_column(
+        "data_influenced_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    result_json: Mapped[dict[str, Any]] = mapped_column(
+        "result_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="success")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="execution_audit_logs")
+
+
+class MoneyLoopConfig(Base):
+    __tablename__ = "money_loop_config"
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_daily_capital: Mapped[float] = mapped_column(Float, nullable=False, default=50000.0)
+    max_parallel_missions: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    risk_level: Mapped[str] = mapped_column(String(32), nullable=False, default="medium")
+    auto_execute: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    optimizer_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="money_loop_configs")
+
+
+class ResearchProject(Base):
+    __tablename__ = "research_projects"
+    __table_args__ = (
+        Index("ix_research_projects_user_created", "user_id", "created_at"),
+        Index("ix_research_projects_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    domain: Mapped[str] = mapped_column(String(64), nullable=False, default="general")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    folders_json: Mapped[dict[str, Any]] = mapped_column(
+        "folders_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    sources_json: Mapped[dict[str, Any]] = mapped_column(
+        "sources_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    notes_json: Mapped[dict[str, Any]] = mapped_column(
+        "notes_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    summaries_json: Mapped[dict[str, Any]] = mapped_column(
+        "summaries_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    experiments_json: Mapped[dict[str, Any]] = mapped_column(
+        "experiments_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    outputs_json: Mapped[dict[str, Any]] = mapped_column(
+        "outputs_json",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="research_projects")
+    organization: Mapped["Organization"] = relationship(back_populates="research_projects")
 
 
 class UserRuntimeConfig(Base):
@@ -948,6 +2238,28 @@ class LearningLog(Base):
     __tablename__ = "learning_logs"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    source_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        nullable=True,
+    )
+    input_data_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    outcome_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    success: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     organization_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -2476,37 +3788,6 @@ class DoctorVisit(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="doctor_visits")
-
-
-class ResearchProject(Base):
-    """Personal research / DPR-style project (Phase 1 shell; AI in Phase 2)."""
-
-    __tablename__ = "research_projects"
-
-    id: Mapped[int] = mapped_column(
-        BigInteger().with_variant(Integer, "sqlite"),
-        primary_key=True,
-        autoincrement=True,
-    )
-    user_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    title: Mapped[str] = mapped_column(Text, nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
-    links_json: Mapped[dict[str, Any]] = mapped_column(
-        JSON().with_variant(JSONB, "postgresql"),
-        nullable=False,
-        default=dict,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
-
-    user: Mapped["User"] = relationship(back_populates="research_projects")
 
 
 class PersonalBudget(Base):

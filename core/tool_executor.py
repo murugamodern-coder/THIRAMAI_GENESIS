@@ -83,6 +83,23 @@ def execute_intent(intent_data: dict[str, Any], context: dict[str, Any]) -> dict
     exp_src = str(context.get("experience_source") or "intent_engine")
 
     try:
+        if intent == "sell_inventory" and uid_i is not None:
+            from services.brain_execute import brain_execute
+
+            routed = brain_execute(str(context.get("user_message") or f"Execute intent {intent}"), uid_i, oid)
+            ok_r = bool((routed.get("result") or {}).get("ok"))
+            return {
+                "status": "success" if ok_r else "error",
+                "ok": ok_r,
+                "action": intent,
+                "message": "Intent routed to brain_execute single authority",
+                "data": {
+                    "routed_via": "brain_execute",
+                    "brain_status": routed.get("status"),
+                    "brain_result": routed.get("result"),
+                    "closure": routed.get("closure"),
+                },
+            }
         if intent == "sell_inventory":
             return _exec_sell(
                 intent_data,

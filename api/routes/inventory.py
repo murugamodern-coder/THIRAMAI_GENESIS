@@ -32,6 +32,7 @@ from services.inventory_service import (
     update_purchase_order_supplier_invoice_sync,
 )
 from services.sale_execution import execute_sell_stock_sync
+from services.automation_rule_engine import evaluate_rules
 
 router = APIRouter(tags=["Inventory & Assets"])
 
@@ -108,6 +109,21 @@ async def inventory_create_item(
             metadata={"item_id": item.get("id"), "sku_name": item.get("sku_name")},
         ),
     )
+    await asyncio.to_thread(
+        evaluate_rules,
+        {
+            "user_id": int(_user.id),
+            "organization_id": int(_user.organization_id),
+            "role_name": str(_user.role_name or ""),
+            "trigger_type": "inventory_updated",
+            "payload": {
+                "item_id": item.get("id"),
+                "sku_name": item.get("sku_name"),
+                "quantity": item.get("quantity"),
+                "reorder_point": item.get("reorder_point"),
+            },
+        },
+    )
     return JSONResponse(content=out)
 
 
@@ -157,6 +173,21 @@ async def inventory_update_item(
             metadata={"item_id": item_id, "sku_name": item.get("sku_name")},
         ),
     )
+    await asyncio.to_thread(
+        evaluate_rules,
+        {
+            "user_id": int(_user.id),
+            "organization_id": int(_user.organization_id),
+            "role_name": str(_user.role_name or ""),
+            "trigger_type": "inventory_updated",
+            "payload": {
+                "item_id": item_id,
+                "sku_name": item.get("sku_name"),
+                "quantity": item.get("quantity"),
+                "reorder_point": item.get("reorder_point"),
+            },
+        },
+    )
     return JSONResponse(content=out)
 
 
@@ -190,6 +221,22 @@ async def inventory_movement(
     )
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("error") or "movement failed")
+    row = out.get("movement") or {}
+    await asyncio.to_thread(
+        evaluate_rules,
+        {
+            "user_id": int(_user.id),
+            "organization_id": int(_user.organization_id),
+            "role_name": str(_user.role_name or ""),
+            "trigger_type": "inventory_updated",
+            "payload": {
+                "item_id": body.inventory_item_id,
+                "quantity_delta": body.quantity_delta,
+                "movement_type": body.movement_type,
+                "quantity": row.get("quantity_after"),
+            },
+        },
+    )
     return JSONResponse(content=out)
 
 

@@ -10732,12 +10732,1418 @@
         "deadline_stopped": false,
         "human_intervention_required": true
       }
+    },
+    {
+      "ts": "2026-04-24T09:05:52.138290+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777021551,
+        "resources": {
+          "timestamp_utc": 1777021551,
+          "disk_free_gb": 229.25,
+          "disk_free_ratio": 0.5029,
+          "cpu_percent": 43.6,
+          "memory_percent": 83.1,
+          "memory_available_gb": 2.65,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T09:05:52.699156+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777021551,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T09:05:52.940735+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T09:05:52.940717+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T09:05:52.947204+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777021551,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T09:05:53.127651+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777021552,
+        "resources": {
+          "timestamp_utc": 1777021552,
+          "disk_free_gb": 229.25,
+          "disk_free_ratio": 0.5029,
+          "cpu_percent": 46.8,
+          "memory_percent": 83.1,
+          "memory_available_gb": 2.65,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T09:05:53.392148+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777021552,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T09:05:53.407675+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777021552,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:04:34.638080+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777032274,
+        "resources": {
+          "timestamp_utc": 1777032274,
+          "disk_free_gb": 228.42,
+          "disk_free_ratio": 0.5011,
+          "cpu_percent": 28.3,
+          "memory_percent": 81.8,
+          "memory_available_gb": 2.85,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:04:35.601419+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777032274,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:04:35.702792+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:04:35.702749+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:04:35.711961+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777032274,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:04:35.895596+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777032275,
+        "resources": {
+          "timestamp_utc": 1777032275,
+          "disk_free_gb": 228.42,
+          "disk_free_ratio": 0.5011,
+          "cpu_percent": 45.1,
+          "memory_percent": 81.9,
+          "memory_available_gb": 2.84,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:04:36.126488+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777032275,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:04:36.139274+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777032275,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:15:58.355890+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777032958,
+        "resources": {
+          "timestamp_utc": 1777032958,
+          "disk_free_gb": 228.22,
+          "disk_free_ratio": 0.5007,
+          "cpu_percent": 38.5,
+          "memory_percent": 84.7,
+          "memory_available_gb": 2.4,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:15:58.658018+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777032958,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:15:58.768386+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:15:58.768345+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:15:58.777289+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777032958,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:15:58.957471+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777032958,
+        "resources": {
+          "timestamp_utc": 1777032958,
+          "disk_free_gb": 228.22,
+          "disk_free_ratio": 0.5007,
+          "cpu_percent": 33.6,
+          "memory_percent": 84.7,
+          "memory_available_gb": 2.41,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:15:59.155848+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777032958,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:15:59.170029+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777032958,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:21:32.701878+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777033292,
+        "resources": {
+          "timestamp_utc": 1777033292,
+          "disk_free_gb": 228.43,
+          "disk_free_ratio": 0.5011,
+          "cpu_percent": 78.4,
+          "memory_percent": 86.4,
+          "memory_available_gb": 2.14,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:21:33.036854+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777033292,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:21:33.140062+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:21:33.140013+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:21:33.149828+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777033292,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:21:33.334265+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777033293,
+        "resources": {
+          "timestamp_utc": 1777033293,
+          "disk_free_gb": 228.43,
+          "disk_free_ratio": 0.5011,
+          "cpu_percent": 35.1,
+          "memory_percent": 86.3,
+          "memory_available_gb": 2.15,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:21:33.618899+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777033293,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:21:33.640561+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777033293,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:24:21.422730+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777033461,
+        "resources": {
+          "timestamp_utc": 1777033461,
+          "disk_free_gb": 228.41,
+          "disk_free_ratio": 0.5011,
+          "cpu_percent": 32.5,
+          "memory_percent": 85.5,
+          "memory_available_gb": 2.27,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:24:21.631046+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777033461,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:24:21.721230+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:24:21.721187+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:24:21.725318+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777033461,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:24:21.890557+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777033461,
+        "resources": {
+          "timestamp_utc": 1777033461,
+          "disk_free_gb": 228.41,
+          "disk_free_ratio": 0.5011,
+          "cpu_percent": 35.8,
+          "memory_percent": 85.6,
+          "memory_available_gb": 2.27,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:24:22.093393+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777033461,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:24:22.099456+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777033461,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:31:18.632233+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777033878,
+        "resources": {
+          "timestamp_utc": 1777033878,
+          "disk_free_gb": 228.42,
+          "disk_free_ratio": 0.5011,
+          "cpu_percent": 32.5,
+          "memory_percent": 82.8,
+          "memory_available_gb": 2.69,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:31:18.917583+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777033878,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:31:19.000869+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:31:19.000831+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:31:19.008000+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777033878,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:31:19.182909+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777033879,
+        "resources": {
+          "timestamp_utc": 1777033879,
+          "disk_free_gb": 228.42,
+          "disk_free_ratio": 0.5011,
+          "cpu_percent": 33.1,
+          "memory_percent": 82.8,
+          "memory_available_gb": 2.69,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:31:19.405793+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777033879,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:31:19.426266+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777033879,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:41:21.971780+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034481,
+        "resources": {
+          "timestamp_utc": 1777034481,
+          "disk_free_gb": 228.14,
+          "disk_free_ratio": 0.5005,
+          "cpu_percent": 24.2,
+          "memory_percent": 83.9,
+          "memory_available_gb": 2.52,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:41:22.267825+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777034481,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:41:22.323146+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:41:22.323127+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:41:22.326112+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034481,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:41:22.488897+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034482,
+        "resources": {
+          "timestamp_utc": 1777034482,
+          "disk_free_gb": 228.14,
+          "disk_free_ratio": 0.5005,
+          "cpu_percent": 19.1,
+          "memory_percent": 84.0,
+          "memory_available_gb": 2.51,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:41:22.670521+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777034482,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:41:22.678447+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034482,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:42:53.547152+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034573,
+        "resources": {
+          "timestamp_utc": 1777034573,
+          "disk_free_gb": 228.13,
+          "disk_free_ratio": 0.5004,
+          "cpu_percent": 33.3,
+          "memory_percent": 84.7,
+          "memory_available_gb": 2.4,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:42:53.711038+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777034573,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:42:53.754991+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:42:53.754969+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:42:53.758529+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034573,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:42:53.921083+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034573,
+        "resources": {
+          "timestamp_utc": 1777034573,
+          "disk_free_gb": 228.13,
+          "disk_free_ratio": 0.5004,
+          "cpu_percent": 20.8,
+          "memory_percent": 84.8,
+          "memory_available_gb": 2.39,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:42:54.089899+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777034573,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:42:54.096418+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034573,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:43:40.117795+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034619,
+        "resources": {
+          "timestamp_utc": 1777034619,
+          "disk_free_gb": 228.13,
+          "disk_free_ratio": 0.5004,
+          "cpu_percent": 61.8,
+          "memory_percent": 85.0,
+          "memory_available_gb": 2.36,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:43:40.375583+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777034619,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:43:40.388537+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034619,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:44:31.083417+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034670,
+        "resources": {
+          "timestamp_utc": 1777034670,
+          "disk_free_gb": 228.12,
+          "disk_free_ratio": 0.5004,
+          "cpu_percent": 17.4,
+          "memory_percent": 84.1,
+          "memory_available_gb": 2.5,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:44:31.303172+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777034670,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:44:31.307633+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034670,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:45:30.341882+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034730,
+        "resources": {
+          "timestamp_utc": 1777034730,
+          "disk_free_gb": 227.9,
+          "disk_free_ratio": 0.4999,
+          "cpu_percent": 26.6,
+          "memory_percent": 84.6,
+          "memory_available_gb": 2.42,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:45:30.519205+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777034730,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:45:30.576573+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:45:30.576534+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:45:30.579708+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034730,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:45:30.748195+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034730,
+        "resources": {
+          "timestamp_utc": 1777034730,
+          "disk_free_gb": 227.9,
+          "disk_free_ratio": 0.4999,
+          "cpu_percent": 31.1,
+          "memory_percent": 84.6,
+          "memory_available_gb": 2.41,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:45:30.944288+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777034730,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:45:31.067873+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034730,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:47:42.358365+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034862,
+        "resources": {
+          "timestamp_utc": 1777034862,
+          "disk_free_gb": 227.9,
+          "disk_free_ratio": 0.4999,
+          "cpu_percent": 32.1,
+          "memory_percent": 84.9,
+          "memory_available_gb": 2.36,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:47:42.567889+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777034862,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:47:42.634158+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:47:42.634134+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:47:42.639260+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034862,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:47:42.807580+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034862,
+        "resources": {
+          "timestamp_utc": 1777034862,
+          "disk_free_gb": 227.9,
+          "disk_free_ratio": 0.4999,
+          "cpu_percent": 30.1,
+          "memory_percent": 85.0,
+          "memory_available_gb": 2.36,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:47:43.023035+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777034862,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:47:43.170561+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034862,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:49:17.384733+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034957,
+        "resources": {
+          "timestamp_utc": 1777034957,
+          "disk_free_gb": 227.89,
+          "disk_free_ratio": 0.4999,
+          "cpu_percent": 74.2,
+          "memory_percent": 85.3,
+          "memory_available_gb": 2.31,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:49:17.632571+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777034957,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:49:17.725437+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:49:17.725388+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:49:17.736004+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034957,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:49:17.907462+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777034957,
+        "resources": {
+          "timestamp_utc": 1777034957,
+          "disk_free_gb": 227.89,
+          "disk_free_ratio": 0.4999,
+          "cpu_percent": 41.8,
+          "memory_percent": 85.4,
+          "memory_available_gb": 2.3,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:49:18.143089+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777034957,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:49:18.299478+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777034957,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
+    },
+    {
+      "ts": "2026-04-24T12:50:11.172330+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777035011,
+        "resources": {
+          "timestamp_utc": 1777035011,
+          "disk_free_gb": 227.89,
+          "disk_free_ratio": 0.4999,
+          "cpu_percent": 23.1,
+          "memory_percent": 84.0,
+          "memory_available_gb": 2.51,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:50:11.387725+00:00",
+      "event_type": "plan",
+      "payload": {
+        "cycle_id": 1777035011,
+        "goal": "harden loop",
+        "plan": {
+          "goal": "harden loop",
+          "total_steps": 2,
+          "steps": [
+            {
+              "id": 1,
+              "type": "audit",
+              "description": "safe check",
+              "command": "whoami",
+              "depends_on": [],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 0
+            },
+            {
+              "id": 2,
+              "type": "audit",
+              "description": "unsafe policy command",
+              "command": "git push",
+              "depends_on": [
+                1
+              ],
+              "risk_level": "low",
+              "status": "pending",
+              "result_history": [],
+              "_plan_order": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:50:11.451847+00:00",
+      "event_type": "learning_update",
+      "payload": {
+        "failures": [],
+        "success_patterns": [],
+        "learned_rules": [],
+        "updated_at": "2026-04-24T12:50:11.451824+00:00"
+      }
+    },
+    {
+      "ts": "2026-04-24T12:50:11.456092+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777035011,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false
+      }
+    },
+    {
+      "ts": "2026-04-24T12:50:11.624747+00:00",
+      "event_type": "resources",
+      "payload": {
+        "cycle_id": 1777035011,
+        "resources": {
+          "timestamp_utc": 1777035011,
+          "disk_free_gb": 227.89,
+          "disk_free_ratio": 0.4999,
+          "cpu_percent": 48.3,
+          "memory_percent": 84.1,
+          "memory_available_gb": 2.49,
+          "cost_units_cycle_estimate": 1.0
+        }
+      }
+    },
+    {
+      "ts": "2026-04-24T12:50:11.832947+00:00",
+      "event_type": "human_intervention_required",
+      "payload": {
+        "cycle_id": 1777035011,
+        "goal": "harden loop",
+        "status": "stopped",
+        "message": "Planner requested human intervention; autonomous execution halted."
+      }
+    },
+    {
+      "ts": "2026-04-24T12:50:11.841014+00:00",
+      "event_type": "cycle_summary",
+      "payload": {
+        "cycle_id": 1777035011,
+        "goal": "harden loop",
+        "clean": false,
+        "deadline_stopped": false,
+        "human_intervention_required": true
+      }
     }
   ],
   "learning": {
     "failures": [],
     "success_patterns": [],
     "learned_rules": [],
-    "updated_at": "2026-04-20T13:26:44.001688+00:00"
+    "updated_at": "2026-04-24T12:50:11.451824+00:00"
   }
 }

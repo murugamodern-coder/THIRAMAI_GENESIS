@@ -45,6 +45,35 @@ def upgrade() -> None:
     if insp.has_table("permissions") and not _has_column(insp, "permissions", "name"):
         op.add_column("permissions", sa.Column("name", sa.String(length=128), nullable=True))
         op.execute(sa.text("UPDATE permissions SET name = COALESCE(name, resource || ':' || action)"))
+        # Deduplicate pre-existing semantic duplicates before adding unique index.
+        op.execute(
+            sa.text(
+                """
+                DELETE FROM permissions p
+                USING permissions d
+                WHERE p.id > d.id
+                  AND COALESCE(p.name, '') = COALESCE(d.name, '')
+                  AND COALESCE(p.resource, '') = COALESCE(d.resource, '')
+                  AND COALESCE(p.action, '') = COALESCE(d.action, '');
+                """
+            )
+        )
+        op.execute(
+            sa.text(
+                """
+                DELETE FROM permissions p
+                USING (
+                    SELECT id
+                    FROM (
+                        SELECT id, ROW_NUMBER() OVER (PARTITION BY COALESCE(name, '') ORDER BY id) AS rn
+                        FROM permissions
+                    ) q
+                    WHERE q.rn > 1
+                ) dup
+                WHERE p.id = dup.id;
+                """
+            )
+        )
         op.alter_column("permissions", "name", existing_type=sa.String(length=128), nullable=False)
         op.create_index("ix_permissions_name", "permissions", ["name"], unique=True)
 

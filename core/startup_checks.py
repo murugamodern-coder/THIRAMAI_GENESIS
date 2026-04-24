@@ -252,6 +252,19 @@ def run_startup_checks(
 
     items.append(check_command_center_files(root))
     items.append(check_bundle_integrity(root))
+    try:
+        from core.auth import runtime_validate_auth_crypto
+
+        ok_crypto, detail_crypto = runtime_validate_auth_crypto()
+        items.append(CheckItem(name="jwt_crypto_runtime", ok=ok_crypto, detail=detail_crypto))
+    except Exception as exc:
+        items.append(
+            CheckItem(
+                name="jwt_crypto_runtime",
+                ok=False,
+                detail=f"runtime validation import/exec failed: {exc}",
+            )
+        )
 
     degraded = any(not i.ok for i in items)
 

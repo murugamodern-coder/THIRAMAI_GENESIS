@@ -36,3 +36,22 @@ def assert_safe_production_config() -> None:
             "Refusing to start: set THIRAMAI_SAFE_ERRORS=1 (or true/yes/on) when ENV/THIRAMAI_ENV is production."
         )
     _ = settings.cors_allow_origins_list()
+    if settings.debug_truthy():
+        raise RuntimeError("Refusing to start: THIRAMAI_DEBUG must be disabled in production.")
+    if not settings.enforce_secure_cookies_truthy():
+        raise RuntimeError("Refusing to start: THIRAMAI_ENFORCE_SECURE_COOKIES must be enabled in production.")
+    if not settings.disable_auto_schema_create_truthy():
+        raise RuntimeError("Refusing to start: THIRAMAI_DISABLE_AUTO_SCHEMA_CREATE must be enabled in production.")
+
+    try:
+        access_minutes = int((os.getenv("JWT_ACCESS_EXPIRE_MINUTES") or os.getenv("JWT_EXPIRE_MINUTES") or "30").strip())
+    except ValueError:
+        access_minutes = 30
+    if access_minutes > 60:
+        raise RuntimeError("Refusing to start: JWT access expiry must be <= 60 minutes in production.")
+    try:
+        refresh_days = int((os.getenv("JWT_REFRESH_EXPIRE_DAYS") or "30").strip())
+    except ValueError:
+        refresh_days = 30
+    if refresh_days <= 0 or refresh_days > 45:
+        raise RuntimeError("Refusing to start: JWT refresh expiry must be in range 1..45 days in production.")

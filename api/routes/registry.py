@@ -24,10 +24,12 @@ def attach_domain_routers(app: FastAPI) -> None:
     from api.routes.health import router as health_router
     from api.routes.jarvis_bridge import router as jarvis_bridge_router
     from api.routes.execute import router as execute_router
+    from api.routes.brain_execute import router as brain_execute_router
 
     app.include_router(health_router)
     app.include_router(jarvis_bridge_router)
     app.include_router(execute_router)
+    app.include_router(brain_execute_router)
 
     from api.routes.kernel_microkernel import router as kernel_microkernel_router
 
@@ -85,6 +87,43 @@ def attach_domain_routers(app: FastAPI) -> None:
     from api.routes.autonomy import router as autonomy_router
     from api.routes.integrations import router as integrations_router
     from api.routes.push_notifications import router as push_notifications_router
+    from api.routes.automation import router as automation_router
+    from api.routes.opportunities import router as opportunities_router
+    from api.routes.learning import router as learning_router
+    from api.routes.governance import router as governance_router
+    from api.routes.money_loop import router as money_loop_router
+    from api.routes.system_overview import router as system_overview_router
+    from api.routes.predict import router as predict_router
+    from api.routes.feedback import router as feedback_router
+    from api.routes.experimentation import router as experimentation_router
+    from api.routes.market_timing import router as market_timing_router
+    from api.routes.autonomy_control import router as autonomy_control_router
+    from api.routes.goal_engine import router as goal_engine_router
+    from api.routes.research_loop import router as research_loop_router
+    from api.routes.invention_loop import router as invention_loop_router
+    from api.routes.scientific_validation import router as scientific_validation_router
+    from api.routes.proactive_autonomy import router as proactive_autonomy_router
+    from api.routes.real_world_autonomy import router as real_world_autonomy_router
+    from api.routes.full_autonomous_operator import router as full_autonomous_operator_router
+    from api.routes.tool_builder import router as tool_builder_router
+    from api.routes.long_term_memory import router as long_term_memory_router
+    from api.routes.goal_prioritization import router as goal_prioritization_router
+    from api.routes.self_expansion import router as self_expansion_router
+    from api.routes.continuous_thinking import router as continuous_thinking_router
+    from api.routes.continuity import router as continuity_router
+    from api.routes.world_model import router as world_model_router
+    from api.routes.simulation import router as simulation_router
+    from api.routes.strategy_generator import router as strategy_generator_router
+    from api.routes.multi_org_control import router as multi_org_control_router
+    from api.routes.revenue_engine import router as revenue_engine_router
+    from api.routes.autonomous_operations import router as autonomous_operations_router
+    from api.routes.system_bootstrap import router as system_bootstrap_router
+    from api.routes.research_projects import router as research_projects_router
+    from api.routes.action_execution import router as action_execution_router
+    from api.routes.autonomy_safety import router as autonomy_safety_router
+    from api.routes.domain_dominion import router as domain_dominion_router
+    from api.routes.decision_intelligence import router as decision_intelligence_router
+    from api.routes.negotiation_intelligence import router as negotiation_intelligence_router
 
     app.include_router(personal_router)
     app.include_router(personal_command_center_router)
@@ -111,6 +150,43 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(stock_ws_router, prefix="/ws")
     app.include_router(integrations_router)
     app.include_router(push_notifications_router)
+    app.include_router(automation_router)
+    app.include_router(opportunities_router)
+    app.include_router(learning_router)
+    app.include_router(governance_router)
+    app.include_router(money_loop_router)
+    app.include_router(system_overview_router)
+    app.include_router(predict_router)
+    app.include_router(feedback_router)
+    app.include_router(experimentation_router)
+    app.include_router(market_timing_router)
+    app.include_router(autonomy_control_router)
+    app.include_router(goal_engine_router)
+    app.include_router(research_loop_router)
+    app.include_router(invention_loop_router)
+    app.include_router(scientific_validation_router)
+    app.include_router(proactive_autonomy_router)
+    app.include_router(real_world_autonomy_router)
+    app.include_router(full_autonomous_operator_router)
+    app.include_router(tool_builder_router)
+    app.include_router(long_term_memory_router)
+    app.include_router(goal_prioritization_router)
+    app.include_router(self_expansion_router)
+    app.include_router(continuous_thinking_router)
+    app.include_router(continuity_router)
+    app.include_router(world_model_router)
+    app.include_router(simulation_router)
+    app.include_router(strategy_generator_router)
+    app.include_router(multi_org_control_router)
+    app.include_router(revenue_engine_router)
+    app.include_router(autonomous_operations_router)
+    app.include_router(system_bootstrap_router)
+    app.include_router(research_projects_router)
+    app.include_router(action_execution_router)
+    app.include_router(autonomy_safety_router)
+    app.include_router(domain_dominion_router)
+    app.include_router(decision_intelligence_router)
+    app.include_router(negotiation_intelligence_router)
     app.include_router(ai_chat_router)
     app.include_router(life_os_router)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -42,6 +43,104 @@ ACTIVE_ORGS = Gauge(
     "thiramai_active_organizations",
     "Number of active organizations",
 )
+
+
+def _execution_runtime_metrics(window_hours: int = 24) -> dict:
+    engine = get_engine()
+    if engine is None:
+        return {"ok": False, "reason": "database_unavailable"}
+    since = datetime.now(timezone.utc) - timedelta(hours=max(1, int(window_hours)))
+    try:
+        with engine.connect() as conn:
+            total = int(
+                conn.execute(
+                    text(
+                        "SELECT COUNT(*) FROM action_execution_runs WHERE created_at >= :since"
+                    ),
+                    {"since": since},
+                ).scalar()
+                or 0
+            )
+            success = int(
+                conn.execute(
+                    text(
+                        "SELECT COUNT(*) FROM action_execution_runs WHERE created_at >= :since AND status = 'completed'"
+                    ),
+                    {"since": since},
+                ).scalar()
+                or 0
+            )
+            failed = int(
+                conn.execute(
+                    text(
+                        "SELECT COUNT(*) FROM action_execution_runs WHERE created_at >= :since AND status = 'failed'"
+                    ),
+                    {"since": since},
+                ).scalar()
+                or 0
+            )
+            retrying = int(
+                conn.execute(
+                    text(
+                        "SELECT COUNT(*) FROM action_execution_runs WHERE created_at >= :since AND status = 'retrying'"
+                    ),
+                    {"since": since},
+                ).scalar()
+                or 0
+            )
+            avg_exec_seconds = float(
+                conn.execute(
+                    text(
+                        "SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (updated_at - created_at))), 0) "
+                        "FROM action_execution_runs WHERE created_at >= :since"
+                    ),
+                    {"since": since},
+                ).scalar()
+                or 0.0
+            )
+            backlog = int(
+                conn.execute(
+                    text(
+                        "SELECT COUNT(*) FROM action_execution_runs "
+                        "WHERE status IN ('planned', 'awaiting_confirmation', 'running')"
+                    )
+                ).scalar()
+                or 0
+            )
+            stuck_running = int(
+                conn.execute(
+                    text(
+                        "SELECT COUNT(*) FROM action_execution_runs "
+                        "WHERE status = 'running' AND updated_at < :stuck_cutoff"
+                    ),
+                    {"stuck_cutoff": datetime.now(timezone.utc) - timedelta(minutes=20)},
+                ).scalar()
+                or 0
+            )
+        success_rate = (float(success) / float(total)) if total > 0 else 0.0
+        failure_rate = (float(failed) / float(total)) if total > 0 else 0.0
+        retry_rate = (float(retrying) / float(total)) if total > 0 else 0.0
+        alerts: list[dict] = []
+        if failure_rate >= 0.30:
+            alerts.append({"level": "warning", "type": "high_failure_rate", "value": round(failure_rate, 4)})
+        if retry_rate >= 0.25:
+            alerts.append({"level": "warning", "type": "high_retry_rate", "value": round(retry_rate, 4)})
+        if backlog >= 100 or stuck_running > 0:
+            alerts.append({"level": "critical", "type": "execution_backlog_or_stuck_runs", "backlog": backlog, "stuck_running": stuck_running})
+        return {
+            "ok": True,
+            "window_hours": int(window_hours),
+            "total_runs": total,
+            "success_rate": round(success_rate, 4),
+            "failure_rate": round(failure_rate, 4),
+            "retry_rate": round(retry_rate, 4),
+            "avg_execution_time_seconds": round(avg_exec_seconds, 3),
+            "execution_backlog": backlog,
+            "stuck_running_count": stuck_running,
+            "alerts": alerts,
+        }
+    except Exception as exc:
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
 
 
 def observe_request_metric(method: str, endpoint: str, status: int, start_ts: float) -> None:
@@ -211,6 +310,11 @@ def health_ready() -> JSONResponse:
         "open_count": sum(1 for b in cb_snaps if str(b.get("state")) == "open"),
         "items": cb_snaps,
     }
+    checks["execution_runtime"] = _execution_runtime_metrics(window_hours=24)
+    if checks["execution_runtime"].get("ok"):
+        rt = checks["execution_runtime"]
+        if float(rt.get("failure_rate") or 0.0) >= 0.30 or int(rt.get("stuck_running_count") or 0) > 0:
+            ok_all = False
 
     body = {
         "status": "ready" if ok_all else "not_ready",
@@ -219,3 +323,10 @@ def health_ready() -> JSONResponse:
         "metrics": http_metrics_snapshot(),
     }
     return JSONResponse(status_code=200 if ok_all else 503, content=body)
+
+
+@router.get("/health/system", summary="Execution health and backlog")
+def health_system() -> JSONResponse:
+    payload = _execution_runtime_metrics(window_hours=24)
+    ok = bool(payload.get("ok")) and int(payload.get("stuck_running_count") or 0) == 0
+    return JSONResponse(status_code=200 if ok else 503, content=payload)

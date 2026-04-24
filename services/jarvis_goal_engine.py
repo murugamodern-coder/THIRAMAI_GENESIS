@@ -244,6 +244,7 @@ def get_active_goals_sync(*, user_id: int, limit: int = 20) -> list[dict[str, An
                 "deadline": g.deadline.isoformat() if g.deadline else None,
                 "status": g.status,
                 "progress": g.progress or {},
+                "meta": g.meta or {},
                 "organization_id": int(g.organization_id) if g.organization_id else None,
                 "subtasks": subs,
             }

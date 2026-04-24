@@ -30,6 +30,14 @@ const GSTPage = lazy(() => import("./pages/business/GSTPage.jsx"));
 const PurchaseOrdersPage = lazy(() => import("./pages/business/PurchaseOrdersPage.jsx"));
 const PayrollPage = lazy(() => import("./pages/business/PayrollPage.jsx"));
 const ReportsPage = lazy(() => import("./pages/business/ReportsPage.jsx"));
+const AutomationPage = lazy(() => import("./pages/AutomationPage.jsx"));
+const IntegrationsPage = lazy(() => import("./pages/IntegrationsPage.jsx"));
+const OpportunitiesPage = lazy(() => import("./pages/OpportunitiesPage.jsx"));
+const LearningInsightsPage = lazy(() => import("./pages/LearningInsightsPage.jsx"));
+const ControlCenterPage = lazy(() => import("./pages/ControlCenterPage.jsx"));
+const MoneyLoopPage = lazy(() => import("./pages/MoneyLoopPage.jsx"));
+const WarRoomPage = lazy(() => import("./pages/WarRoomPage.jsx"));
+const ResearchProjectsPage = lazy(() => import("./pages/ResearchProjectsPage.jsx"));
 import PersonalShellLayout from "./layout/PersonalShellLayout.jsx";
 import PersonalHomePage from "./pages/personal/PersonalHomePage.jsx";
 import PersonalFinancePage from "./pages/personal/PersonalFinancePage.jsx";
@@ -43,6 +51,7 @@ import CopilotPage from "./pages/CopilotPage.jsx";
 import ResearchPage from "./pages/ResearchPage.jsx";
 import StockOSPage from "./pages/StockOSPage.jsx";
 import AgenticOSPage from "./pages/AgenticOSPage.jsx";
+import BrainPage from "./pages/BrainPage.jsx";
 import { postUsageEvent } from "./api/commandCenterApi.js";
 import { defaultRouteForRole, ROLES } from "./lib/rbac.js";
 
@@ -72,10 +81,6 @@ function LegacyRouteRedirect({ to, from }) {
     }).catch(() => {});
   }, [from, location.pathname, to]);
   return <Navigate to={to} replace />;
-}
-
-function BrainWorkspacePage() {
-  return <div className="text-sm text-slate-300">Jarvis workspace ready. Ask anything to begin.</div>;
 }
 
 export default function App() {
@@ -113,10 +118,118 @@ export default function App() {
         path="/central"
         element={
           <Protected>
-            <Navigate to="/dashboard" replace />
+            <Navigate to="/brain" replace />
           </Protected>
         }
       />
+      <Route
+        path="/brain"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<BrainPage />} />
+      </Route>
+      <Route
+        path="/automation"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<AutomationPage />} />
+      </Route>
+      <Route
+        path="/integrations"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<IntegrationsPage />} />
+      </Route>
+      <Route
+        path="/opportunities"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<OpportunitiesPage />} />
+      </Route>
+      <Route
+        path="/learning"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<LearningInsightsPage />} />
+      </Route>
+      <Route
+        path="/control-center"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<ControlCenterPage />} />
+      </Route>
+      <Route
+        path="/money-loop"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<MoneyLoopPage />} />
+      </Route>
+      <Route
+        path="/war-room"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<WarRoomPage />} />
+      </Route>
+      <Route
+        path="/research-projects"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<ResearchProjectsPage />} />
+      </Route>
       <Route
         path="/dashboard"
         element={
@@ -127,7 +240,7 @@ export default function App() {
           </Protected>
         }
       >
-        <Route index element={<BrainWorkspacePage />} />
+        <Route index element={<Navigate to="/brain" replace />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="stocks" element={<LegacyRouteRedirect from="/dashboard/stocks" to="/os/stock" />} />
         <Route path="website-builder" element={<LegacyRouteRedirect from="/dashboard/website-builder" to="/os/agentic-platform" />} />

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { fetchAuthMe } from "../api/commandCenterApi.js";
-import AIAssistantPanel from "../components/dashboard/AIAssistantPanel.jsx";
 import { visibleNavForRole } from "../lib/navigationVisibility.js";
 import { useCommandStore } from "../store/useCommandStore.js";
 
@@ -138,14 +137,9 @@ export default function ShellLayout() {
       </aside>
       <main id="cc-main-content" className="flex-1 overflow-y-auto px-2 pb-28 pt-3 sm:px-4 md:p-6">
         <div className="mx-auto w-full max-w-6xl">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4 lg:col-span-7">
-              <AIAssistantPanel />
-            </section>
-            <section className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40 p-3 sm:p-4 lg:col-span-5">
-              <Outlet />
-            </section>
-          </div>
+          <section className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40 p-3 sm:p-4">
+            <Outlet />
+          </section>
         </div>
       </main>
     </div>

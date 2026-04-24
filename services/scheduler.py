@@ -1,5 +1,6 @@
 """
-Scheduled autonomous tasks: morning brief (IST), stock alert monitor tick, health heartbeat.
+Scheduled autonomous tasks: morning brief (IST), stock alert monitor tick, health heartbeat,
+continuous brain loop (``brain_continuous_loop_cron`` every 5 minutes), and more.
 
 Uses asyncio loops + sync DB/Groq in threads; Redis async client from ``core.redis_cache``.
 """
@@ -9,11 +10,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
+
+from core.observability import log_structured
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -26,6 +30,12 @@ except ImportError:  # pragma: no cover
     ZoneInfo = None  # type: ignore[misc,assignment]
 
 INDIA_TZ = ZoneInfo("Asia/Kolkata") if ZoneInfo else None
+
+
+def _run_command_via_brain_sync(user_id: int, organization_id: int, command: str) -> dict[str, Any]:
+    from services.brain_execute import brain_execute
+
+    return brain_execute(str(command or "")[:1200], int(user_id), int(organization_id))
 
 
 def _now_ist() -> datetime:
@@ -68,6 +78,35 @@ def distinct_active_organization_ids_sync() -> list[int]:
         )
         rows = session.execute(stmt).scalars().all()
         return sorted({int(r) for r in rows if r is not None})
+
+
+def distinct_active_user_org_pairs_sync(limit: int = 200) -> list[tuple[int, int]]:
+    """Active (user_id, organization_id) pairs for tenant periodic tasks."""
+    from core.database import get_session_factory
+    from core.db.models import User, UserOrganizationMembership
+
+    factory = get_session_factory()
+    if factory is None:
+        return []
+    with factory() as session:
+        stmt = (
+            select(UserOrganizationMembership.user_id, UserOrganizationMembership.organization_id)
+            .join(User, UserOrganizationMembership.user_id == User.id)
+            .where(UserOrganizationMembership.is_active.is_(True), User.is_active.is_(True))
+            .limit(max(1, min(int(limit), 2000)))
+        )
+        rows = session.execute(stmt).all()
+        out: list[tuple[int, int]] = []
+        seen: set[tuple[int, int]] = set()
+        for uid, oid in rows:
+            if uid is None or oid is None:
+                continue
+            pair = (int(uid), int(oid))
+            if pair in seen:
+                continue
+            seen.add(pair)
+            out.append(pair)
+        return out
 
 
 def fetch_stock_alert_rows_sync(limit: int = 50) -> list[tuple[str, int]]:
@@ -163,6 +202,119 @@ async def fetch_or_generate_morning_brief(org_id: int) -> dict[str, Any]:
     }
 
 
+def _autonomous_business_operator_enabled() -> bool:
+    try:
+        from services.autonomous_business_operator import is_enabled
+
+        return bool(is_enabled())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _user_kill_switch_active(user_id: int) -> bool:
+    """True when user-level execution kill switch is active."""
+    try:
+        from services.governance_engine import is_kill_switch_active
+
+        return bool(is_kill_switch_active(int(user_id)))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _env_int(name: str, default: int, *, low: int = 1, high: int = 100000) -> int:
+    try:
+        v = int((os.getenv(name) or str(default)).strip() or str(default))
+    except Exception:
+        v = int(default)
+    return max(int(low), min(int(high), int(v)))
+
+
+def _system_pressure_snapshot_sync(window_minutes: int = 30) -> dict[str, Any]:
+    from core.database import get_session_factory
+    from core.db.models import ActionExecutionRun
+
+    fn = get_session_factory()
+    if fn is None:
+        return {"ok": False, "reason": "database_unavailable"}
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=max(1, int(window_minutes)))
+    with fn() as session:
+        total_rows = session.execute(
+            select(ActionExecutionRun.id).where(ActionExecutionRun.created_at >= cutoff).limit(5000)
+        ).all()
+        success_rows = session.execute(
+            select(ActionExecutionRun.id).where(
+                ActionExecutionRun.created_at >= cutoff,
+                ActionExecutionRun.status == "completed",
+            ).limit(5000)
+        ).all()
+        failed_rows = session.execute(
+            select(ActionExecutionRun.id).where(
+                ActionExecutionRun.created_at >= cutoff,
+                ActionExecutionRun.status == "failed",
+            ).limit(5000)
+        ).all()
+        retry_rows = session.execute(
+            select(ActionExecutionRun.id).where(
+                ActionExecutionRun.created_at >= cutoff,
+                ActionExecutionRun.source_command.ilike("%[auto-retry parent=%"),
+            ).limit(5000)
+        ).all()
+        backlog_rows = session.execute(
+            select(ActionExecutionRun.id).where(
+                ActionExecutionRun.status.in_(["planned", "awaiting_confirmation", "running"])
+            ).limit(5000)
+        ).all()
+        stuck_rows = session.execute(
+            select(ActionExecutionRun.id).where(
+                ActionExecutionRun.status == "running",
+                ActionExecutionRun.updated_at < (now - timedelta(minutes=20)),
+            ).limit(5000)
+        ).all()
+    total = len(total_rows)
+    success = len(success_rows)
+    failed = len(failed_rows)
+    retries = len(retry_rows)
+    backlog = len(backlog_rows)
+    stuck = len(stuck_rows)
+    return {
+        "ok": True,
+        "window_minutes": int(window_minutes),
+        "total": total,
+        "success_rate": (float(success) / float(total)) if total else 0.0,
+        "failure_rate": (float(failed) / float(total)) if total else 0.0,
+        "retry_rate": (float(retries) / float(total)) if total else 0.0,
+        "backlog": backlog,
+        "stuck": stuck,
+    }
+
+
+def _rotate_pairs(pairs: list[tuple[int, int]], offset: int) -> list[tuple[int, int]]:
+    if not pairs:
+        return []
+    n = len(pairs)
+    o = int(offset) % n
+    return pairs[o:] + pairs[:o]
+
+
+async def _run_bounded_pairs(
+    pairs: list[tuple[int, int]],
+    *,
+    worker_coro,
+    max_concurrency: int = 8,
+) -> None:
+    sem = asyncio.Semaphore(max(1, int(max_concurrency)))
+
+    async def _one(uid: int, oid: int) -> None:
+        async with sem:
+            await worker_coro(uid, oid)
+
+    tasks = [asyncio.create_task(_one(int(uid), int(oid))) for uid, oid in pairs]
+    if not tasks:
+        return
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
 class ThiramaiScheduler:
     """Background asyncio tasks triggered at intervals (IST-aligned daily brief)."""
 
@@ -170,6 +322,15 @@ class ThiramaiScheduler:
         self.app = app
         self.tasks: list[asyncio.Task[Any]] = []
         self.running = False
+        self._loop_cursor: dict[str, int] = defaultdict(int)
+        self._guard: dict[str, Any] = {
+            "degraded": False,
+            "blocked_autonomy": False,
+            "reduced_concurrency_factor": 1.0,
+            "stable_ticks": 0,
+            "degraded_reason": "",
+            "last_snapshot": {},
+        }
 
     async def start(self) -> None:
         self.running = True
@@ -178,13 +339,106 @@ class ThiramaiScheduler:
             asyncio.create_task(self.stock_alert_monitor()),
             asyncio.create_task(self.system_health_check()),
             asyncio.create_task(self.memory_cleanup()),
+            asyncio.create_task(self.execution_watchdog_cron()),
+            asyncio.create_task(self.opportunity_scan_cron()),
+            asyncio.create_task(self.learning_optimize_cron()),
+            asyncio.create_task(self.automation_scheduled_eval_cron()),
+            asyncio.create_task(self.money_loop_cron()),
+            asyncio.create_task(self.goal_engine_cron()),
+            asyncio.create_task(self.research_loop_cron()),
+            asyncio.create_task(self.continuous_thinking_cron()),
+            asyncio.create_task(self.brain_continuous_loop_cron()),
+            asyncio.create_task(self.strategic_intelligence_cron()),
+            asyncio.create_task(self.autonomous_operations_cron()),
+            asyncio.create_task(self.continuity_loop_cron()),
+            asyncio.create_task(self.domain_weekly_review_cron()),
         ]
+        if _autonomous_business_operator_enabled():
+            self.tasks.append(asyncio.create_task(self.autonomous_business_operator_cron()))
 
     async def stop(self) -> None:
         self.running = False
         for t in self.tasks:
             t.cancel()
         self.tasks.clear()
+
+    async def _refresh_guard(self) -> dict[str, Any]:
+        snap = await asyncio.to_thread(_system_pressure_snapshot_sync, _env_int("THIRAMAI_GUARD_WINDOW_MINUTES", 30, low=5, high=240))
+        self._guard["last_snapshot"] = snap
+        if not bool(snap.get("ok")):
+            return self._guard
+        fail_thr = float((os.getenv("THIRAMAI_GUARD_FAILURE_RATE_THRESHOLD") or "0.30").strip() or 0.30)
+        retry_thr = float((os.getenv("THIRAMAI_GUARD_RETRY_RATE_THRESHOLD") or "0.25").strip() or 0.25)
+        backlog_thr = _env_int("THIRAMAI_GUARD_BACKLOG_THRESHOLD", 120, low=10, high=10000)
+        stuck_thr = _env_int("THIRAMAI_GUARD_STUCK_THRESHOLD", 1, low=0, high=1000)
+        degrade = (
+            float(snap.get("failure_rate") or 0.0) > fail_thr
+            or float(snap.get("retry_rate") or 0.0) > retry_thr
+            or int(snap.get("backlog") or 0) > backlog_thr
+            or int(snap.get("stuck") or 0) >= stuck_thr
+        )
+        if degrade:
+            self._guard["degraded"] = True
+            self._guard["blocked_autonomy"] = True
+            self._guard["reduced_concurrency_factor"] = 0.5
+            self._guard["stable_ticks"] = 0
+            self._guard["degraded_reason"] = (
+                f"fail={snap.get('failure_rate'):.3f},retry={snap.get('retry_rate'):.3f},"
+                f"backlog={int(snap.get('backlog') or 0)},stuck={int(snap.get('stuck') or 0)}"
+            )
+            log_structured("scheduler_guard_degraded", reason=self._guard["degraded_reason"], snapshot=snap)
+        else:
+            self._guard["stable_ticks"] = int(self._guard.get("stable_ticks") or 0) + 1
+            recover_ticks = _env_int("THIRAMAI_GUARD_RECOVERY_TICKS", 3, low=1, high=100)
+            if self._guard.get("degraded") and int(self._guard["stable_ticks"]) >= recover_ticks:
+                self._guard["degraded"] = False
+                self._guard["blocked_autonomy"] = False
+                self._guard["reduced_concurrency_factor"] = 1.0
+                self._guard["degraded_reason"] = ""
+                log_structured("scheduler_guard_recovered", stable_ticks=int(self._guard["stable_ticks"]), snapshot=snap)
+        return self._guard
+
+    def _guarded_concurrency(self, base: int) -> int:
+        factor = float(self._guard.get("reduced_concurrency_factor") or 1.0)
+        return max(1, int(max(1, int(base)) * factor))
+
+    def _load_shed_pairs(self, loop_name: str, pairs: list[tuple[int, int]], *, high_priority_only: bool = False) -> list[tuple[int, int]]:
+        items = [(int(uid), int(oid)) for uid, oid in pairs]
+        if not items:
+            return []
+        cur = int(self._loop_cursor.get(loop_name) or 0)
+        rotated = _rotate_pairs(items, cur)
+        self._loop_cursor[loop_name] = (cur + 1) % len(rotated)
+        if not self._guard.get("degraded"):
+            return rotated
+        max_items = _env_int("THIRAMAI_GUARD_MAX_PAIRS_WHEN_DEGRADED", 30, low=1, high=5000)
+        subset = rotated[:max_items]
+        if high_priority_only:
+            return subset[: max(1, max_items // 2)]
+        return subset
+
+    async def autonomous_business_operator_cron(self) -> None:
+        """Every 3–5 min (default 4): mega-tick (execution loop, env scan, autonomy) with staggered deal/strategy."""
+        from services.autonomous_business_operator import (
+            mega_tick_interval_seconds,
+            run_business_operator_tick_batch,
+        )
+
+        tick_n = 0
+        while self.running:
+            try:
+                if not self.running:
+                    break
+                tick_n += 1
+                await asyncio.to_thread(run_business_operator_tick_batch, tick_n)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("autonomous_business_operator_cron error: %s", exc)
+            try:
+                await asyncio.sleep(mega_tick_interval_seconds())
+            except asyncio.CancelledError:
+                break
 
     async def daily_morning_brief(self) -> None:
         """Every day at ~8:00 AM IST — generate briefs per active org and store in Redis."""
@@ -283,3 +537,469 @@ class ThiramaiScheduler:
                 _log.info("Memory cleanup tick (conversation keys self-expire via TTL)")
             except asyncio.CancelledError:
                 break
+
+    async def execution_watchdog_cron(self) -> None:
+        """
+        Every few minutes: detect stale execution runs and route them to closure authority.
+
+        Env knobs:
+        - ``THIRAMAI_EXECUTION_WATCHDOG_CRON`` (default 1)
+        - ``THIRAMAI_EXECUTION_WATCHDOG_INTERVAL_MINUTES`` (default 5)
+        - ``THIRAMAI_EXECUTION_RUNNING_TIMEOUT_MINUTES`` (default 15)
+        - ``THIRAMAI_EXECUTION_AWAITING_TIMEOUT_MINUTES`` (default 30)
+        - ``THIRAMAI_EXECUTION_WATCHDOG_COOLDOWN_MINUTES`` (default 5)
+        """
+        import os
+
+        from services.execution_watchdog import run_execution_watchdog_scan, run_retry_job_drain
+
+        interval_min = 5
+        running_timeout_min = 15
+        awaiting_timeout_min = 30
+        cooldown_min = 5
+        try:
+            interval_min = max(1, int((os.getenv("THIRAMAI_EXECUTION_WATCHDOG_INTERVAL_MINUTES") or "5").strip()))
+            running_timeout_min = max(1, int((os.getenv("THIRAMAI_EXECUTION_RUNNING_TIMEOUT_MINUTES") or "15").strip()))
+            awaiting_timeout_min = max(1, int((os.getenv("THIRAMAI_EXECUTION_AWAITING_TIMEOUT_MINUTES") or "30").strip()))
+            cooldown_min = max(1, int((os.getenv("THIRAMAI_EXECUTION_WATCHDOG_COOLDOWN_MINUTES") or "5").strip()))
+        except Exception:
+            interval_min = 5
+            running_timeout_min = 15
+            awaiting_timeout_min = 30
+            cooldown_min = 5
+
+        while self.running:
+            try:
+                if (os.getenv("THIRAMAI_EXECUTION_WATCHDOG_CRON") or "1").strip() == "0":
+                    await asyncio.sleep(3600)
+                    continue
+                await asyncio.sleep(interval_min * 60)
+                if not self.running:
+                    break
+                await self._refresh_guard()
+                max_runs = _env_int("THIRAMAI_WATCHDOG_MAX_RUNS_PER_SCAN", 200, low=20, high=5000)
+                if self._guard.get("degraded"):
+                    max_runs = max(20, max_runs // 2)
+                await asyncio.to_thread(
+                    run_execution_watchdog_scan,
+                    running_timeout_min=running_timeout_min,
+                    awaiting_confirmation_timeout_min=awaiting_timeout_min,
+                    cooldown_min=cooldown_min,
+                    max_runs_per_scan=max_runs,
+                )
+                await asyncio.to_thread(run_retry_job_drain, max_runs=max_runs)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("execution_watchdog_cron error: %s", exc)
+                await asyncio.sleep(30)
+
+    async def opportunity_scan_cron(self) -> None:
+        """Every 30 minutes: scan opportunities via async queue."""
+        from services.async_task_queue import enqueue_task
+        from services.opportunity_engine import scan_all_opportunities
+
+        while self.running:
+            try:
+                await asyncio.sleep(1800)
+                if not self.running:
+                    break
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 120)
+                for uid, oid in pairs:
+                    if _user_kill_switch_active(int(uid)):
+                        continue
+                    queued = enqueue_task("opportunity_scan", {"user_id": uid, "organization_id": oid})
+                    if not queued.get("queued"):
+                        await asyncio.to_thread(scan_all_opportunities, uid, oid)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("opportunity_scan_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def learning_optimize_cron(self) -> None:
+        """Hourly strategy optimization."""
+        from services.async_task_queue import enqueue_task
+        from services.learning_engine import update_strategy_profiles
+
+        while self.running:
+            try:
+                await asyncio.sleep(3600)
+                if not self.running:
+                    break
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 200)
+                seen_users: set[int] = set()
+                for uid, _oid in pairs:
+                    if _user_kill_switch_active(int(uid)):
+                        continue
+                    if uid in seen_users:
+                        continue
+                    seen_users.add(uid)
+                    queued = enqueue_task("learning_optimize", {"user_id": uid})
+                    if not queued.get("queued"):
+                        await asyncio.to_thread(update_strategy_profiles, uid)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("learning_optimize_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def automation_scheduled_eval_cron(self) -> None:
+        """Every 20 minutes: evaluate scheduled rules."""
+        from services.async_task_queue import enqueue_task
+        from services.automation_rule_engine import evaluate_rules
+
+        while self.running:
+            try:
+                await asyncio.sleep(1200)
+                if not self.running:
+                    break
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 200)
+                for uid, oid in pairs:
+                    if _user_kill_switch_active(int(uid)):
+                        continue
+                    event = {
+                        "user_id": uid,
+                        "organization_id": oid,
+                        "role_name": "owner",
+                        "trigger_type": "scheduled_check",
+                        "payload": {"source": "scheduler", "ts": _now_ist().isoformat()},
+                    }
+                    queued = enqueue_task("automation_evaluate", event)
+                    if not queued.get("queued"):
+                        await asyncio.to_thread(evaluate_rules, event)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("automation_scheduled_eval_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def money_loop_cron(self) -> None:
+        """Every X minutes run continuous money loop cycle."""
+
+        interval_min = 15
+        try:
+            import os
+
+            interval_min = max(1, int((os.getenv("THIRAMAI_MONEY_LOOP_INTERVAL_MINUTES") or "15").strip()))
+        except Exception:
+            interval_min = 15
+
+        while self.running:
+            try:
+                await asyncio.sleep(interval_min * 60)
+                if not self.running:
+                    break
+                await self._refresh_guard()
+                if bool(self._guard.get("blocked_autonomy")):
+                    _log.warning("money_loop_cron shed: guard blocked autonomy reason=%s", self._guard.get("degraded_reason"))
+                    continue
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 200)
+                picked = self._load_shed_pairs(
+                    "money_loop_cron",
+                    [(uid, oid) for uid, oid in pairs if not _user_kill_switch_active(int(uid))],
+                    high_priority_only=True,
+                )
+                max_concurrency = self._guarded_concurrency(_env_int("THIRAMAI_MONEY_LOOP_MAX_CONCURRENCY", 6, low=1, high=128))
+
+                async def _worker(uid: int, oid: int) -> None:
+                    await asyncio.to_thread(
+                        _run_command_via_brain_sync,
+                        int(uid),
+                        int(oid),
+                        "Run money loop cycle with governance and safety gates",
+                    )
+
+                await _run_bounded_pairs(picked, worker_coro=_worker, max_concurrency=max_concurrency)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("money_loop_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def goal_engine_cron(self) -> None:
+        """Daily goal refresh and progress advance."""
+
+        while self.running:
+            try:
+                await asyncio.sleep(6 * 3600)
+                if not self.running:
+                    break
+                await self._refresh_guard()
+                if bool(self._guard.get("blocked_autonomy")):
+                    _log.warning("goal_engine_cron shed: guard blocked autonomy reason=%s", self._guard.get("degraded_reason"))
+                    continue
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 200)
+                picked = self._load_shed_pairs(
+                    "goal_engine_cron",
+                    [(uid, oid) for uid, oid in pairs if not _user_kill_switch_active(int(uid))],
+                    high_priority_only=True,
+                )
+                max_concurrency = self._guarded_concurrency(_env_int("THIRAMAI_GOAL_ENGINE_MAX_CONCURRENCY", 6, low=1, high=128))
+
+                async def _worker(uid: int, oid: int) -> None:
+                    await asyncio.to_thread(
+                        _run_command_via_brain_sync,
+                        int(uid),
+                        int(oid),
+                        "Refresh strategic goals, snapshot weekly progress, and apply autonomy contract checks",
+                    )
+
+                await _run_bounded_pairs(picked, worker_coro=_worker, max_concurrency=max_concurrency)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("goal_engine_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def research_loop_cron(self) -> None:
+        """Every 4 hours run baseline research-loop experiments."""
+
+        while self.running:
+            try:
+                await asyncio.sleep(4 * 3600)
+                if not self.running:
+                    break
+                await self._refresh_guard()
+                if bool(self._guard.get("blocked_autonomy")):
+                    _log.warning("research_loop_cron shed: guard blocked autonomy reason=%s", self._guard.get("degraded_reason"))
+                    continue
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 120)
+                picked = self._load_shed_pairs(
+                    "research_loop_cron",
+                    [(uid, oid) for uid, oid in pairs if not _user_kill_switch_active(int(uid))],
+                    high_priority_only=False,
+                )
+                max_concurrency = self._guarded_concurrency(_env_int("THIRAMAI_RESEARCH_LOOP_MAX_CONCURRENCY", 5, low=1, high=128))
+
+                async def _worker(uid: int, oid: int) -> None:
+                    await asyncio.to_thread(
+                        _run_command_via_brain_sync,
+                        int(uid),
+                        int(oid),
+                        "Run research loop hypothesis experiment compare and promote update",
+                    )
+
+                await _run_bounded_pairs(picked, worker_coro=_worker, max_concurrency=max_concurrency)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("research_loop_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def brain_continuous_loop_cron(self) -> None:
+        """
+        Every 5 minutes: ``run_brain_cycle`` for each active user+organization pair.
+
+        Respects global autonomy halt, per-user kill switch (guardrails), and governance
+        inside ``run_brain_cycle`` (autonomy mode, ``validate_action``). Set
+        ``THIRAMAI_BRAIN_CONTINUOUS_LOOP_CRON=0`` to disable.
+        """
+        import os
+
+        from services.autonomy_safety_layer import global_autonomy_halted
+        from services.continuous_brain_loop import run_brain_cycle
+        base_concurrency = max(1, int((os.getenv("THIRAMAI_BRAIN_LOOP_MAX_CONCURRENCY") or "8").strip() or 8))
+
+        while self.running:
+            try:
+                if (os.getenv("THIRAMAI_BRAIN_CONTINUOUS_LOOP_CRON") or "1").strip() == "0":
+                    await asyncio.sleep(3600)
+                    continue
+                await asyncio.sleep(300)
+                if not self.running:
+                    break
+                if global_autonomy_halted():
+                    _log.info("brain_continuous_loop_cron: global autonomy halt; skipping tick")
+                    continue
+                await self._refresh_guard()
+                if bool(self._guard.get("blocked_autonomy")):
+                    _log.warning("brain_continuous_loop_cron blocked by guard: %s", self._guard.get("degraded_reason"))
+                    continue
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 300)
+                active_pairs = self._load_shed_pairs(
+                    "brain_continuous_loop_cron",
+                    [(int(uid), int(oid)) for uid, oid in pairs if not _user_kill_switch_active(int(uid))],
+                    high_priority_only=True,
+                )
+                max_concurrency = self._guarded_concurrency(base_concurrency)
+
+                async def _brain_worker(uid: int, oid: int) -> None:
+                    if not self.running:
+                        return
+                    await asyncio.to_thread(run_brain_cycle, int(uid), int(oid))
+
+                await _run_bounded_pairs(
+                    active_pairs,
+                    worker_coro=_brain_worker,
+                    max_concurrency=max_concurrency,
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("brain_continuous_loop_cron error: %s", exc)
+                await asyncio.sleep(30)
+
+    async def continuous_thinking_cron(self) -> None:
+        """Every few minutes: think -> prioritize goals -> execute -> learn."""
+
+        interval_min = 5
+        try:
+            import os
+
+            interval_min = max(1, int((os.getenv("THIRAMAI_CONTINUOUS_THINKING_INTERVAL_MINUTES") or "5").strip()))
+        except Exception:
+            interval_min = 5
+
+        while self.running:
+            try:
+                await asyncio.sleep(interval_min * 60)
+                if not self.running:
+                    break
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 200)
+                for uid, oid in pairs:
+                    if _user_kill_switch_active(int(uid)):
+                        continue
+                    await asyncio.to_thread(
+                        _run_command_via_brain_sync,
+                        int(uid),
+                        int(oid),
+                        "Run continuous thinking cycle for prioritization and learning",
+                    )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("continuous_thinking_cron error: %s", exc)
+                await asyncio.sleep(30)
+
+    async def strategic_intelligence_cron(self) -> None:
+        """Periodic world-model refresh and strategy generation."""
+
+        while self.running:
+            try:
+                await asyncio.sleep(30 * 60)
+                if not self.running:
+                    break
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 150)
+                for uid, oid in pairs:
+                    if _user_kill_switch_active(int(uid)):
+                        continue
+                    await asyncio.to_thread(
+                        _run_command_via_brain_sync,
+                        int(uid),
+                        int(oid),
+                        "Refresh world model and generate strategic promotion recommendations",
+                    )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("strategic_intelligence_cron error: %s", exc)
+                await asyncio.sleep(30)
+
+    async def domain_weekly_review_cron(self) -> None:
+        """Weekly: domain P&L review, failures, improvements (per active user+org with domain profile enabled)."""
+        import os
+
+        from services.domain_dominion_engine import get_or_create_profile, run_weekly_domain_strategy_review
+
+        while self.running:
+            try:
+                if (os.getenv("THIRAMAI_DOMAIN_WEEKLY_CRON") or "1").strip() == "0":
+                    await asyncio.sleep(3600)
+                    continue
+                await asyncio.sleep(7 * 24 * 3600)
+                if not self.running:
+                    break
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 200)
+                for uid, oid in pairs:
+                    if _user_kill_switch_active(int(uid)):
+                        continue
+                    prof = await asyncio.to_thread(get_or_create_profile, int(uid), int(oid))
+                    if not prof or not int(prof.get("id") or 0) or not prof.get("enabled", True):
+                        continue
+                    await asyncio.to_thread(run_weekly_domain_strategy_review, int(uid), int(oid))
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("domain_weekly_review_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def continuity_loop_cron(self) -> None:
+        """
+        Every 5–10 min (``THIRAMAI_CONTINUITY_INTERVAL_MINUTES``, default 6):
+        one continuity tick per active user+org (RQ when enabled, else inline thread).
+        Set ``THIRAMAI_CONTINUITY_CRON=0`` to disable this loop. Per-tenant gating: ``continuity_user_settings.enabled``.
+        """
+        import os
+
+        from services.async_task_queue import enqueue_task
+        from services.autonomous_continuity_engine import run_continuity_tick
+
+        interval_min = 6
+        try:
+            interval_min = max(1, int((os.getenv("THIRAMAI_CONTINUITY_INTERVAL_MINUTES") or "6").strip()))
+        except Exception:
+            interval_min = 6
+
+        while self.running:
+            try:
+                if (os.getenv("THIRAMAI_CONTINUITY_CRON") or "1").strip() == "0":
+                    await asyncio.sleep(3600)
+                    continue
+                await asyncio.sleep(max(1, interval_min) * 60)
+                if not self.running:
+                    break
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 200)
+                for uid, oid in pairs:
+                    if _user_kill_switch_active(int(uid)):
+                        continue
+                    pl = {
+                        "user_id": int(uid),
+                        "organization_id": int(oid),
+                        "role_name": "owner",
+                    }
+                    queued = enqueue_task("continuity_tick", pl)
+                    if not queued.get("queued"):
+                        await asyncio.to_thread(
+                            _run_command_via_brain_sync,
+                            int(uid),
+                            int(oid),
+                            "Run continuity tick for autonomous continuity engine",
+                        )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("continuity_loop_cron error: %s", exc)
+                await asyncio.sleep(30)
+
+    async def autonomous_operations_cron(self) -> None:
+        """Run daily business operations with minimal human dependency."""
+        from services.multi_org_control_engine import list_user_organizations
+
+        while self.running:
+            try:
+                await asyncio.sleep(24 * 3600)
+                if not self.running:
+                    break
+                pairs = await asyncio.to_thread(distinct_active_user_org_pairs_sync, 200)
+                # Reduce duplicate user runs; each user handles all org lanes via multi-org engine.
+                users = sorted({int(uid) for uid, _ in pairs})
+                for uid in users:
+                    if _user_kill_switch_active(int(uid)):
+                        continue
+                    orgs = await asyncio.to_thread(list_user_organizations, uid)
+                    for org in orgs:
+                        oid = int(org.get("organization_id") or 0)
+                        if oid <= 0 or bool(org.get("is_disabled")):
+                            continue
+                        await asyncio.to_thread(
+                            _run_command_via_brain_sync,
+                            int(uid),
+                            int(oid),
+                            "Run daily autonomous business operations cycle",
+                        )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("autonomous_operations_cron error: %s", exc)
+                await asyncio.sleep(60)

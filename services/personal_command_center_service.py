@@ -34,6 +34,7 @@ from core.db.models import (
 from core.personal_ai_engine import generate_daily_guidance
 from services import life_os_service
 from services import personal_meetings_service
+from services.membership_service import first_active_membership
 from services.personal_crypto import encrypt_utf8
 from services.personal_os_aggregate import MISSION_OPEN_STATUSES, build_personal_today_sync
 
@@ -1165,9 +1166,9 @@ def list_research_projects_sync(user_id: int) -> list[dict[str, Any]]:
             {
                 "id": int(r.id),
                 "title": r.title,
-                "description": (r.description or "")[:500],
+                "description": str((r.notes_json or {}).get("description") or "")[:500],
                 "status": r.status,
-                "links_json": r.links_json or {},
+                "links_json": r.sources_json or r.folders_json or {},
                 "updated_at": r.updated_at.isoformat(),
             }
             for r in rows
@@ -1180,6 +1181,7 @@ def create_research_project_sync(
     title: str,
     description: str | None,
     links_json: dict[str, Any],
+    organization_id: int | None = None,
 ) -> tuple[bool, str, int | None]:
     uid = int(user_id)
     factory = _factory()
@@ -1187,12 +1189,22 @@ def create_research_project_sync(
         return False, "database not configured", None
     with factory() as session:
         with session.begin():
+            oid = int(organization_id or 0)
+            if oid <= 0:
+                m = first_active_membership(session, uid)
+                oid = int(m.organization_id) if m is not None else 1
             row = ResearchProject(
                 user_id=uid,
-                title=title.strip()[:2000],
-                description=(description or None),
+                organization_id=oid,
+                title=title.strip()[:300],
+                domain="personal",
                 status="active",
-                links_json=dict(links_json or {}),
+                folders_json={},
+                sources_json=dict(links_json or {}),
+                notes_json={"description": (description or "")[:8000]},
+                summaries_json={},
+                experiments_json={},
+                outputs_json={},
             )
             session.add(row)
             session.flush()

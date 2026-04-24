@@ -1119,8 +1119,13 @@ async def post_agent_command(
     body: AgentCommandBody,
     user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    from services.orchestrator import create_plan_from_command
+    import asyncio
 
+    from services.brain_execute import brain_execute
+    from services.brain_execute_adapter import brain_to_agent_command_envelope
+    from services.brain_execute_deprecation import warn_deprecated_execution_forwarded
+
+    warn_deprecated_execution_forwarded("/api/agent/command")
     corr = (
         (body.correlation_id or "").strip()
         or (request.headers.get("X-Correlation-ID") or "").strip()
@@ -1128,21 +1133,17 @@ async def post_agent_command(
     )
     if not corr:
         corr = str(uuid.uuid4())
-    out = create_plan_from_command(
+    brain = await asyncio.to_thread(
+        brain_execute,
         body.command.strip(),
-        user_id=_uid(user),
-        organization_id=int(user.organization_id),
-        os_key=(body.os_key or "stock").strip().lower(),
-        correlation_id=corr[:128],
-        execution_mode=(body.execution_mode or "paper").strip().lower(),
+        _uid(user),
+        int(user.organization_id),
     )
-    if out.get("requires_approval"):
-        _log_agent.info(
-            "Jarvis awaits approval task_id=%s user_id=%s",
-            out.get("task_id"),
-            _uid(user),
-        )
-    return out
+    return brain_to_agent_command_envelope(
+        brain,
+        correlation_id=corr[:128],
+        command=body.command.strip(),
+    )
 
 
 @router.get("/api/agent/plan/{task_id}", summary="Get plan state (approval queue)")

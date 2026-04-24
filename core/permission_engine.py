@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Protocol
 
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy import func, select
 
 from core.database import get_session_factory
@@ -66,15 +67,19 @@ def _db_permissions_for_role(*, organization_id: int, role_name: str) -> frozens
         out: set[str] = set()
 
         # Preferred schema: role_permissions -> permissions.name
-        rows = session.execute(
-            select(PermissionRow.name)
-            .join(RolePermission, RolePermission.permission_id == PermissionRow.id)
-            .where(RolePermission.role_id == rid)
-        ).all()
-        for (name,) in rows:
-            n = str(name or "").strip()
-            if n:
-                out.add(n)
+        try:
+            rows = session.execute(
+                select(PermissionRow.name)
+                .join(RolePermission, RolePermission.permission_id == PermissionRow.id)
+                .where(RolePermission.role_id == rid)
+            ).all()
+            for (name,) in rows:
+                n = str(name or "").strip()
+                if n:
+                    out.add(n)
+        except ProgrammingError:
+            # Backward compatibility for environments that haven't applied RBAC m2m migration.
+            session.rollback()
 
         # Backward compatibility: legacy permissions role-scoped table.
         legacy = session.execute(

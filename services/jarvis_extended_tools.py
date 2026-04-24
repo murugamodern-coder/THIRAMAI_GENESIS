@@ -1352,12 +1352,19 @@ def execute_jarvis_extended_tool(
                     if fac is not None:
                         with fac() as session:
                             with session.begin():
+                                org_id = int(oid) if oid and int(oid) > 0 else 1
                                 rp = ResearchProject(
                                     user_id=uid,
-                                    title=q[:200],
-                                    description=summary[:4000],
+                                    organization_id=org_id,
+                                    title=q[:200][:300],
+                                    domain="personal",
                                     status="active",
-                                    links_json={"sources": urls[:10], "kind": "jarvis_research"},
+                                    folders_json={},
+                                    sources_json={"sources": urls[:10], "kind": "jarvis_research"},
+                                    notes_json={"description": summary[:4000]},
+                                    summaries_json={},
+                                    experiments_json={},
+                                    outputs_json={},
                                 )
                                 session.add(rp)
                 except Exception:

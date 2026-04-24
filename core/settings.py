@@ -53,6 +53,9 @@ class ThiramaiSettings(BaseSettings):
 
     # --- Common THIRAMAI_* (validated strings; use helpers where needed) ---
     THIRAMAI_AUTH_DISABLED: str = ""
+    THIRAMAI_DEBUG: str = ""
+    THIRAMAI_ENFORCE_SECURE_COOKIES: str = ""
+    THIRAMAI_DISABLE_AUTO_SCHEMA_CREATE: str = ""
     THIRAMAI_DASHBOARD_WS_INTERVAL: str = ""
     THIRAMAI_DASHBOARD_LOW_STOCK_THRESHOLD: str = ""
     THIRAMAI_RL_TRUST_X_FORWARDED_FOR: str = ""
@@ -76,6 +79,9 @@ class ThiramaiSettings(BaseSettings):
         "THIRAMAI_SOVEREIGN_SCHEDULER",
         "THIRAMAI_BACKGROUND_AGENT",
         "THIRAMAI_LEGACY_ROOT_SPA",
+        "THIRAMAI_DEBUG",
+        "THIRAMAI_ENFORCE_SECURE_COOKIES",
+        "THIRAMAI_DISABLE_AUTO_SCHEMA_CREATE",
         "THIRAMAI_COMMAND_CENTER_BUILD_ID",
         "THIRAMAI_INCIDENT_MODE",
         "THIRAMAI_STARTUP_DEGRADED",
@@ -115,6 +121,15 @@ class ThiramaiSettings(BaseSettings):
 
     def background_agent_truthy(self) -> bool:
         return _truthy(self.THIRAMAI_BACKGROUND_AGENT)
+
+    def debug_truthy(self) -> bool:
+        return _truthy(self.THIRAMAI_DEBUG)
+
+    def enforce_secure_cookies_truthy(self) -> bool:
+        return _truthy(self.THIRAMAI_ENFORCE_SECURE_COOKIES)
+
+    def disable_auto_schema_create_truthy(self) -> bool:
+        return _truthy(self.THIRAMAI_DISABLE_AUTO_SCHEMA_CREATE)
 
     def incident_mode_truthy(self) -> bool:
         """Reduce background load when ops or startup validation enables incident / degraded mode."""

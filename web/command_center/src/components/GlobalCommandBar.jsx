@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import api from "../api/client.js";
+import { postBrainCommand, summarizeBrainReply } from "../lib/brainExecuteClient.js";
 import { showToastDedup } from "../lib/toastDedup.js";
 
 function detectLang(text) {
@@ -137,19 +137,7 @@ async function speakThiramaiResponse(text, options = {}) {
   speakWithBrowserSynth(cleanText, lang, options);
 }
 
-function inferOsKey(payload) {
-  const direct = payload?.os_key || payload?.handled_by || payload?.os;
-  if (typeof direct === "string" && direct.trim()) return direct.trim().toLowerCase();
-  const text = String(payload?.message || payload?.detail || "").toLowerCase();
-  if (text.includes("stock") || text.includes("trade") || text.includes("nifty")) return "stock";
-  if (text.includes("research") || text.includes("news")) return "research";
-  if (text.includes("business") || text.includes("gst")) return "business";
-  if (text.includes("personal") || text.includes("calendar")) return "personal";
-  return "agentic";
-}
-
 export default function GlobalCommandBar() {
-  const navigate = useNavigate();
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -365,29 +353,21 @@ export default function GlobalCommandBar() {
     setErrorMsg("");
     setValue("");
     try {
-      const resp = await api.post("/api/orchestrator/command", {
-        command,
+      const brain = await postBrainCommand(command);
+      const summary = summarizeBrainReply(brain);
+      const payload = {
+        show_inline: true,
+        brain,
+        response: summary,
+        message: summary,
+        routing: "BRAIN",
         source,
         attachment: attachment
           ? { name: attachment.name, type: attachment.type, data: attachment.data }
           : undefined,
-      });
-      const payload = resp.data || { message: "Command accepted" };
+      };
       setAttachment(null);
       window.dispatchEvent(new CustomEvent("thiramai-chat-response", { detail: { payload } }));
-      if (!payload?.show_inline) {
-        const routedOs = inferOsKey(payload);
-        const nextRoute = routedOs === "stock"
-          ? "/os/stock"
-          : routedOs === "research"
-            ? "/os/research"
-            : routedOs === "business"
-              ? "/dashboard/inventory"
-              : routedOs === "personal"
-                ? "/personal"
-                : "/os/agentic-platform";
-        navigate(nextRoute);
-      }
     } catch (err) {
       const error = err?.response?.data?.detail || err?.message || "Command failed";
       setErrorMsg(String(error));

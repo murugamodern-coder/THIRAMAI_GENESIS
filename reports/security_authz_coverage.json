@@ -1,0 +1,585 @@
+{
+  "timestamp_utc": "2026-04-24T12:50:00.328840+00:00",
+  "scope": "api/routes/*.py",
+  "total_files": 82,
+  "total_routes": 484,
+  "files_with_likely_unprotected_routes": 0,
+  "likely_unprotected_files": [],
+  "details": [
+    {
+      "file": "api/routes/__init__.py",
+      "route_count": 0,
+      "auth_markers": 0,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/action_execution.py",
+      "route_count": 5,
+      "auth_markers": 12,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/agent_tools.py",
+      "route_count": 5,
+      "auth_markers": 14,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/ai_chat.py",
+      "route_count": 5,
+      "auth_markers": 14,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/ai_erp.py",
+      "route_count": 1,
+      "auth_markers": 4,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/ai_goal.py",
+      "route_count": 17,
+      "auth_markers": 48,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/ai_local.py",
+      "route_count": 4,
+      "auth_markers": 9,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/ai_ltm.py",
+      "route_count": 7,
+      "auth_markers": 13,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/analytics.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/audit.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/auth.py",
+      "route_count": 4,
+      "auth_markers": 3,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/automation.py",
+      "route_count": 5,
+      "auth_markers": 12,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/autonomous_operations.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/autonomy.py",
+      "route_count": 3,
+      "auth_markers": 8,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/autonomy_control.py",
+      "route_count": 3,
+      "auth_markers": 8,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/autonomy_safety.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/billing.py",
+      "route_count": 15,
+      "auth_markers": 40,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/brain_execute.py",
+      "route_count": 1,
+      "auth_markers": 4,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/business_depth.py",
+      "route_count": 20,
+      "auth_markers": 45,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/business_module.py",
+      "route_count": 4,
+      "auth_markers": 11,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/code_agent.py",
+      "route_count": 8,
+      "auth_markers": 19,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/compliance_hub.py",
+      "route_count": 2,
+      "auth_markers": 5,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/continuity.py",
+      "route_count": 8,
+      "auth_markers": 18,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/continuous_thinking.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/control_plane.py",
+      "route_count": 7,
+      "auth_markers": 16,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/dashboard.py",
+      "route_count": 16,
+      "auth_markers": 23,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/dashboard_ws.py",
+      "route_count": 0,
+      "auth_markers": 1,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/decision_intelligence.py",
+      "route_count": 6,
+      "auth_markers": 14,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/domain_dominion.py",
+      "route_count": 9,
+      "auth_markers": 20,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/empire.py",
+      "route_count": 1,
+      "auth_markers": 4,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/execute.py",
+      "route_count": 5,
+      "auth_markers": 13,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/executive_os.py",
+      "route_count": 0,
+      "auth_markers": 57,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/experimentation.py",
+      "route_count": 6,
+      "auth_markers": 14,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/factory.py",
+      "route_count": 15,
+      "auth_markers": 32,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/feedback.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/full_autonomous_operator.py",
+      "route_count": 11,
+      "auth_markers": 24,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/goal_engine.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/goal_prioritization.py",
+      "route_count": 1,
+      "auth_markers": 4,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/governance.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/health.py",
+      "route_count": 6,
+      "auth_markers": 0,
+      "likely_unprotected": false,
+      "public_safe": true
+    },
+    {
+      "file": "api/routes/integrations.py",
+      "route_count": 9,
+      "auth_markers": 17,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/invention_loop.py",
+      "route_count": 7,
+      "auth_markers": 16,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/inventory.py",
+      "route_count": 18,
+      "auth_markers": 39,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/jarvis_bridge.py",
+      "route_count": 1,
+      "auth_markers": 0,
+      "likely_unprotected": false,
+      "public_safe": true
+    },
+    {
+      "file": "api/routes/kernel_microkernel.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/learning.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/life_os.py",
+      "route_count": 9,
+      "auth_markers": 19,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/long_term_memory.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/market_timing.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/metrics_autonomy.py",
+      "route_count": 1,
+      "auth_markers": 0,
+      "likely_unprotected": false,
+      "public_safe": true
+    },
+    {
+      "file": "api/routes/money_loop.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/multi_org_control.py",
+      "route_count": 3,
+      "auth_markers": 8,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/negotiation_intelligence.py",
+      "route_count": 7,
+      "auth_markers": 16,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/opportunities.py",
+      "route_count": 3,
+      "auth_markers": 8,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/org.py",
+      "route_count": 1,
+      "auth_markers": 3,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/os_central_brain.py",
+      "route_count": 20,
+      "auth_markers": 45,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/personal.py",
+      "route_count": 17,
+      "auth_markers": 35,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/personal_command_center.py",
+      "route_count": 29,
+      "auth_markers": 69,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/predict.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/proactive_autonomy.py",
+      "route_count": 6,
+      "auth_markers": 14,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/product_growth.py",
+      "route_count": 7,
+      "auth_markers": 11,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/production.py",
+      "route_count": 5,
+      "auth_markers": 12,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/push_notifications.py",
+      "route_count": 4,
+      "auth_markers": 5,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/real_world_autonomy.py",
+      "route_count": 16,
+      "auth_markers": 37,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/registry.py",
+      "route_count": 0,
+      "auth_markers": 0,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/research_loop.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/research_projects.py",
+      "route_count": 5,
+      "auth_markers": 12,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/revenue_engine.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/saas_admin.py",
+      "route_count": 3,
+      "auth_markers": 8,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/scientific_validation.py",
+      "route_count": 3,
+      "auth_markers": 8,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/self_expansion.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/simulation.py",
+      "route_count": 5,
+      "auth_markers": 12,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/sovereign.py",
+      "route_count": 20,
+      "auth_markers": 38,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/stock_assistant.py",
+      "route_count": 14,
+      "auth_markers": 30,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/stock_ws.py",
+      "route_count": 0,
+      "auth_markers": 1,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/strategy_generator.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/system_bootstrap.py",
+      "route_count": 3,
+      "auth_markers": 8,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/system_overview.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/tenancy.py",
+      "route_count": 2,
+      "auth_markers": 5,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/tool_builder.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/website_builder.py",
+      "route_count": 4,
+      "auth_markers": 10,
+      "likely_unprotected": false,
+      "public_safe": false
+    },
+    {
+      "file": "api/routes/world_model.py",
+      "route_count": 2,
+      "auth_markers": 6,
+      "likely_unprotected": false,
+      "public_safe": false
+    }
+  ],
+  "note": "Static heuristic only; verify with route-level integration tests."
+}

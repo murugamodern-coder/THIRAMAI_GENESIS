@@ -10,10 +10,13 @@ from __future__ import annotations
 import asyncio
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request, status
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.exc import IntegrityError
 
+from api.dependencies import CurrentUser, get_current_user
 from api.routes.auth import OrganizationBrief, TokenResponse, access_token_ttl_seconds
 from core.auth import create_access_token
 from core.database import get_session_factory
@@ -56,7 +59,20 @@ class OrgCreateResponse(TokenResponse):
         "(General + Operations + Sales), owner user, and membership. Returns JWT with ``active_org_id``."
     ),
 )
-async def create_organization(request: Request, body: OrgCreateBody) -> OrgCreateResponse:
+async def create_organization(
+    request: Request,
+    body: OrgCreateBody,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> OrgCreateResponse:
+    _ = current_user
+    bootstrap_key = (os.getenv("THIRAMAI_ORG_CREATE_BOOTSTRAP_KEY") or "").strip()
+    if bootstrap_key:
+        provided = (request.headers.get("x-org-create-key") or "").strip()
+        if not provided or provided != bootstrap_key:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="organization creation bootstrap key required",
+            )
     ip = client_ip_from_request(request.client.host if request.client else None)
     ua = (request.headers.get("user-agent") or "")[:2000]
 

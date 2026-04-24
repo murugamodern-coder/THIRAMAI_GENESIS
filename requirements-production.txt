@@ -4,6 +4,7 @@ uvicorn[standard]==0.44.0
 gunicorn==25.3.0
 sentry-sdk[fastapi]==2.58.0
 prometheus-fastapi-instrumentator==7.1.0
+rq==1.16.2
 
 # Live broker SDKs (Fyers v3 / Zerodha Kite) — required for ``execution_mode=live`` when not using paper fallback.
 fyers-apiv3>=3.1.0,<4

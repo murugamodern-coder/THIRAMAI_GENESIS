@@ -270,6 +270,8 @@ def maybe_upgrade_execution_mode_fact_sync(*, user_id: int) -> dict[str, Any]:
         return {"ok": False, "error": "invalid user"}
     cur: JarvisFact | None = None
     factory = get_session_factory()
+    if factory is None:
+        return {"ok": True, "upgraded": False, "reason": "database_unavailable"}
     if factory is not None:
         with factory() as session:
             cur = session.execute(

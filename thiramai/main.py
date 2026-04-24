@@ -459,8 +459,17 @@ class JarvisCore:
                         "human_intervention_required": True,
                     },
                 )
+                self.latest_results = [
+                    {
+                        "task_id": "human_intervention_required",
+                        "status": "skipped",
+                        "reason": "planner_requested_human_intervention",
+                        "result": {"status": "success", "note": "No autonomous execution due to required human intervention."},
+                        "review": {"status": "pass", "summary": "Human intervention requested; autonomous changes withheld safely."},
+                    }
+                ]
                 _loop_log.warning("Planner requested human intervention; stopping autonomous cycle.")
-                return False
+                return not bool(getattr(self, "_fixed_goal_only", False))
             _log_debug_event("[PLAN CREATED]", {"cycle_id": cycle_id, "plan": plan})
             tasks = self.planner.decompose(plan)
             for i, t in enumerate(tasks):

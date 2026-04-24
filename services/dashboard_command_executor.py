@@ -31,6 +31,23 @@ _LOG = logging.getLogger(__name__)
 _MAX_CHARS = int((os.getenv("THIRAMAI_DASHBOARD_COMMAND_MAX_CHARS") or "4000").strip() or "4000")
 
 _PLUGINS_LOADED = False
+_MUTATING_ACTIONS = {
+    "inventory_adjust",
+    "run_worker_autoscale",
+    "run_auto_repair",
+    "set_predictive_scaling_mode",
+    "update_company_identity",
+    "set_operational_infra_budget",
+    "clear_thought_stream",
+}
+_ALLOW_ANON_MUTATING_ACTIONS = {
+    "update_company_identity",
+    "run_auto_repair",
+    "set_operational_infra_budget",
+    "set_predictive_scaling_mode",
+    "run_worker_autoscale",
+    "clear_thought_stream",
+}
 
 
 def _is_jinja_undefined(obj: Any) -> bool:
@@ -453,6 +470,46 @@ def _base_out(parsed: dict[str, Any]) -> dict[str, Any]:
         "result": None,
         "thought_message": None,
     }
+
+
+def _route_mutation_to_brain_execute(
+    *,
+    raw_command: str,
+    organization_id: int,
+    parsed: dict[str, Any],
+    executor_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    out = _base_out(parsed)
+    xctx = dict(executor_context or {})
+    uid = int(xctx.get("user_id") or 0)
+    if uid <= 0:
+        out["ok"] = False
+        out["error"] = "single_execution_authority_requires_user_id"
+        out["thought_message"] = "System: Mutating commands require authenticated user context for brain routing."
+        return out
+    try:
+        from services.brain_execute import brain_execute
+
+        routed = brain_execute(
+            str(raw_command or "").strip()[:2000],
+            uid,
+            int(organization_id),
+        )
+    except Exception as exc:
+        _LOG.exception("brain routing failed for dashboard command")
+        out["ok"] = False
+        out["error"] = f"brain_route_failed:{type(exc).__name__}"
+        out["thought_message"] = "System: Brain routing failed for this command."
+        return out
+    out["ok"] = bool((routed.get("result") or {}).get("ok"))
+    out["executed"] = "brain_execute"
+    out["result"] = {
+        "brain_status": routed.get("status"),
+        "brain_result": routed.get("result"),
+        "closure": routed.get("closure"),
+    }
+    out["thought_message"] = "System: Command routed to central execution authority."
+    return out
 
 
 def _handle_update_company_identity(
@@ -973,10 +1030,11 @@ def _execute_natural_language_dashboard_command_raw(
         }
 
     if _looks_like_inventory_sync_command(text):
-        return _handle_run_auto_repair(
+        return _route_mutation_to_brain_execute(
+            raw_command=text,
             organization_id=int(organization_id),
             parsed=_parsed_run_auto_repair(value="inventory_sync"),
-            sre_profile=sre_profile,
+            executor_context=executor_context,
         )
 
     if _looks_like_inventory_integrity_audit_command(text):
@@ -994,10 +1052,19 @@ def _execute_natural_language_dashboard_command_raw(
         )
 
     if _looks_like_auto_repair_command(text):
-        return _handle_run_auto_repair(
+        parsed_auto = _parsed_run_auto_repair()
+        uid = int((executor_context or {}).get("user_id") or 0)
+        if uid <= 0:
+            return _handle_run_auto_repair(
+                organization_id=int(organization_id),
+                parsed=parsed_auto,
+                sre_profile=sre_profile,
+            )
+        return _route_mutation_to_brain_execute(
+            raw_command=text,
             organization_id=int(organization_id),
-            parsed=_parsed_run_auto_repair(),
-            sre_profile=sre_profile,
+            parsed=parsed_auto,
+            executor_context=executor_context,
         )
 
     from core.sale_intent_heuristic import (
@@ -1022,17 +1089,19 @@ def _execute_natural_language_dashboard_command_raw(
 
     inv_hint = parsed_update_stock_intent_from_message(text)
     if inv_hint is not None:
-        return _handle_inventory_adjust(
-            organization_id=int(organization_id),
-            parsed={
+        parsed_adjust = {
                 "action": "inventory_adjust",
                 "entity_name": inv_hint.sku_name,
                 "value": inv_hint.location or "",
                 "numeric_value": float(inv_hint.quantity_delta),
                 "confidence": 1.0,
                 "rationale": "keyword_inventory_adjust",
-            },
-            sre_profile=sre_profile,
+            }
+        return _route_mutation_to_brain_execute(
+            raw_command=text,
+            organization_id=int(organization_id),
+            parsed=parsed_adjust,
+            executor_context=executor_context,
         )
 
     try:
@@ -1048,6 +1117,15 @@ def _execute_natural_language_dashboard_command_raw(
         }
 
     action = parsed.get("action") or "unknown"
+    if action in _MUTATING_ACTIONS:
+        uid = int((executor_context or {}).get("user_id") or 0)
+        if uid > 0 or action not in _ALLOW_ANON_MUTATING_ACTIONS:
+            return _route_mutation_to_brain_execute(
+                raw_command=text,
+                organization_id=int(organization_id),
+                parsed=parsed,
+                executor_context=executor_context,
+            )
     custom = get_dashboard_command_handler(action)
     if custom is not None:
         try:
@@ -1081,33 +1159,22 @@ def _execute_natural_language_dashboard_command_raw(
             return out
 
         from core.intent_engine import resolve_intent
-        from core.tool_executor import execute_intent
 
         resolved = resolve_intent(text, skip_llm=True)
         if resolved.get("intent") != "unknown":
-            xctx = dict(executor_context or {})
-            xctx.setdefault("organization_id", int(organization_id))
-            xctx.setdefault("user_message", text)
-            exec_out = execute_intent(resolved, xctx)
-            out = _base_out(parsed)
-            out["ok"] = bool(exec_out.get("ok"))
-            out["status"] = exec_out.get("status")
-            out["action"] = exec_out.get("action")
-            out["message"] = exec_out.get("message")
-            out["data"] = exec_out.get("data")
-            out["executed"] = f"intent_engine:{exec_out.get('action')}"
-            out["result"] = exec_out.get("data")
-            out["thought_message"] = str(exec_out.get("message") or "")
-            if not exec_out.get("ok"):
-                out["error"] = str((exec_out.get("data") or {}).get("error") or "intent_engine_failed")
-            out["intent_resolution"] = {
-                "intent": resolved.get("intent"),
-                "entity": resolved.get("entity"),
-                "quantity": resolved.get("quantity"),
-                "confidence": resolved.get("confidence"),
-                "source": resolved.get("source"),
-            }
-            return out
+            return _route_mutation_to_brain_execute(
+                raw_command=text,
+                organization_id=int(organization_id),
+                parsed={
+                    "action": "intent_engine_routed",
+                    "entity_name": str(resolved.get("entity") or ""),
+                    "value": "",
+                    "numeric_value": resolved.get("quantity"),
+                    "confidence": resolved.get("confidence"),
+                    "rationale": "intent_engine_route_to_brain",
+                },
+                executor_context=executor_context,
+            )
 
         out = _base_out(parsed)
         out["thought_message"] = (

@@ -7,12 +7,77 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 
 from api.dependencies import CurrentUser, get_current_user
 from core.settings import get_settings
 from services import google_calendar_integration_service as gcal
+from services.integration_engine import list_integrations, list_outgoing_message_logs, test_integration, upsert_integration
 
 router = APIRouter(tags=["Integrations"])
+
+
+class IntegrationUpsertBody(BaseModel):
+    type: str = Field(..., min_length=1, max_length=32)
+    config_json: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class IntegrationTestBody(BaseModel):
+    type: str = Field(..., min_length=1, max_length=32)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/integrations", summary="Create or update channel integration")
+async def upsert_channel_integration(
+    body: IntegrationUpsertBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    out = upsert_integration(
+        user_id=int(user.id),
+        integration_type=body.type,
+        config_json=body.config_json or {},
+        enabled=bool(body.enabled),
+    )
+    if out is None:
+        raise HTTPException(status_code=400, detail="Unsupported or invalid integration")
+    return {"ok": True, **out}
+
+
+@router.get("/integrations", summary="List integrations for current user")
+async def get_channel_integrations(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    return {"ok": True, "items": list_integrations(int(user.id))}
+
+
+@router.post("/integrations/test", summary="Test a configured integration")
+async def post_test_integration(
+    body: IntegrationTestBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    out = test_integration(
+        user_id=int(user.id),
+        integration_type=body.type,
+        payload=body.payload or {},
+    )
+    return {"ok": bool(out.get("ok")), "result": out}
+
+
+@router.get("/integrations/logs", summary="List outgoing integration message logs")
+async def get_integration_logs(
+    limit: int = Query(100, ge=1, le=300),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    return {"ok": True, "items": list_outgoing_message_logs(user_id=int(user.id), limit=limit)}
 
 
 @router.post("/integrations/google/connect", summary="Start Google Calendar OAuth (returns authorization URL)")

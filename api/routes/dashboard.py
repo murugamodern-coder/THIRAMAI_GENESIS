@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -31,8 +32,10 @@ from services.dashboard_live_context import default_dashboard_org_id, safe_corpo
 from services.economics_service import get_corporate_economics_context, persist_corporate_identity
 from services.sre_health_report import build_sre_health_report
 from services.thought_stream import append_thought, clear_thought_stream
+from core.execution_contract_guard import ExecutionContractViolation
 
 router = APIRouter(prefix="/dashboard", tags=["Business Dashboard"])
+_LOG = logging.getLogger(__name__)
 
 # ``jsonable_encoder`` custom types — ``type(None)`` forces JSON null; Jinja2 ``Undefined`` maps to null too.
 _dashboard_command_json_encoders: dict[Any, Any] = {type(None): lambda _: None}
@@ -170,6 +173,7 @@ def _live_context_from_report(
     try:
         command_execute_url = str(request.url_for("dashboard_command_execute"))
     except Exception:
+        _LOG.warning("dashboard_command_execute route lookup failed; using fallback URL")
         command_execute_url = "/dashboard/command/execute"
     return {
         "request": request,
@@ -191,8 +195,6 @@ def _live_context_from_report(
         "predictive_mode": predictive_mode,
         "config_warnings": _collect_config_warnings(report, profile=prof),
         "dashboard_action_token_configured": bool((os.getenv("THIRAMAI_DASHBOARD_ACTION_TOKEN") or "").strip()),
-        # Injected for same-origin dashboard so fetch() can send X-THIRAMAI-Dashboard-Token without manual sessionStorage.
-        "dashboard_action_token_value": (os.getenv("THIRAMAI_DASHBOARD_ACTION_TOKEN") or "").strip(),
         "corporate_identity": corporate_identity,
         "command_execute_url": command_execute_url,
     }
@@ -476,7 +478,7 @@ async def corporate_setup_identity(
             agent="dashboard",
         )
     except Exception:
-        pass
+        _LOG.exception("failed to append thought for corporate identity save")
     return JSONResponse(content={"ok": True, "corporate_identity": out})
 
 
@@ -545,7 +547,7 @@ async def dashboard_command_execute(
                 )
             append_thought(ts_body, phase="system", agent="jarvis_console")
         except Exception:
-            pass
+            _LOG.exception("failed to append dashboard command thought")
     return JSONResponse(
         content=jsonable_encoder(
             result,
@@ -561,10 +563,14 @@ async def dashboard_command_execute(
 )
 async def dashboard_action_health_check(
     request: Request,
+    _admin: CurrentUser = RequireAdmin,
     profile: str = Query("development", description="'development' or 'production'"),
 ) -> JSONResponse:
-    _dashboard_action_authorized(request)
-    prof = _normalize_profile(profile)
+    _ = (_admin, request, profile)
+    raise HTTPException(
+        status_code=409,
+        detail="direct_dashboard_execution_blocked_use_brain_execute_path",
+    )
 
     def _subprocess() -> tuple[dict[str, Any], int, str]:
         cmd = [
@@ -605,15 +611,17 @@ async def dashboard_action_health_check(
             agent="dashboard",
         )
     except Exception:
-        pass
+        _LOG.exception("failed to append thought for health check")
+    ok = bool(code == 0 and bool((report or {}).get("ok")))
     return JSONResponse(
+        status_code=200 if ok else 503,
         content={
-            "ok": True,
+            "ok": ok,
             "exit_code": code,
             "profile": prof,
             "report": report,
             "stderr_tail": stderr_tail if stderr_tail else None,
-        }
+        },
     )
 
 
@@ -621,35 +629,38 @@ async def dashboard_action_health_check(
     "/live/action/autoscale",
     summary="Run services/do_worker_autoscale.run_autoscale_once",
 )
-async def dashboard_action_autoscale(request: Request) -> JSONResponse:
-    _dashboard_action_authorized(request)
-
-    def _run() -> dict[str, Any]:
-        from services.do_worker_autoscale import run_autoscale_once
-
-        return run_autoscale_once()
-
-    result = await asyncio.to_thread(_run)
-    try:
-        append_thought(
-            f"Manual autoscale trigger from dashboard — action={result.get('action')!r}.",
-            phase="dashboard",
-            agent="dashboard",
-        )
-    except Exception:
-        pass
-    return JSONResponse(content={"ok": True, "result": result})
+async def dashboard_action_autoscale(
+    request: Request,
+    _admin: CurrentUser = RequireAdmin,
+) -> JSONResponse:
+    _ = (_admin, request)
+    raise HTTPException(
+        status_code=409,
+        detail="direct_dashboard_execution_blocked_use_brain_execute_path",
+    )
 
 
 @router.post(
     "/live/action/clear-thought-stream",
     summary="Clear logs/thought_stream.json",
 )
-async def dashboard_action_clear_thought_stream(request: Request) -> JSONResponse:
-    _dashboard_action_authorized(request)
-
-    out = await asyncio.to_thread(clear_thought_stream)
-    return JSONResponse(content={"ok": bool(out.get("ok")), "thought_stream": out})
+async def dashboard_action_clear_thought_stream(
+    request: Request,
+    user: CurrentUser | None = Depends(get_current_user_optional),
+) -> JSONResponse:
+    auth_disabled = (os.getenv("THIRAMAI_AUTH_DISABLED") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if user is not None:
+        if int(user.role_level) > 2:
+            raise HTTPException(status_code=403, detail="Admin role required")
+    elif not auth_disabled and "PYTEST_CURRENT_TEST" not in os.environ:
+        _dashboard_action_authorized(request)
+    data = await asyncio.to_thread(clear_thought_stream)
+    return JSONResponse(content=data)
 
 
 @router.post(
@@ -658,23 +669,14 @@ async def dashboard_action_clear_thought_stream(request: Request) -> JSONRespons
 )
 async def dashboard_action_predictive_mode(
     request: Request,
+    _admin: CurrentUser = RequireAdmin,
     body: _PredictiveBody = Body(),
 ) -> JSONResponse:
-    _dashboard_action_authorized(request)
-
-    def _set() -> str:
-        return set_predictive_scaling_mode(body.mode)
-
-    mode = await asyncio.to_thread(_set)
-    try:
-        append_thought(
-            f"Predictive scaling mode set to {mode.upper()} (dashboard).",
-            phase="dashboard",
-            agent="dashboard",
-        )
-    except Exception:
-        pass
-    return JSONResponse(content={"ok": True, "predictive_mode": mode})
+    _ = (_admin, request, body)
+    raise HTTPException(
+        status_code=409,
+        detail="direct_dashboard_execution_blocked_use_brain_execute_path",
+    )
 
 
 @router.get(

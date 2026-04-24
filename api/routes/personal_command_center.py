@@ -458,6 +458,7 @@ async def create_research(body: ResearchCreateBody, user: CurrentUser = Depends(
         title=body.title,
         description=body.description,
         links_json=body.links_json,
+        organization_id=int(user.organization_id),
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)

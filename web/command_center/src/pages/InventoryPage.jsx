@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createInventoryItem,
@@ -75,6 +75,8 @@ export default function InventoryPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const csvInputRef = useRef(null);
 
   const loadInventory = useCallback(async () => {
     setLoading(true);
@@ -207,8 +209,53 @@ export default function InventoryPage() {
     URL.revokeObjectURL(url);
   };
 
+  const onImportCsv = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setError("");
+    try {
+      const text = await file.text();
+      const lines = text
+        .split(/\r?\n/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      if (lines.length < 2) throw new Error("CSV has no data rows");
+
+      const header = lines[0].toLowerCase();
+      const rows = lines.slice(1);
+      const indexOf = (name) => header.split(",").findIndex((h) => h.trim().replace(/"/g, "") === name);
+      const skuIdx = Math.max(0, indexOf("sku"));
+      const nameIdx = indexOf("name");
+      const catIdx = indexOf("category");
+      const stockIdx = indexOf("stock");
+      const minIdx = indexOf("min stock");
+      const priceIdx = indexOf("price");
+
+      for (const line of rows) {
+        const cols = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+        const skuVal = cols[skuIdx] || cols[nameIdx] || "Imported SKU";
+        await createInventoryItem({
+          sku_name: skuVal,
+          name: cols[nameIdx] || skuVal,
+          category: cols[catIdx] || "General",
+          quantity: Number(cols[stockIdx] || 0),
+          reorder_point: Number(cols[minIdx] || 0),
+          unit_price: cols[priceIdx] ? Number(cols[priceIdx]) : null,
+        });
+      }
+      await loadInventory();
+    } catch (e) {
+      const d = e?.response?.data?.detail;
+      setError(typeof d === "string" ? d : e?.message || "Unable to import CSV");
+    } finally {
+      setImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <h1 className="text-2xl font-semibold text-slate-100">📦 Inventory</h1>
         <div className="flex flex-wrap gap-2">
@@ -293,8 +340,38 @@ export default function InventoryPage() {
               <InventorySkeleton />
             ) : paged.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
-                  No inventory items found.
+                <td colSpan={8} className="px-4 py-10">
+                  <div className="mx-auto flex max-w-md flex-col items-center rounded-xl border border-slate-800 bg-slate-900/70 p-6 text-center">
+                    <div className="mb-3 text-3xl">📦</div>
+                    <h3 className="text-lg font-semibold text-slate-100">Start building your inventory</h3>
+                    <p className="mt-2 text-sm text-slate-400">
+                      Add your first item or import a CSV to quickly set up your stock catalog.
+                    </p>
+                    <div className="mt-5 flex flex-wrap justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={openCreate}
+                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+                      >
+                        Add Item
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => csvInputRef.current?.click()}
+                        disabled={importing}
+                        className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-60"
+                      >
+                        {importing ? "Importing..." : "Import CSV"}
+                      </button>
+                    </div>
+                    <input
+                      ref={csvInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={onImportCsv}
+                    />
+                  </div>
                 </td>
               </tr>
             ) : (

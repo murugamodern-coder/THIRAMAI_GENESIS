@@ -182,4 +182,14 @@ OPENAPI_TAGS: list[dict[str, str]] = [
             "(`services.orchestrator`). Model: **`THIRAMAI_AGENT_PLAN_MODEL`**."
         ),
     },
+    {
+        "name": "Action Execution",
+        "description": (
+            "**Real-world action layer:** **`POST /actions/plan`** (decompose command → persisted steps with risk levels), "
+            "**`POST /actions/runs/{id}/confirm`** (batch medium-risk + explicit high-risk step IDs), "
+            "**`POST /actions/runs/{id}/execute`** (sequential execution with verification, retries, execution memory), "
+            "**`GET /actions/runs/{id}`**. Background: set **`async_execution`** on plan/execute or enable RQ (`THIRAMAI_ASYNC_QUEUE_MODE=rq`). "
+            "Browser automation uses Playwright when installed (`playwright install chromium`)."
+        ),
+    },
 ]

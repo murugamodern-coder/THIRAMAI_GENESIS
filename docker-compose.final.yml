@@ -1,0 +1,142 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-thiramai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-thiramai}
+    volumes:
+      - thiramai_pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thiramai} -d ${POSTGRES_DB:-thiramai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - thiramai_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ENV: production
+      THIRAMAI_ENV: production
+      THIRAMAI_DEBUG: "0"
+      THIRAMAI_SAFE_ERRORS: "1"
+      THIRAMAI_ENFORCE_SECURE_COOKIES: "1"
+      THIRAMAI_DISABLE_AUTO_SCHEMA_CREATE: "1"
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-30}
+      JWT_REFRESH_EXPIRE_DAYS: ${JWT_REFRESH_EXPIRE_DAYS:-30}
+      THIRAMAI_CORS_ORIGINS: ${THIRAMAI_CORS_ORIGINS:?set THIRAMAI_CORS_ORIGINS}
+      THIRAMAI_ASYNC_QUEUE_MODE: rq
+      THIRAMAI_RL_TRUST_X_FORWARDED_FOR: "1"
+      THIRAMAI_TRUSTED_PROXY_IPS: ${THIRAMAI_TRUSTED_PROXY_IPS:-172.16.0.0/12,10.0.0.0/8}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health/ready >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  rq-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: >
+      sh -c "python -m rq worker ${THIRAMAI_RQ_QUEUE_NAME:-thiramai} --url ${REDIS_URL:-redis://redis:6379/0}"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      THIRAMAI_ASYNC_QUEUE_MODE: rq
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app:app", "--bind", "0.0.0.0:8000", "--workers", "1"]
+    environment:
+      ENV: production
+      THIRAMAI_ENV: production
+      THIRAMAI_SCHEDULER_AUTONOMOUS: "1"
+      THIRAMAI_ASYNC_QUEUE_MODE: rq
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      THIRAMAI_CORS_ORIGINS: ${THIRAMAI_CORS_ORIGINS:?set THIRAMAI_CORS_ORIGINS}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-thiramai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-thiramai}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./deploy/scripts/backup_db.sh:/usr/local/bin/backup_db.sh:ro
+    command: >
+      sh -c "chmod +x /usr/local/bin/backup_db.sh &&
+      while true; do /usr/local/bin/backup_db.sh; sleep 86400; done"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/app.thiramai.ai.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/certbot-www:/var/www/certbot
+      - ./deploy/nginx/certs:/etc/letsencrypt
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  thiramai_pgdata:
+  thiramai_redis:

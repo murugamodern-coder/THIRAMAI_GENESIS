@@ -4,10 +4,13 @@ THIRAMAI Genesis - FastAPI: core app, CORS, static factory mount, dashboard, and
 """
 
 import io
+import os
 import sys
 
 def _wrap_stdio_utf8(stream: object, *, name: str) -> None:
     """Re-wrap stdio as UTF-8 TextIOWrapper when the underlying buffer is usable (skip closed/NUL)."""
+    if "PYTEST_CURRENT_TEST" in os.environ or "PYTEST_VERSION" in os.environ:
+        return
     try:
         buf = getattr(stream, "buffer", None)
         if buf is None or getattr(buf, "closed", False):
@@ -25,11 +28,11 @@ _wrap_stdio_utf8(sys.stdout, name="stdout")
 _wrap_stdio_utf8(sys.stderr, name="stderr")
 
 import logging
-import os
 import re
 import signal
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -130,7 +133,7 @@ Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 @app.post("/auto-deploy/trigger", tags=["AutoDeploy"])
 async def trigger_auto_deploy(
-    action: str = "health-check",
+    action: Literal["health-check", "restart"] = "health-check",
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     _ = current_user
@@ -203,6 +206,31 @@ class CommandCenterStaticNoStoreMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class SecureCookieEnforcementMiddleware(BaseHTTPMiddleware):
+    """Ensure cookies emitted by app are secure in production."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        raw = list(getattr(response, "raw_headers", []) or [])
+        if not raw:
+            return response
+        updated: list[tuple[bytes, bytes]] = []
+        for name, value in raw:
+            if name.lower() != b"set-cookie":
+                updated.append((name, value))
+                continue
+            cookie = value.decode("latin-1")
+            if "Secure" not in cookie:
+                cookie = f"{cookie}; Secure"
+            if "HttpOnly" not in cookie:
+                cookie = f"{cookie}; HttpOnly"
+            if "SameSite" not in cookie:
+                cookie = f"{cookie}; SameSite=Lax"
+            updated.append((name, cookie.encode("latin-1")))
+        response.raw_headers = updated
+        return response
+
+
 # Auth: POST /auth/register, /auth/login, GET /auth/me (see api/routes/auth.py).
 app.include_router(auth_router)
 app.include_router(tools_router, prefix="/api/tools")
@@ -251,6 +279,8 @@ if _allowed_hosts_raw:
 
 app.add_middleware(CommandCenterStaticNoStoreMiddleware)
 app.add_middleware(AiPayloadLimitMiddleware)
+if get_settings().is_production() or get_settings().enforce_secure_cookies_truthy():
+    app.add_middleware(SecureCookieEnforcementMiddleware)
 
 
 @app.on_event("startup")
@@ -268,7 +298,17 @@ def _startup_thiramai() -> None:
     except Exception:
         logging.getLogger("thiramai").exception("THIRAMAI environment validation failed — refusing startup")
         raise
+    if get_settings().is_production():
+        raw_required = (os.getenv("THIRAMAI_REQUIRED_SECRETS") or "JWT_SECRET_KEY,DATABASE_URL").strip()
+        required = [x.strip() for x in raw_required.split(",") if x.strip()]
+        if required:
+            from core.startup_checks import check_required_env
+
+            required_check = check_required_env(required)
+            if not required_check.ok:
+                raise RuntimeError(f"Startup secret validation failed: {required_check.detail}")
     assert_safe_production_config()
+    _init_error_tracking()
     ensure_thiramai_logging()
     _log_command_center_index_sanity()
     logging.getLogger("thiramai").info(
@@ -276,6 +316,7 @@ def _startup_thiramai() -> None:
         "on the same network. If an old IP (e.g. 10.89.x.x) times out, the adapter address may have changed."
     )
     seed_default_roles_on_startup()
+    app.state.system_started_at = datetime.now(timezone.utc)
     if _incident_or_degraded():
         logging.getLogger("thiramai").warning(
             "THIRAMAI_INCIDENT_MODE or THIRAMAI_STARTUP_DEGRADED is on — background schedulers and agent are disabled."
@@ -317,6 +358,24 @@ def _startup_thiramai() -> None:
         start_alert_scheduler()
     if _sovereign_scheduler_enabled():
         start_sovereign_scheduler()
+
+
+def _init_error_tracking() -> None:
+    """Optional Sentry hook for production error tracking."""
+    dsn = (os.getenv("SENTRY_DSN") or "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=(os.getenv("ENV") or os.getenv("THIRAMAI_ENV") or "development").strip(),
+            traces_sample_rate=float((os.getenv("SENTRY_TRACES_SAMPLE_RATE") or "0.05").strip()),
+        )
+        logging.getLogger("thiramai").info("Sentry initialized")
+    except Exception:
+        logging.getLogger("thiramai").exception("Sentry init failed")
 
 
 @app.on_event("startup")

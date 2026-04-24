@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from api.dependencies import CurrentUser, require_roles
 from core.orchestrator import run_brain
 from core.sovereign_journal import read_recent_cot, sovereign_stage5_enabled
+from services.brain_execute import brain_execute
 from services import channels_bridge, empire_governance, infra_self_heal, ltm_self_tune, prompt_self_tune, task_aggregator, world_scanner
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,8 +89,12 @@ async def executive_summary_latest(
 async def executive_summary_run(
     _user: CurrentUser = Depends(require_roles("owner", "manager")),
 ) -> JSONResponse:
-    md = task_aggregator.build_daily_executive_summary(int(_user.organization_id))
-    return JSONResponse(content={"ok": True, "markdown_chars": len(md)})
+    res = brain_execute(
+        "Build daily executive summary",
+        int(_user.id),
+        int(_user.organization_id),
+    )
+    return JSONResponse(content={"ok": bool((res.get("result") or {}).get("ok")), "result": res.get("result"), "status": res.get("status")})
 
 
 @router.get("/world-events/recent")
@@ -106,8 +111,12 @@ async def world_events_recent(
 async def world_scan_run(
     _user: CurrentUser = Depends(require_roles("owner", "manager")),
 ) -> JSONResponse:
-    out = world_scanner.run_world_scan_for_org(int(_user.organization_id))
-    return JSONResponse(content=out)
+    out = brain_execute(
+        "Run world scan for organization",
+        int(_user.id),
+        int(_user.organization_id),
+    )
+    return JSONResponse(content={"ok": bool((out.get("result") or {}).get("ok")), "result": out.get("result"), "status": out.get("status")})
 
 
 @router.get("/ltm/tuning-brief")
@@ -218,8 +227,12 @@ async def empire_pl_latest(
 async def empire_pl_run(
     _user: CurrentUser = Depends(require_roles("owner", "manager")),
 ) -> JSONResponse:
-    row = empire_governance.build_pl_vs_market_analysis(int(_user.organization_id))
-    return JSONResponse(content={"ok": True, "record": row})
+    out = brain_execute(
+        "Build PL versus market governance analysis",
+        int(_user.id),
+        int(_user.organization_id),
+    )
+    return JSONResponse(content={"ok": bool((out.get("result") or {}).get("ok")), "result": out.get("result"), "status": out.get("status")})
 
 
 @router.get("/empire/opportunity/latest")
@@ -234,8 +247,12 @@ async def empire_opp_latest(
 async def empire_opp_run(
     _user: CurrentUser = Depends(require_roles("owner", "manager")),
 ) -> JSONResponse:
-    row = empire_governance.build_weekly_revenue_opportunity(int(_user.organization_id))
-    return JSONResponse(content={"ok": True, "record": row})
+    out = brain_execute(
+        "Build weekly revenue opportunity analysis",
+        int(_user.id),
+        int(_user.organization_id),
+    )
+    return JSONResponse(content={"ok": bool((out.get("result") or {}).get("ok")), "result": out.get("result"), "status": out.get("status")})
 
 
 @router.get("/empire/prompt-tuning/latest")
@@ -250,16 +267,24 @@ async def empire_prompt_latest(
 async def empire_prompt_run(
     _user: CurrentUser = Depends(require_roles("owner", "manager")),
 ) -> JSONResponse:
-    row = prompt_self_tune.run_prompt_self_analysis(organization_id=int(_user.organization_id))
-    return JSONResponse(content={"ok": True, "record": row})
+    out = brain_execute(
+        "Run prompt self tuning analysis",
+        int(_user.id),
+        int(_user.organization_id),
+    )
+    return JSONResponse(content={"ok": bool((out.get("result") or {}).get("ok")), "result": out.get("result"), "status": out.get("status")})
 
 
 @router.post("/empire/self-heal/run")
 async def empire_self_heal_run(
     _user: CurrentUser = Depends(require_roles("owner", "manager")),
 ) -> JSONResponse:
-    out = infra_self_heal.run_self_heal_scan(organization_id=int(_user.organization_id))
-    return JSONResponse(content=out)
+    out = brain_execute(
+        "Run infrastructure self-heal scan",
+        int(_user.id),
+        int(_user.organization_id),
+    )
+    return JSONResponse(content={"ok": bool((out.get("result") or {}).get("ok")), "result": out.get("result"), "status": out.get("status")})
 
 
 @router.get("/dashboard", include_in_schema=False)

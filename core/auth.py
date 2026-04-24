@@ -42,8 +42,22 @@ def _secret_key() -> str:
 
 
 def _algorithm() -> str:
-    """Resolve JWT alg: ALGORITHM env, then JWT_ALGORITHM, default HS256."""
-    return (os.getenv("ALGORITHM") or os.getenv("JWT_ALGORITHM") or "HS256").strip()
+    """Resolve JWT alg with safe default and optional asymmetric override."""
+    alg = (os.getenv("ALGORITHM") or os.getenv("JWT_ALGORITHM") or "HS256").strip().upper()
+    if not alg:
+        alg = "HS256"
+    allow_asymmetric = (os.getenv("THIRAMAI_ALLOW_ASYMMETRIC_JWT") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not allow_asymmetric and not alg.startswith("HS"):
+        raise RuntimeError(
+            f"JWT algorithm '{alg}' is blocked by policy. "
+            "Use HS256/HS384/HS512 or set THIRAMAI_ALLOW_ASYMMETRIC_JWT=1 with security review."
+        )
+    return alg
 
 
 def _token_version() -> int:
@@ -200,6 +214,23 @@ def decode_access_token(token: str) -> dict[str, Any]:
     Prefer get_current_user in new code.
     """
     return get_current_user(token)
+
+
+def runtime_validate_auth_crypto() -> tuple[bool, str]:
+    """
+    Runtime validation guard for JWT crypto wiring.
+
+    Performs a local issue/decode round trip using current env policy to fail fast
+    when an incompatible cryptography/jose runtime is present.
+    """
+    try:
+        tok = create_access_token(sub_user_id=1, org_id=1, role_name="owner")
+        claims = get_current_user(tok)
+        if str(claims.get("sub")) != "1":
+            return False, "jwt_roundtrip_claim_mismatch"
+        return True, f"jwt_roundtrip_ok alg={_algorithm()}"
+    except Exception as exc:
+        return False, f"jwt_roundtrip_failed: {exc}"
 
 
 def token_subject_user_id(claims: dict[str, Any]) -> int:

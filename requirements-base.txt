@@ -1,5 +1,6 @@
 # THIRAMAI Genesis — core runtime (pinned). No ASGI process manager, no observability extras.
-# Optional: pgvector, playwright — install separately when enabled.
+# Optional: pgvector — install separately when enabled. Playwright is used by the action execution browser agent.
+playwright>=1.49.0,<2
 fastapi==0.135.3
 openai==1.108.1
 jinja2==3.1.6
@@ -19,7 +20,7 @@ google-api-python-client==2.194.0
 langgraph==1.1.6
 langchain-core==1.2.29
 tavily-python==0.7.23
-pypdf==6.10.1
+pypdf==6.10.2
 fpdf2==2.8.7
 pydantic-settings==2.13.1
 httpx==0.28.1
@@ -30,7 +31,8 @@ pandas==3.0.2
 ta==0.11.0
 python-jose[cryptography]==3.5.0
 bcrypt==5.0.0
-cryptography==46.0.7
+# Security exception pin: 46.0.5 is currently runtime-compatible with python-jose stack here.
+cryptography==46.0.5
 python-multipart==0.0.26
 email-validator==2.3.0
 redis==7.4.0

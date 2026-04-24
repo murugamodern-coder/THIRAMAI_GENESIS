@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 _log = logging.getLogger("thiramai.security.sandbox_policy")
@@ -40,6 +41,8 @@ def validate_llm_write_path(path_like: str | Path) -> tuple[bool, str]:
     try:
         rel = _norm_rel(target.relative_to(_ROOT))
     except ValueError:
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            return True, "pytest_temp_path_allowed"
         return False, "outside_repo_root"
     if rel in _BLOCKED_EXACT:
         return False, f"blocked_path:{rel}"

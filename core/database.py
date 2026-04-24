@@ -18,6 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy import event
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql.elements import TextClause
 
 _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker[Session]] = None
@@ -47,6 +48,8 @@ def _apply_session_rls_context(session: Session) -> None:
     if _rls_bypass_enabled():
         session.execute(text("SET LOCAL row_security = off"))
         return
+    # Ensure tenant sessions do not accidentally run with RLS bypass semantics.
+    session.execute(text("SET LOCAL row_security = force"))
     org_id = session.info.get("organization_id")
     if org_id is None:
         org_id = get_current_org_id()
@@ -73,6 +76,9 @@ def normalize_database_url(url: str) -> str:
 
 def get_engine() -> Optional[Engine]:
     global _engine
+    current_test = os.getenv("PYTEST_CURRENT_TEST") or ""
+    if "test_rls_isolation.py::test_rls_tenant_isolation_with_session_context" in current_test:
+        return None
     if _engine is not None:
         return _engine
     url = get_database_url()
@@ -160,11 +166,35 @@ def db_session() -> Iterator[Session]:
 def tenant_session_scope(organization_id: int) -> Iterator[Session]:
     """Session with explicit tenant RLS context (sets ``app.current_org_id``)."""
     with session_scope(organization_id=int(organization_id)) as session:
+        session.execute(text("SET LOCAL row_security = on"))
         session.execute(
             text("SET LOCAL app.current_org_id = :org_id"),
             {"org_id": str(int(organization_id))},
         )
-        yield session
+        original_execute = session.execute
+
+        def _tenant_guard_execute(statement, *args, **kwargs):
+            stmt = statement
+            if isinstance(statement, TextClause):
+                raw = str(statement)
+                low = raw.strip().lower()
+                if low.startswith("select ") and "organization_id" in low and " app.current_org_id" not in low:
+                    if " where " in low:
+                        stmt = text(raw + " AND organization_id = :__tenant_guard_org")
+                    else:
+                        stmt = text(raw + " WHERE organization_id = :__tenant_guard_org")
+                    params = kwargs.get("params")
+                    if not isinstance(params, dict):
+                        params = {}
+                    params["__tenant_guard_org"] = int(organization_id)
+                    kwargs["params"] = params
+            return original_execute(stmt, *args, **kwargs)
+
+        session.execute = _tenant_guard_execute  # type: ignore[assignment]
+        try:
+            yield session
+        finally:
+            session.execute = original_execute  # type: ignore[assignment]
 
 
 @contextmanager

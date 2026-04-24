@@ -58,6 +58,7 @@ from core.sale_intent_heuristic import (
 )
 from services.analytics_service import format_sales_analytics_markdown, user_requests_sales_analytics
 from services.market_research_service import fetch_solar_dpr_research_bundle, format_solar_dpr_bundle_markdown
+from services.autonomy_safety_layer import global_autonomy_halted
 from services.empire_governance import maybe_apply_exception_only_ux
 from services.sale_execution import execute_sell_stock_sync
 from core.policies.loader import MAX_USER_MESSAGE_CHARS, get_prompt
@@ -271,6 +272,19 @@ def run_brain(
                 request_id=request_id,
             )
             return BrainStructuredResponse(narrative=veto, action_intent=ActionIntentNone())
+
+        if global_autonomy_halted():
+            log_event(
+                request_id,
+                "orchestrator.global_autonomy_halt",
+                ok=False,
+                latency_ms=timer.ms(),
+                extra={"organization_id": org_id},
+            )
+            return BrainStructuredResponse(
+                narrative="**Autonomy halt:** system-wide autonomous execution is paused. Clear the halt in operator / safety settings before tools or side-effect actions run.",
+                action_intent=ActionIntentNone(),
+            )
 
         executive_core.ensure_vault()
         executive_core.ingest_epa_tags(raw)

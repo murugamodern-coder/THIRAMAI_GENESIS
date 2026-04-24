@@ -26,8 +26,6 @@ from core.observability import ensure_thiramai_logging, log_event, new_request_i
 from services.empire_governance import build_pl_vs_market_analysis, build_weekly_revenue_opportunity
 from services.infra_self_heal import run_self_heal_scan
 from services.prompt_self_tune import run_prompt_self_analysis
-from services.task_aggregator import build_daily_executive_summary
-from services.world_scanner import run_world_scan_for_org
 
 _log = logging.getLogger("thiramai.sovereign_scheduler")
 
@@ -57,6 +55,32 @@ def _active_org_ids(session: Session) -> list[int]:
     return [int(x) for x in session.scalars(stmt).all()]
 
 
+def _primary_user_for_org(session: Session, organization_id: int) -> int | None:
+    stmt = (
+        select(User.id)
+        .join(UserOrganizationMembership, UserOrganizationMembership.user_id == User.id)
+        .where(
+            UserOrganizationMembership.organization_id == int(organization_id),
+            UserOrganizationMembership.is_active.is_(True),
+            User.is_active.is_(True),
+        )
+        .order_by(User.id.asc())
+        .limit(1)
+    )
+    row = session.execute(stmt).scalar_one_or_none()
+    return int(row) if row is not None else None
+
+
+def _route_org_command_via_brain(organization_id: int, command: str) -> dict:
+    from services.brain_execute import brain_execute
+
+    with session_scope() as session:
+        uid = _primary_user_for_org(session, int(organization_id))
+    if not uid:
+        return {"ok": False, "error": "no_active_user_for_org"}
+    return brain_execute(str(command or "")[:1200], int(uid), int(organization_id))
+
+
 def run_world_scan_all_orgs() -> None:
     rid = new_request_id()
     factory = get_session_factory()
@@ -72,7 +96,7 @@ def run_world_scan_all_orgs() -> None:
             org_ids = [i for i in org_ids if i in wanted]
         for oid in org_ids:
             try:
-                run_world_scan_for_org(oid)
+                _route_org_command_via_brain(oid, "Run world scan and update world intelligence context")
             except Exception as exc:
                 _log.warning("sovereign.world_scan org=%s failed: %s", oid, exc)
         log_event(
@@ -101,7 +125,7 @@ def run_executive_summary_all_orgs() -> None:
             org_ids = [i for i in org_ids if i in wanted]
         for oid in org_ids:
             try:
-                build_daily_executive_summary(oid)
+                _route_org_command_via_brain(oid, "Build daily executive summary from unified operational context")
             except Exception as exc:
                 _log.warning("sovereign.executive_summary org=%s failed: %s", oid, exc)
         log_event(
@@ -397,8 +421,8 @@ def shutdown_sovereign_scheduler() -> None:
     if _scheduler is not None:
         try:
             _scheduler.shutdown(wait=False)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.warning("sovereign scheduler shutdown error: %s", exc)
         _scheduler = None
 
 

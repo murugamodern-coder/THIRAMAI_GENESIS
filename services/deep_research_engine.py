@@ -470,11 +470,13 @@ def deep_research_sync(
                 "comparison_table": comp,
                 "categories_sample": [it.get("categories") for it in norm[:8]],
             }
+            oid = int(organization_id) if organization_id and int(organization_id) > 0 else None
             ok, _msg, rid = create_research_project_sync(
                 user_id=uid,
                 title=q[:200],
                 description=(analysis.get("summary") or "")[:4000],
                 links_json=links,
+                organization_id=oid,
             )
             if ok and rid:
                 project_id = int(rid)

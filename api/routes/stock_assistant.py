@@ -30,6 +30,8 @@ from services.stock_alert_service import (
 )
 from services.stock_realtime_monitor import connect_to_market_data
 from services.stock_signal_service import generate_intraday_signal
+from services.governance_engine import log_execution, validate_action
+from services.learning_engine import record_outcome, update_strategy_profiles
 
 router = APIRouter(prefix="/stocks/assistant", tags=["Stock Assistant"])
 
@@ -130,6 +132,29 @@ class TradeBody(BaseModel):
 
 @router.post("/portfolio/buy", summary="Paper buy (increases position)")
 async def post_buy(body: TradeBody, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    trade_amount = float(body.quantity) * float(body.price_inr)
+    check = validate_action(
+        "trade_buy",
+        {
+            "user_id": _uid(user),
+            "domain": "trading",
+            "payload": {"symbol": body.symbol, "trade_amount": trade_amount},
+        },
+    )
+    if not check.get("allowed"):
+        log_execution(
+            user_id=_uid(user),
+            action_type="trade_buy",
+            source="manual",
+            payload_json={"symbol": body.symbol, "trade_amount": trade_amount},
+            result_json={"blocked": True, "reason": check.get("reason") or "Governance blocked"},
+            status="blocked",
+            execution_id=f"trade_buy_{body.symbol.upper()}",
+            reasoning_summary="Trade buy blocked by governance.",
+            why_action_taken="Trade request exceeded configured guardrails.",
+            data_influenced_json={"symbol": body.symbol, "trade_amount": trade_amount},
+        )
+        raise HTTPException(status_code=403, detail=check.get("reason") or "Governance blocked")
     out = add_stock_sync(
         _uid(user),
         body.symbol,
@@ -139,12 +164,68 @@ async def post_buy(body: TradeBody, user: CurrentUser = Depends(get_current_user
         fees_inr=body.fees_inr,
     )
     if not out.get("ok"):
+        log_execution(
+            user_id=_uid(user),
+            action_type="trade_buy",
+            source="manual",
+            payload_json={"symbol": body.symbol, "trade_amount": trade_amount},
+            result_json=out,
+            status="failed",
+            execution_id=f"trade_buy_{body.symbol.upper()}",
+            reasoning_summary="Trade buy failed in trading engine.",
+            why_action_taken="Manual buy action attempted by user.",
+            data_influenced_json={"symbol": body.symbol, "trade_amount": trade_amount},
+        )
         raise HTTPException(status_code=400, detail=out.get("error") or "buy failed")
+    log_execution(
+        user_id=_uid(user),
+        action_type="trade_buy",
+        source="manual",
+        payload_json={"symbol": body.symbol, "trade_amount": trade_amount},
+        result_json=out,
+        status="success",
+        execution_id=f"trade_buy_{body.symbol.upper()}",
+        reasoning_summary="Trade buy executed successfully.",
+        why_action_taken="Manual user action accepted by governance and trading engine.",
+        data_influenced_json={"symbol": body.symbol, "trade_amount": trade_amount},
+    )
+    record_outcome(
+        user_id=_uid(user),
+        organization_id=int(user.organization_id),
+        source_type="trade",
+        source_id=None,
+        input_data={"symbol": body.symbol, "quantity": float(body.quantity), "price_inr": float(body.price_inr), "side": "buy"},
+        outcome={"success": True, "profit_loss": 0.0, "note": "Trade buy executed"},
+    )
+    update_strategy_profiles(_uid(user))
     return out
 
 
 @router.post("/portfolio/sell", summary="Paper sell (realized P&L)")
 async def post_sell(body: TradeBody, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    trade_amount = float(body.quantity) * float(body.price_inr)
+    check = validate_action(
+        "trade_sell",
+        {
+            "user_id": _uid(user),
+            "domain": "trading",
+            "payload": {"symbol": body.symbol, "trade_amount": trade_amount},
+        },
+    )
+    if not check.get("allowed"):
+        log_execution(
+            user_id=_uid(user),
+            action_type="trade_sell",
+            source="manual",
+            payload_json={"symbol": body.symbol, "trade_amount": trade_amount},
+            result_json={"blocked": True, "reason": check.get("reason") or "Governance blocked"},
+            status="blocked",
+            execution_id=f"trade_sell_{body.symbol.upper()}",
+            reasoning_summary="Trade sell blocked by governance.",
+            why_action_taken="Trade request exceeded configured guardrails.",
+            data_influenced_json={"symbol": body.symbol, "trade_amount": trade_amount},
+        )
+        raise HTTPException(status_code=403, detail=check.get("reason") or "Governance blocked")
     out = sell_stock_sync(
         _uid(user),
         body.symbol,
@@ -154,7 +235,41 @@ async def post_sell(body: TradeBody, user: CurrentUser = Depends(get_current_use
         fees_inr=body.fees_inr,
     )
     if not out.get("ok"):
+        log_execution(
+            user_id=_uid(user),
+            action_type="trade_sell",
+            source="manual",
+            payload_json={"symbol": body.symbol, "trade_amount": trade_amount},
+            result_json=out,
+            status="failed",
+            execution_id=f"trade_sell_{body.symbol.upper()}",
+            reasoning_summary="Trade sell failed in trading engine.",
+            why_action_taken="Manual sell action attempted by user.",
+            data_influenced_json={"symbol": body.symbol, "trade_amount": trade_amount},
+        )
         raise HTTPException(status_code=400, detail=out.get("error") or "sell failed")
+    realized = float(out.get("realized_pnl_inr") or out.get("realized_pnl") or 0)
+    log_execution(
+        user_id=_uid(user),
+        action_type="trade_sell",
+        source="manual",
+        payload_json={"symbol": body.symbol, "trade_amount": trade_amount},
+        result_json={**out, "realized_pnl": realized},
+        status="success",
+        execution_id=f"trade_sell_{body.symbol.upper()}",
+        reasoning_summary="Trade sell executed successfully.",
+        why_action_taken="Manual user action accepted by governance and trading engine.",
+        data_influenced_json={"symbol": body.symbol, "trade_amount": trade_amount, "realized_pnl": realized},
+    )
+    record_outcome(
+        user_id=_uid(user),
+        organization_id=int(user.organization_id),
+        source_type="trade",
+        source_id=None,
+        input_data={"symbol": body.symbol, "quantity": float(body.quantity), "price_inr": float(body.price_inr), "side": "sell"},
+        outcome={"success": realized >= 0, "profit_loss": realized, "note": "Trade sell executed"},
+    )
+    update_strategy_profiles(_uid(user))
     return out
 
 
