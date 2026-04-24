@@ -1,5 +1,6 @@
 import React from "react";
 
+import { clearAuthStorage } from "../api/client.js";
 import { parseFailingComponentFrame } from "../lib/errorBoundaryUtils.js";
 import { captureUiError } from "../lib/telemetry.js";
 
@@ -55,6 +56,7 @@ export default class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       const isDev = typeof import.meta !== "undefined" && import.meta?.env?.DEV;
       const em = this.state.error?.message || String(this.state.error || "");
+      const isAuthError = /\b(401|403)\b|unauthori[sz]ed|forbidden/i.test(em);
       const showHookDetails =
         isDev || /310|hooks|Rendered more hooks/i.test(em);
       const firstName = parseFailingComponentFrame(this.state.errorInfo?.componentStack || "")?.name;
@@ -70,9 +72,11 @@ export default class ErrorBoundary extends React.Component {
             padding: 24,
           }}
         >
-          <h2 style={{ marginTop: 0 }}>Something went wrong</h2>
+          <h2 style={{ marginTop: 0 }}>{isAuthError ? "Session expired" : "Something went wrong"}</h2>
           <p className="cc-muted" style={{ marginTop: -8 }}>
-            A UI component crashed. The rest of the shell stays up — reload to fully recover.
+            {isAuthError
+              ? "Session expired, please login again."
+              : "A UI component crashed. The rest of the shell stays up — reload to fully recover."}
           </p>
           {firstName ? (
             <p style={{ fontSize: 13, fontWeight: 600 }}>
@@ -93,13 +97,26 @@ ${this.state.errorInfo?.componentStack || "n/a"}`}
               </pre>
             </details>
           )}
-          <button
-            type="button"
-            className="cc-btn cc-btn-primary"
-            onClick={() => window.location.reload()}
-          >
-            Reload page
-          </button>
+          {isAuthError ? (
+            <button
+              type="button"
+              className="cc-btn cc-btn-primary"
+              onClick={() => {
+                clearAuthStorage();
+                window.location.hash = "#/login";
+              }}
+            >
+              Login
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="cc-btn cc-btn-primary"
+              onClick={() => window.location.reload()}
+            >
+              Reload page
+            </button>
+          )}
         </div>
       );
     }

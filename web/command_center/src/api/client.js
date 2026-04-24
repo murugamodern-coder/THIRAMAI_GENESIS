@@ -13,6 +13,27 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+export function clearAuthStorage() {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.clear();
+  } catch {
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function redirectToLogin() {
+  try {
+    if (typeof window !== "undefined") window.location.hash = "#/login";
+  } catch {
+    // ignore
+  }
+}
+
 /** Same-origin API (FastAPI). Vite dev proxy forwards to backend. */
 const api = axios.create({
   baseURL: "",
@@ -48,16 +69,8 @@ api.interceptors.response.use(
     // Hypothesis H4: requests reach backend but are rejected with 401 -> UI shows "Network Error".
     // For HashRouter, redirecting via window.location.hash is reliable and avoids hook usage here.
     if (Number(err?.response?.status) === 401) {
-      try {
-        setToken(null);
-      } catch {
-        // ignore
-      }
-      try {
-        if (typeof window !== "undefined") window.location.hash = "#/login";
-      } catch {
-        // ignore
-      }
+      clearAuthStorage();
+      redirectToLogin();
     }
     return Promise.reject(err);
   },

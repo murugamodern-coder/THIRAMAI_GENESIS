@@ -52,7 +52,8 @@ import ResearchPage from "./pages/ResearchPage.jsx";
 import StockOSPage from "./pages/StockOSPage.jsx";
 import AgenticOSPage from "./pages/AgenticOSPage.jsx";
 import BrainPage from "./pages/BrainPage.jsx";
-import { postUsageEvent } from "./api/commandCenterApi.js";
+import { fetchAuthMe, postUsageEvent } from "./api/commandCenterApi.js";
+import { clearAuthStorage } from "./api/client.js";
 import { defaultRouteForRole, ROLES } from "./lib/rbac.js";
 
 function Protected({ children }) {
@@ -87,6 +88,30 @@ export default function App() {
   logRenderStart("App");
   useLayoutCommitTrace("App");
   usePostCommitTrace("App");
+  const token = useCommandStore((s) => s.token);
+  const setMe = useCommandStore((s) => s.setMe);
+  const logout = useCommandStore((s) => s.logout);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetchAuthMe()
+      .then((me) => {
+        if (!cancelled && me) setMe(me);
+      })
+      .catch((err) => {
+        const status = Number(err?.response?.status || 0);
+        if (status === 401) {
+          clearAuthStorage();
+          logout();
+          if (typeof window !== "undefined") window.location.hash = "#/login";
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [logout, setMe, token]);
+
   return (
     <Suspense fallback={<div className="cc-card">Loading page...</div>}>
       <Routes>
