@@ -38,7 +38,7 @@ function normalizeStep(raw, idx) {
   return { id: `s${idx + 1}`, label: String(raw || `Step ${idx + 1}`), status: "pending", stepOrder: idx + 1, result: null };
 }
 
-export default function AIAssistantPanel({ onLoadingChange = null }) {
+export default function AIAssistantPanel({ onLoadingChange = null, subtitle = "" }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
@@ -249,6 +249,19 @@ export default function AIAssistantPanel({ onLoadingChange = null }) {
       >
         {systemInsight}
       </p>
+      {systemInsight === "Command channel ready" && subtitle ? (
+        <p
+          style={{
+            color: "rgba(255,255,255,0.4)",
+            fontSize: "13px",
+            marginTop: "-20px",
+            marginBottom: "28px",
+            textAlign: "center",
+          }}
+        >
+          {subtitle}
+        </p>
+      ) : null}
       <section className="flex flex-col gap-4">
         <div className="max-h-[62vh] min-h-72 overflow-y-auto rounded-[2rem] bg-slate-950/80 p-5 shadow-[0_28px_90px_-56px_rgba(15,23,42,0.95)]">
           {messages.length === 0 ? (

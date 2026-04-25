@@ -1,37 +1,23 @@
 {
   "schema": "jarvis_thought_stream_v1",
-  "updated_at": 1777034976.3097546,
+  "updated_at": 1777116913.0846035,
   "thoughts": [
     {
-      "ts": 1777034964.942337,
+      "ts": 1777116900.377339,
       "phase": "session_start",
       "agent": "orchestrator",
       "message": "Session started; analyzing request (22 chars).",
-      "request_id": "8c04c33d-2054-49c9-ba1e-2718b499cd71"
+      "request_id": "dc52b035-5ace-4745-baeb-f828d7c3f2ff"
     },
     {
-      "ts": 1777034964.9469106,
-      "phase": "preflight",
-      "agent": "orchestrator",
-      "message": "Preflight: retail quantity guard triggered; short-circuiting to safe reply.",
-      "request_id": "8c04c33d-2054-49c9-ba1e-2718b499cd71"
-    },
-    {
-      "ts": 1777034964.9581094,
+      "ts": 1777116900.4022973,
       "phase": "session_start",
       "agent": "orchestrator",
       "message": "Session started; analyzing request (21 chars).",
-      "request_id": "998754bb-cee8-4e26-8efd-2d049dac4720"
+      "request_id": "d0943975-2837-4408-8ec5-af358ae79617"
     },
     {
-      "ts": 1777034964.9608173,
-      "phase": "preflight",
-      "agent": "orchestrator",
-      "message": "Preflight: retail quantity guard triggered; short-circuiting to safe reply.",
-      "request_id": "998754bb-cee8-4e26-8efd-2d049dac4720"
-    },
-    {
-      "ts": 1777034976.3090303,
+      "ts": 1777116913.08407,
       "phase": "boot",
       "agent": "background_agent",
       "message": "Background agent started (every 60s)."

@@ -147,6 +147,19 @@ export default function ShellLayout() {
         >
           Sign out
         </button>
+        {/* Version */}
+        <div
+          style={{
+            fontSize: "11px",
+            color: "rgba(255,255,255,0.3)",
+            textAlign: "center",
+            padding: "8px",
+            marginTop: "8px",
+            borderTop: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          v1.0.0 · Thiramai Sovereign OS
+        </div>
       </div>
     </>
   );

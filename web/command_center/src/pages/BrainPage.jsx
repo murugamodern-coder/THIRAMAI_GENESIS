@@ -9,7 +9,10 @@ export default function BrainPage() {
       className="mx-auto flex min-h-[calc(100vh-10rem)] max-w-[720px] flex-col justify-center py-10"
       style={{ color: "#ffffff" }}
     >
-      <AIAssistantPanel onLoadingChange={setIsLoading} />
+      <AIAssistantPanel
+        onLoadingChange={setIsLoading}
+        subtitle="Thiramai Sovereign OS · AI Command Interface"
+      />
       {isLoading && (
         <div
           style={{
