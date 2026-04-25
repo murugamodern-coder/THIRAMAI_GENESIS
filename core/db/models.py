@@ -4852,5 +4852,165 @@ class DomainDefinition(Base):
     __table_args__ = (UniqueConstraint("name", name="uq_domain_definitions_name"),)
 
 
+class ArchitectureProposal(Base):
+    """
+    Self-Evolution Phase 4: an LLM-designed proposal for a brand new module.
+
+    Lifecycle: ``proposed`` → ``sandboxed`` (passed/failed) → ``approved``/``rejected``
+    → ``deployed``. Owner-only API approves; on approval the file is written under
+    ``services/dynamic/`` and an :class:`EvolutionTrigger` is opened so the
+    standard self-coder pipeline can pick it up.
+    """
+
+    __tablename__ = "architecture_proposals"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    proposed_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    need_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    module_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    proposed_path: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    generated_code: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    generated_tests: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="proposed", index=True)
+    sandbox_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sandbox_exit_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    sandbox_log: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    approval_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True).with_variant(String(64), "sqlite"), nullable=True
+    )
+    approved_by: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    model_note: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WorldStateSnapshot(Base):
+    """
+    Self-Evolution Phase 4: a snapshot of the Bayesian world model — the 50+
+    variable state vector, the posterior parameters per variable, and the
+    forecast over key business outcomes at this instant.
+    """
+
+    __tablename__ = "world_state_snapshots"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    state_signature: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    state_vector: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    belief_distribution: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    outcome_predictions: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    evidence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    model_version: Mapped[str] = mapped_column(String(32), nullable=False, default="v2")
+
+
+class WorldTransitionEdge(Base):
+    """
+    Self-Evolution Phase 4: ``from_state → to_state`` running counter used to
+    estimate transition probabilities for the Bayesian world model.
+
+    Outcomes observed during a transition are accumulated into
+    ``outcome_aggregates`` so that ``P(outcome | from_state)`` can be derived
+    cheaply at predict time.
+    """
+
+    __tablename__ = "world_transition_edges"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    from_state_signature: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", index=True
+    )
+    to_state_signature: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", index=True
+    )
+    transition_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    outcome_aggregates: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "from_state_signature",
+            "to_state_signature",
+            name="uq_world_transition_edges_scope",
+        ),
+    )
+
+
+class MetaLearningRecord(Base):
+    """
+    Self-Evolution Phase 4: artefact emitted by the meta-learner.
+
+    ``record_type`` is one of:
+
+    - ``feature_importance``  — RandomForest feature importances per domain
+    - ``model_choice``        — best model per (domain, time-of-day) bucket
+    - ``time_of_day``         — best decision hour per domain (success rate)
+    - ``hyperparameters``     — auto-tuned HP set for a model
+
+    The most recent ``is_recommendation=True`` row per (domain, record_type) is
+    what downstream services should consume.
+    """
+
+    __tablename__ = "meta_learning_records"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    domain: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    record_type: Mapped[str] = mapped_column(String(64), nullable=False, default="", index=True)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_recommendation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 # Back-compat alias (deprecated)
 Org = Organization

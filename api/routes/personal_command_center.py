@@ -1032,6 +1032,40 @@ def _compute_brain_health(organization_id: int) -> dict[str, Any]:
     except Exception:
         llm_status = {"error": "llm_router_unavailable"}
 
+    architect_status: dict[str, Any] = {}
+    try:
+        from services.architect.architecture_proposer import get_status as _arch_status
+
+        architect_status = _arch_status()
+    except Exception:
+        architect_status = {"error": "architect_unavailable"}
+
+    world_model_status: dict[str, Any] = {}
+    try:
+        from services.world_model.bayesian_world_model import get_status as _wm_status
+
+        world_model_status = _wm_status()
+    except Exception:
+        world_model_status = {"error": "world_model_unavailable"}
+
+    meta_learner_status: dict[str, Any] = {}
+    try:
+        from services.ml.meta_learner import get_status as _ml_status
+
+        meta_learner_status = _ml_status()
+    except Exception:
+        meta_learner_status = {"error": "meta_learner_unavailable"}
+
+    # Phase 4 lifts the evolution score ceiling once architect / world-model /
+    # meta-learner are reporting non-trivial activity.
+    if architect_status.get("counts", {}).get("deployed", 0) > 0:
+        score = min(100, score + 5)
+    if int(world_model_status.get("snapshot_count") or 0) > 0:
+        score = min(100, score + 5)
+    if int(meta_learner_status.get("meta_score") or 0) > 0:
+        score = min(100, score + int(meta_learner_status.get("meta_score") or 0) // 20)
+    score = max(0, min(int(score), 100))
+
     return {
         "ok": True,
         "models": {
@@ -1053,7 +1087,10 @@ def _compute_brain_health(organization_id: int) -> dict[str, Any]:
         "self_coder_proposals": int(open_proposals),
         "evolution_score": int(score),
         "organization_id": int(organization_id),
-        "phase": "self_evolution_phase_3",
+        "phase": "self_evolution_phase_4",
         "rl_trading": rl_status,
         "llm_router": llm_status,
+        "architect": architect_status,
+        "world_model_v2": world_model_status,
+        "meta_learner": meta_learner_status,
     }

@@ -58,6 +58,17 @@ def seconds_until_next_ist(hour: int, minute: int = 0) -> float:
     return max(1.0, (target - now).total_seconds())
 
 
+def _seconds_until_next_ist_weekday(weekday: int, hour: int, minute: int = 0) -> float:
+    """Seconds until next ``weekday`` (0=Mon … 6=Sun) at ``hour``:``minute`` IST."""
+    now = _now_ist()
+    target = now.replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
+    days_ahead = (int(weekday) - now.weekday()) % 7
+    if days_ahead == 0 and now >= target:
+        days_ahead = 7
+    target = target + timedelta(days=days_ahead)
+    return max(1.0, (target - now).total_seconds())
+
+
 def distinct_active_organization_ids_sync() -> list[int]:
     """Organizations that have at least one active membership with an active user."""
     from core.database import get_session_factory
@@ -353,6 +364,9 @@ class ThiramaiScheduler:
             asyncio.create_task(self.continuity_loop_cron()),
             asyncio.create_task(self.domain_weekly_review_cron()),
             asyncio.create_task(self.nightly_research_cron()),
+            asyncio.create_task(self.architect_auto_propose_cron()),
+            asyncio.create_task(self.world_model_snapshot_cron()),
+            asyncio.create_task(self.meta_learning_cycle_cron()),
         ]
         if _autonomous_business_operator_enabled():
             self.tasks.append(asyncio.create_task(self.autonomous_business_operator_cron()))
@@ -506,6 +520,146 @@ class ThiramaiScheduler:
             )
         except Exception as exc:
             _log.warning("nightly research run failed: %s", exc)
+
+    async def architect_auto_propose_cron(self) -> None:
+        """Self-Evolution Phase 4 — hourly capability-gap auto-propose loop.
+
+        Always sleeps an hour between ticks. The proposer itself is gated by
+        ``THIRAMAI_ARCHITECT_AUTO_PROPOSE`` (defaults to off) so the job is safe
+        to schedule unconditionally; without the env flag it just no-ops.
+        Disable the cron entirely with ``THIRAMAI_ARCHITECT_CRON=0``.
+        """
+        if (os.getenv("THIRAMAI_ARCHITECT_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("architect_auto_propose_cron disabled via env")
+            return
+        interval_min = max(15, _env_int("THIRAMAI_ARCHITECT_CRON_MINUTES", 60, low=15, high=720))
+        # Stagger initial run so multiple workers don't pile up.
+        await asyncio.sleep(min(120, interval_min * 60 // 4))
+        while self.running:
+            try:
+                await self._run_architect_auto_propose()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("architect_auto_propose_cron error: %s", exc)
+            await asyncio.sleep(interval_min * 60)
+
+    async def _run_architect_auto_propose(self) -> None:
+        try:
+            from services.architect.architecture_proposer import auto_propose_loop
+
+            result = await asyncio.to_thread(auto_propose_loop)
+            log_structured(
+                "architect_auto_propose",
+                ok=bool(result.get("ok")),
+                skipped=bool(result.get("skipped")),
+                reason=result.get("reason") or "",
+                proposed=len(result.get("proposed") or []),
+            )
+        except Exception as exc:
+            _log.warning("architect auto-propose failed: %s", exc)
+
+    async def world_model_snapshot_cron(self) -> None:
+        """Self-Evolution Phase 4 — periodic Bayesian world-model tick.
+
+        Default cadence: every 30 minutes. Snapshots are persisted to
+        ``world_state_snapshots`` and the transition-edge counts are updated
+        from the discretised state signature.
+        Disable with ``THIRAMAI_WORLD_MODEL_CRON=0``.
+        """
+        if (os.getenv("THIRAMAI_WORLD_MODEL_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("world_model_snapshot_cron disabled via env")
+            return
+        interval_min = max(5, _env_int("THIRAMAI_WORLD_MODEL_INTERVAL_MIN", 30, low=5, high=240))
+        # Small initial offset so we don't fight the morning brief.
+        await asyncio.sleep(60)
+        while self.running:
+            try:
+                await self._run_world_model_snapshot()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("world_model_snapshot_cron error: %s", exc)
+            await asyncio.sleep(interval_min * 60)
+
+    async def _run_world_model_snapshot(self) -> None:
+        try:
+            from services.world_model.bayesian_world_model import snapshot_world_state
+
+            org_ids = await asyncio.to_thread(distinct_active_organization_ids_sync)
+            if not org_ids:
+                # Fall back to a single null-org snapshot so the engine still warms up.
+                org_ids = [None]  # type: ignore[list-item]
+            for oid in org_ids:
+                try:
+                    res = await asyncio.to_thread(
+                        snapshot_world_state, organization_id=oid, user_id=None
+                    )
+                    log_structured(
+                        "world_model_snapshot",
+                        organization_id=oid,
+                        ok=bool(res.get("ok")),
+                        signature=str(res.get("state_signature") or ""),
+                        evidence_count=int(res.get("evidence_count") or 0),
+                    )
+                except Exception as exc:
+                    _log.debug("world_model snapshot org=%s err=%s", oid, exc)
+        except Exception as exc:
+            _log.warning("world model snapshot run failed: %s", exc)
+
+    async def meta_learning_cycle_cron(self) -> None:
+        """Self-Evolution Phase 4 — weekly meta-learning cycle.
+
+        Runs Sunday 04:00 IST by default. Disable with
+        ``THIRAMAI_META_LEARNER_CRON=0``. Override day/hour with
+        ``THIRAMAI_META_LEARNER_DAY_IST`` (0=Mon … 6=Sun, default ``6``) and
+        ``THIRAMAI_META_LEARNER_HOUR_IST`` (default ``4``).
+        """
+        if (os.getenv("THIRAMAI_META_LEARNER_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("meta_learning_cycle_cron disabled via env")
+            return
+        try:
+            target_day = int((os.getenv("THIRAMAI_META_LEARNER_DAY_IST") or "6").strip())
+        except ValueError:
+            target_day = 6
+        try:
+            target_hour = int((os.getenv("THIRAMAI_META_LEARNER_HOUR_IST") or "4").strip())
+        except ValueError:
+            target_hour = 4
+        target_day = max(0, min(6, target_day))
+        target_hour = max(0, min(23, target_hour))
+        while self.running:
+            try:
+                await asyncio.sleep(_seconds_until_next_ist_weekday(target_day, target_hour))
+                if not self.running:
+                    break
+                await self._run_meta_learning_cycle()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("meta_learning_cycle_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _run_meta_learning_cycle(self) -> None:
+        try:
+            from services.ml.meta_learner import run_full_meta_cycle
+
+            tune_for = [
+                d.strip()
+                for d in (os.getenv("THIRAMAI_META_LEARNER_TUNE_FOR") or "irrigation_manufacturing,equity_trading").split(",")
+                if d.strip()
+            ]
+            result = await asyncio.to_thread(run_full_meta_cycle, tune_hp_for=tune_for)
+            log_structured(
+                "meta_learning_cycle_done",
+                domains=len(result.get("domains") or []),
+                fi_runs=sum(
+                    1 for r in (result.get("feature_importance") or {}).values() if (r or {}).get("ok")
+                ),
+                tuned=len(result.get("hyperparameters") or {}),
+            )
+        except Exception as exc:
+            _log.warning("meta learning cycle failed: %s", exc)
 
     async def stock_alert_monitor(self) -> None:
         """Every 5 minutes — snapshot active stock alert rules into Redis lists per org."""
