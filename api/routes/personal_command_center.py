@@ -1064,6 +1064,10 @@ def _compute_brain_health(organization_id: int) -> dict[str, Any]:
         score = min(100, score + 5)
     if int(meta_learner_status.get("meta_score") or 0) > 0:
         score = min(100, score + int(meta_learner_status.get("meta_score") or 0) // 20)
+
+    schedule_coverage = _self_evolution_schedule_coverage()
+    # Reward each wired-and-enabled cron up to +15.
+    score = min(100, score + int(schedule_coverage.get("scheduled_score") or 0))
     score = max(0, min(int(score), 100))
 
     return {
@@ -1093,4 +1097,45 @@ def _compute_brain_health(organization_id: int) -> dict[str, Any]:
         "architect": architect_status,
         "world_model_v2": world_model_status,
         "meta_learner": meta_learner_status,
+        "schedule": schedule_coverage,
     }
+
+
+def _self_evolution_schedule_coverage() -> dict[str, Any]:
+    """Snapshot of which Self-Evolution cron jobs are wired + enabled.
+
+    Returns a dict with per-cron ``wired`` and ``enabled`` booleans plus an
+    integer ``scheduled_score`` (0..15) used to bump the evolution score.
+    The check is static (env-var + import-presence) so it never touches
+    the running scheduler from a request thread.
+    """
+    import os as _os
+
+    from services import scheduler as _scheduler_module
+
+    crons = {
+        "learning_pipeline_nightly": ("learning_pipeline_nightly_cron", "THIRAMAI_LEARNING_NIGHTLY_CRON"),
+        "self_evolution_trigger": ("self_evolution_trigger_cron", "THIRAMAI_SELF_EVOLUTION_TRIGGER_CRON"),
+        "online_learner_resolve": ("online_learner_resolve_cron", "THIRAMAI_ONLINE_LEARNER_CRON"),
+        "causal_graph_populate": ("causal_graph_populate_cron", "THIRAMAI_CAUSAL_GRAPH_CRON"),
+        "feature_archive_daily": ("feature_archive_daily_cron", "THIRAMAI_FEATURE_ARCHIVE_CRON"),
+        "model_ensemble_train": ("model_ensemble_train_cron", "THIRAMAI_ENSEMBLE_TRAIN_CRON"),
+        "architect_auto_propose": ("architect_auto_propose_cron", "THIRAMAI_ARCHITECT_CRON"),
+        "world_model_snapshot": ("world_model_snapshot_cron", "THIRAMAI_WORLD_MODEL_CRON"),
+        "meta_learning_cycle": ("meta_learning_cycle_cron", "THIRAMAI_META_LEARNER_CRON"),
+        "nightly_research": ("nightly_research_cron", "THIRAMAI_NIGHTLY_RESEARCH_CRON"),
+    }
+    out: dict[str, Any] = {}
+    enabled_count = 0
+    for label, (attr, env_key) in crons.items():
+        wired = hasattr(_scheduler_module.ThiramaiScheduler, attr)
+        env_val = (_os.getenv(env_key) or "1").strip().lower()
+        enabled = env_val not in ("0", "false", "off", "no")
+        out[label] = {"wired": bool(wired), "enabled": bool(enabled and wired), "env_key": env_key}
+        if wired and enabled:
+            enabled_count += 1
+    out["scheduled_score"] = min(15, int(round((enabled_count / max(1, len(crons))) * 15)))
+    out["wired_count"] = sum(1 for c in out.values() if isinstance(c, dict) and c.get("wired"))
+    out["enabled_count"] = enabled_count
+    out["total"] = len(crons)
+    return out

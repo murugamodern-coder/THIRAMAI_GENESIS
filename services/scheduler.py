@@ -367,6 +367,12 @@ class ThiramaiScheduler:
             asyncio.create_task(self.architect_auto_propose_cron()),
             asyncio.create_task(self.world_model_snapshot_cron()),
             asyncio.create_task(self.meta_learning_cycle_cron()),
+            asyncio.create_task(self.learning_pipeline_nightly_cron()),
+            asyncio.create_task(self.self_evolution_trigger_cron()),
+            asyncio.create_task(self.online_learner_resolve_cron()),
+            asyncio.create_task(self.causal_graph_populate_cron()),
+            asyncio.create_task(self.feature_archive_daily_cron()),
+            asyncio.create_task(self.model_ensemble_train_cron()),
         ]
         if _autonomous_business_operator_enabled():
             self.tasks.append(asyncio.create_task(self.autonomous_business_operator_cron()))
@@ -660,6 +666,293 @@ class ThiramaiScheduler:
             )
         except Exception as exc:
             _log.warning("meta learning cycle failed: %s", exc)
+
+    async def learning_pipeline_nightly_cron(self) -> None:
+        """Self-Evolution Phase 1 — nightly learning pipeline (pattern mine + retrain).
+
+        Default 02:00 IST. Disable with ``THIRAMAI_LEARNING_NIGHTLY_CRON=0``.
+        Override hour with ``THIRAMAI_LEARNING_NIGHTLY_HOUR_IST`` (default 2).
+        """
+        if (os.getenv("THIRAMAI_LEARNING_NIGHTLY_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("learning_pipeline_nightly_cron disabled via env")
+            return
+        try:
+            hour = int((os.getenv("THIRAMAI_LEARNING_NIGHTLY_HOUR_IST") or "2").strip())
+        except ValueError:
+            hour = 2
+        hour = max(0, min(23, hour))
+        while self.running:
+            try:
+                await asyncio.sleep(seconds_until_next_ist(hour, 0))
+                if not self.running:
+                    break
+                await self._run_learning_pipeline_nightly()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("learning_pipeline_nightly_cron loop error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _run_learning_pipeline_nightly(self) -> None:
+        try:
+            from services.ml.learning_pipeline import run_nightly
+
+            org_ids = await asyncio.to_thread(distinct_active_organization_ids_sync)
+            if not org_ids:
+                org_ids = [None]  # type: ignore[list-item]
+            patterns_total = 0
+            train_ok = 0
+            for oid in org_ids:
+                try:
+                    res = await asyncio.to_thread(run_nightly, oid)
+                    patterns_total += int((res or {}).get("patterns_upserted") or 0)
+                    if bool(((res or {}).get("train_result") or {}).get("ok")):
+                        train_ok += 1
+                except Exception as exc:
+                    _log.debug("learning_pipeline_nightly org=%s err=%s", oid, exc)
+            log_structured(
+                "learning_pipeline_nightly_done",
+                orgs=len(org_ids),
+                patterns_upserted=patterns_total,
+                models_trained=train_ok,
+            )
+        except Exception as exc:
+            _log.warning("learning pipeline nightly failed: %s", exc)
+
+    async def self_evolution_trigger_cron(self) -> None:
+        """Self-Evolution Phase 1 — hourly trigger check (declining metrics, recurring errors).
+
+        Disable with ``THIRAMAI_SELF_EVOLUTION_TRIGGER_CRON=0``. Hourly cadence
+        is overridable via ``THIRAMAI_SELF_EVOLUTION_TRIGGER_MINUTES`` (default 60).
+        """
+        if (os.getenv("THIRAMAI_SELF_EVOLUTION_TRIGGER_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("self_evolution_trigger_cron disabled via env")
+            return
+        interval_min = max(15, _env_int("THIRAMAI_SELF_EVOLUTION_TRIGGER_MINUTES", 60, low=15, high=720))
+        # Stagger first run by ~3 minutes to avoid bootstrap collisions.
+        await asyncio.sleep(180)
+        while self.running:
+            try:
+                await self._run_self_evolution_trigger()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("self_evolution_trigger_cron error: %s", exc)
+            await asyncio.sleep(interval_min * 60)
+
+    async def _run_self_evolution_trigger(self) -> None:
+        try:
+            from services.self_evolution_trigger import check_and_trigger
+
+            org_ids = await asyncio.to_thread(distinct_active_organization_ids_sync)
+            if not org_ids:
+                org_ids = [None]  # type: ignore[list-item]
+            proposals_total = 0
+            for oid in org_ids:
+                try:
+                    res = await asyncio.to_thread(check_and_trigger, organization_id=oid)
+                    proposals_total += int((res or {}).get("proposals_count") or 0)
+                except Exception as exc:
+                    _log.debug("self_evolution_trigger org=%s err=%s", oid, exc)
+            log_structured(
+                "self_evolution_trigger_done",
+                orgs=len(org_ids),
+                proposals=proposals_total,
+            )
+        except Exception as exc:
+            _log.warning("self evolution trigger failed: %s", exc)
+
+    async def online_learner_resolve_cron(self) -> None:
+        """Self-Evolution Phase 2 — periodic ``predictions_pending`` resolver.
+
+        Every 30 minutes by default. Disable with ``THIRAMAI_ONLINE_LEARNER_CRON=0``.
+        Cadence override: ``THIRAMAI_ONLINE_LEARNER_INTERVAL_MIN`` (default 30).
+        """
+        if (os.getenv("THIRAMAI_ONLINE_LEARNER_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("online_learner_resolve_cron disabled via env")
+            return
+        interval_min = max(5, _env_int("THIRAMAI_ONLINE_LEARNER_INTERVAL_MIN", 30, low=5, high=240))
+        # Small initial offset.
+        await asyncio.sleep(120)
+        while self.running:
+            try:
+                await self._run_online_learner_resolve()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("online_learner_resolve_cron error: %s", exc)
+            await asyncio.sleep(interval_min * 60)
+
+    async def _run_online_learner_resolve(self) -> None:
+        try:
+            from services.ml.online_learner import resolve_pending
+
+            org_ids = await asyncio.to_thread(distinct_active_organization_ids_sync)
+            if not org_ids:
+                org_ids = [None]  # type: ignore[list-item]
+            resolved_total = 0
+            for oid in org_ids:
+                try:
+                    res = await asyncio.to_thread(resolve_pending, limit=200, organization_id=oid)
+                    resolved_total += int((res or {}).get("resolved") or 0)
+                except Exception as exc:
+                    _log.debug("online_learner_resolve org=%s err=%s", oid, exc)
+            log_structured(
+                "online_learner_resolve_done",
+                orgs=len(org_ids),
+                resolved=resolved_total,
+            )
+        except Exception as exc:
+            _log.warning("online learner resolve failed: %s", exc)
+
+    async def causal_graph_populate_cron(self) -> None:
+        """Self-Evolution Phase 2 — daily causal-edge population from ``learning_logs``.
+
+        Default 03:00 IST. Disable with ``THIRAMAI_CAUSAL_GRAPH_CRON=0``.
+        Hour override: ``THIRAMAI_CAUSAL_GRAPH_HOUR_IST`` (default 3).
+        Lookback override: ``THIRAMAI_CAUSAL_GRAPH_LOOKBACK_DAYS`` (default 30).
+        """
+        if (os.getenv("THIRAMAI_CAUSAL_GRAPH_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("causal_graph_populate_cron disabled via env")
+            return
+        try:
+            hour = int((os.getenv("THIRAMAI_CAUSAL_GRAPH_HOUR_IST") or "3").strip())
+        except ValueError:
+            hour = 3
+        hour = max(0, min(23, hour))
+        lookback = _env_int("THIRAMAI_CAUSAL_GRAPH_LOOKBACK_DAYS", 30, low=1, high=365)
+        while self.running:
+            try:
+                await asyncio.sleep(seconds_until_next_ist(hour, 30))
+                if not self.running:
+                    break
+                await self._run_causal_graph_populate(lookback)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("causal_graph_populate_cron loop error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _run_causal_graph_populate(self, lookback_days: int) -> None:
+        try:
+            from services.causal.causal_graph import populate_from_learning_log
+
+            org_ids = await asyncio.to_thread(distinct_active_organization_ids_sync)
+            if not org_ids:
+                org_ids = [None]  # type: ignore[list-item]
+            added_total = 0
+            for oid in org_ids:
+                try:
+                    res = await asyncio.to_thread(
+                        populate_from_learning_log,
+                        lookback_days=int(lookback_days),
+                        organization_id=oid,
+                    )
+                    added_total += int((res or {}).get("added") or 0)
+                except Exception as exc:
+                    _log.debug("causal_graph_populate org=%s err=%s", oid, exc)
+            log_structured(
+                "causal_graph_populate_done",
+                orgs=len(org_ids),
+                added=added_total,
+            )
+        except Exception as exc:
+            _log.warning("causal graph populate failed: %s", exc)
+
+    async def feature_archive_daily_cron(self) -> None:
+        """Self-Evolution Phase 2 — daily feature snapshot to ``feature_archive``.
+
+        Default 01:00 IST. Disable with ``THIRAMAI_FEATURE_ARCHIVE_CRON=0``.
+        Hour override: ``THIRAMAI_FEATURE_ARCHIVE_HOUR_IST`` (default 1).
+        """
+        if (os.getenv("THIRAMAI_FEATURE_ARCHIVE_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("feature_archive_daily_cron disabled via env")
+            return
+        try:
+            hour = int((os.getenv("THIRAMAI_FEATURE_ARCHIVE_HOUR_IST") or "1").strip())
+        except ValueError:
+            hour = 1
+        hour = max(0, min(23, hour))
+        while self.running:
+            try:
+                await asyncio.sleep(seconds_until_next_ist(hour, 0))
+                if not self.running:
+                    break
+                await self._run_feature_archive_daily()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("feature_archive_daily_cron loop error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _run_feature_archive_daily(self) -> None:
+        try:
+            from services.ml.feature_store import run_archive_for_all_orgs
+
+            res = await asyncio.to_thread(run_archive_for_all_orgs)
+            log_structured(
+                "feature_archive_daily_done",
+                orgs=int((res or {}).get("orgs") or 0),
+                written=int((res or {}).get("written") or 0),
+                errors=int((res or {}).get("errors") or 0),
+            )
+        except Exception as exc:
+            _log.warning("feature archive daily failed: %s", exc)
+
+    async def model_ensemble_train_cron(self) -> None:
+        """Self-Evolution Phase 2 — weekly ensemble training (3-model).
+
+        Default Saturday 03:30 IST. Disable with ``THIRAMAI_ENSEMBLE_TRAIN_CRON=0``.
+        Day override: ``THIRAMAI_ENSEMBLE_TRAIN_DAY_IST`` (0=Mon … 6=Sun, default 5).
+        Hour override: ``THIRAMAI_ENSEMBLE_TRAIN_HOUR_IST`` (default 3).
+        """
+        if (os.getenv("THIRAMAI_ENSEMBLE_TRAIN_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("model_ensemble_train_cron disabled via env")
+            return
+        try:
+            target_day = int((os.getenv("THIRAMAI_ENSEMBLE_TRAIN_DAY_IST") or "5").strip())
+        except ValueError:
+            target_day = 5
+        try:
+            target_hour = int((os.getenv("THIRAMAI_ENSEMBLE_TRAIN_HOUR_IST") or "3").strip())
+        except ValueError:
+            target_hour = 3
+        target_day = max(0, min(6, target_day))
+        target_hour = max(0, min(23, target_hour))
+        while self.running:
+            try:
+                await asyncio.sleep(_seconds_until_next_ist_weekday(target_day, target_hour, 30))
+                if not self.running:
+                    break
+                await self._run_model_ensemble_train()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("model_ensemble_train_cron loop error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _run_model_ensemble_train(self) -> None:
+        try:
+            from services.ml.model_ensemble import train_ensemble
+
+            org_ids = await asyncio.to_thread(distinct_active_organization_ids_sync)
+            if not org_ids:
+                org_ids = [None]  # type: ignore[list-item]
+            ok_count = 0
+            for oid in org_ids:
+                try:
+                    res = await asyncio.to_thread(train_ensemble, organization_id=oid, lookback_days=180, activate=True)
+                    if bool((res or {}).get("ok")):
+                        ok_count += 1
+                except Exception as exc:
+                    _log.debug("model_ensemble_train org=%s err=%s", oid, exc)
+            log_structured(
+                "model_ensemble_train_done",
+                orgs=len(org_ids),
+                trained_ok=ok_count,
+            )
+        except Exception as exc:
+            _log.warning("model ensemble train failed: %s", exc)
 
     async def stock_alert_monitor(self) -> None:
         """Every 5 minutes — snapshot active stock alert rules into Redis lists per org."""
