@@ -146,7 +146,13 @@ async def add_performance_headers(request: Request, call_next):
         logger.warning("SLOW: %s took %.2fs", request.url.path, elapsed)
     return response
 
-Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+if not _s_app.is_production() or (os.getenv("THIRAMAI_EXPOSE_PUBLIC_METRICS") or "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}:
+    Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 
 @app.post("/auto-deploy/trigger", tags=["AutoDeploy"])
@@ -166,10 +172,13 @@ async def trigger_auto_deploy(
 
 
 @app.get("/auto-deploy/status", tags=["AutoDeploy"])
-async def auto_deploy_status() -> dict[str, Any]:
+async def auto_deploy_status(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
     import json
     from services.auto_deploy_engine import DEPLOY_LOG_PATH, can_auto_deploy
 
+    _ = current_user
     ok, reason = can_auto_deploy()
     history: list[dict[str, Any]] = []
     if DEPLOY_LOG_PATH.exists():

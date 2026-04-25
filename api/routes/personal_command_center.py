@@ -6,6 +6,8 @@ Uses ``X-Personal-Vault-Passphrase`` (optional) with ``life_os_service.unlock_fe
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -43,6 +45,7 @@ from services.personal_meetings_service import (
 )
 
 router = APIRouter(prefix="/personal/os", tags=["Personal Command Center"])
+_LOG = logging.getLogger(__name__)
 
 
 def _fernet(user_id: int, passphrase: str | None):
@@ -77,23 +80,30 @@ async def today_brief(
     from cache.ttl import today_brief_ttl_seconds
 
     ttl = today_brief_ttl_seconds()
-    if ttl <= 0:
-        return pcc.build_today_brief_sync(
-            user_id=int(user.id),
-            organization_id=int(user.organization_id),
-            fernet=fn,
-        )
-    from services.cache_layer import cache_key_today_brief, get_or_set_cache
+    try:
+        if ttl <= 0:
+            return await asyncio.to_thread(
+                pcc.build_today_brief_sync,
+                user_id=int(user.id),
+                organization_id=int(user.organization_id),
+                fernet=fn,
+            )
+        from services.cache_layer import cache_key_today_brief, get_or_set_cache
 
-    day = datetime.now(timezone.utc).date().isoformat()
-    key = cache_key_today_brief(int(user.id), int(user.organization_id), day) + (":e1" if fn else ":e0")
-    uid = int(user.id)
-    oid = int(user.organization_id)
+        day = datetime.now(timezone.utc).date().isoformat()
+        key = cache_key_today_brief(int(user.id), int(user.organization_id), day) + (":e1" if fn else ":e0")
+        uid = int(user.id)
+        oid = int(user.organization_id)
 
-    def _compute() -> dict[str, Any]:
-        return pcc.build_today_brief_sync(user_id=uid, organization_id=oid, fernet=fn)
+        def _compute() -> dict[str, Any]:
+            return pcc.build_today_brief_sync(user_id=uid, organization_id=oid, fernet=fn)
 
-    return get_or_set_cache(key, ttl, _compute)
+        return await asyncio.to_thread(get_or_set_cache, key, ttl, _compute)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _LOG.exception("today_brief_unhandled_error")
+        raise HTTPException(status_code=500, detail="Today brief is temporarily unavailable.") from exc
 
 
 @router.get("/weekly-review", summary="Last 7 days — tasks, spend, health, meetings, suggested priorities")

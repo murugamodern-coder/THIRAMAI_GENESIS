@@ -55,7 +55,8 @@ async def inventory_list_v2(
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
-    out = list_inventory_items_sync(
+    out = await asyncio.to_thread(
+        list_inventory_items_sync,
         organization_id=_user.organization_id,
         limit=limit,
         offset=offset,

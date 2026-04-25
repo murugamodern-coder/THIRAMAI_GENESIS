@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from typing import Any
 
@@ -14,6 +15,7 @@ from services.brain_execute import brain_execute
 from services.research_common import groq_json_object_sync
 
 router = APIRouter(tags=["Brain execute"])
+_LOG = logging.getLogger(__name__)
 
 
 class BrainExecuteRequest(BaseModel):
@@ -73,10 +75,17 @@ async def post_brain_execute(
             status_code=403,
             detail="user_id and organization_id must match the authenticated session",
         )
-    result = await asyncio.to_thread(
-        brain_execute,
-        str(body.command).strip(),
-        int(user.id),
-        int(user.organization_id),
-    )
-    return _attach_ai_summary(result if isinstance(result, dict) else {}, str(body.command).strip())
+    cmd = str(body.command).strip()
+    try:
+        result = await asyncio.to_thread(
+            brain_execute,
+            cmd,
+            int(user.id),
+            int(user.organization_id),
+        )
+        return _attach_ai_summary(result if isinstance(result, dict) else {}, cmd)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _LOG.exception("brain_execute_unhandled_error")
+        raise HTTPException(status_code=500, detail="Brain execute failed safely.") from exc

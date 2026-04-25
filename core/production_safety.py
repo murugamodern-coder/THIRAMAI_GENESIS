@@ -44,11 +44,16 @@ def assert_safe_production_config() -> None:
         raise RuntimeError("Refusing to start: THIRAMAI_DISABLE_AUTO_SCHEMA_CREATE must be enabled in production.")
 
     try:
-        access_minutes = int((os.getenv("JWT_ACCESS_EXPIRE_MINUTES") or os.getenv("JWT_EXPIRE_MINUTES") or "30").strip())
-    except ValueError:
-        access_minutes = 30
+        from core.auth import access_token_ttl_seconds
+
+        access_minutes = int(access_token_ttl_seconds() // 60)
+    except Exception:
+        access_minutes = 1440
     if access_minutes > 60:
-        raise RuntimeError("Refusing to start: JWT access expiry must be <= 60 minutes in production.")
+        raise RuntimeError(
+            "Refusing to start: JWT access expiry must be <= 60 minutes in production. "
+            "Set JWT_ACCESS_EXPIRE_MINUTES=60 or lower."
+        )
     try:
         refresh_days = int((os.getenv("JWT_REFRESH_EXPIRE_DAYS") or "30").strip())
     except ValueError:
