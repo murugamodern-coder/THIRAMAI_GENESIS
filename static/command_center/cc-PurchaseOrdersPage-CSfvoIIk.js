@@ -1,0 +1,2 @@
+import{k as e}from"./cc-vendor-CyTesiP1.js";import{C as t}from"./cc-app-CBxD0MsT.js";import"./cc-vendor-router-De2AVtcB.js";import"./cc-vendor-state-WWOKp67T.js";function i(){return e.jsx(t,{title:"Purchase Orders",icon:"??",description:"End-to-end procurement management",expectedDate:"Q2 2026",features:["PO creation and tracking","Supplier management","3-way matching","Auto-invoice generation"]})}export{i as default};
+//# sourceMappingURL=cc-PurchaseOrdersPage-CSfvoIIk.js.map

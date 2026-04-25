@@ -8,6 +8,24 @@ THIRAMAI is an autonomous planning and execution framework with policy enforceme
 - Business operations automation (for example: maraseku oil workflows, inventory-oriented task orchestration).
 - Safe autonomous execution with policy checks, review loops, and audit trails.
 
+## Feature Status
+
+| Feature | Status | Expected |
+|---------|--------|----------|
+| Command Center | ✅ Live | - |
+| Control Center | ✅ Live | - |
+| Inventory | ✅ Live | - |
+| Billing | ✅ Live | - |
+| Production | ✅ Live | - |
+| Personal OS | ✅ Live | - |
+| Stock Watchlist | ✅ Live | - |
+| Research | ✅ Live | - |
+| Analytics | 🔜 Coming | Q2 2026 |
+| GST Filing | 🔜 Coming | Q3 2026 |
+| Payroll | 🔜 Coming | Q3 2026 |
+| Reports | 🔜 Coming | Q2 2026 |
+| Settings | 🔜 Coming | Q2 2026 |
+
 ## Setup
 
 1. Create and activate a Python 3.11+ virtual environment.

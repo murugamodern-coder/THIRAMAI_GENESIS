@@ -1,0 +1,2 @@
+import{k as t}from"./cc-vendor-CyTesiP1.js";import{C as e}from"./cc-app-CBxD0MsT.js";import"./cc-vendor-router-De2AVtcB.js";import"./cc-vendor-state-WWOKp67T.js";function c(){return t.jsx(e,{title:"Chart of Accounts",icon:"??",description:"Complete accounting structure for your business",expectedDate:"Q3 2026",features:["GST-ready account structure","Auto-categorization","P&L mapping","Balance sheet ready"]})}export{c as default};
+//# sourceMappingURL=cc-ChartOfAccountsPage-263_wX6V.js.map

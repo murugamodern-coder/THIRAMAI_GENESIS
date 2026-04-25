@@ -52,6 +52,7 @@ import ResearchPage from "./pages/ResearchPage.jsx";
 import StockOSPage from "./pages/StockOSPage.jsx";
 import AgenticOSPage from "./pages/AgenticOSPage.jsx";
 import BrainPage from "./pages/BrainPage.jsx";
+import NotFoundPage from "./pages/NotFoundPage.jsx";
 import { fetchAuthMe, postUsageEvent } from "./api/commandCenterApi.js";
 import { clearAuthStorage } from "./api/client.js";
 import { defaultRouteForRole, ROLES } from "./lib/rbac.js";
@@ -537,7 +538,7 @@ export default function App() {
         <Route path="integrations" element={<PersonalIntegrationsPage />} />
         <Route path="weekly-review" element={<WeeklyReviewPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
   );
