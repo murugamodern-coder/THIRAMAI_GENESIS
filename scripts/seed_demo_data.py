@@ -52,12 +52,10 @@ def _ensure_admin_operational_role(conn) -> tuple[int | None, int | None]:
             SELECT id, name
             FROM roles
             WHERE org_id = :org_id
-              AND lower(name) IN ('owner','admin','staff','worker')
+              AND lower(name) IN ('owner','staff')
             ORDER BY CASE lower(name)
                 WHEN 'owner' THEN 1
-                WHEN 'admin' THEN 2
-                WHEN 'staff' THEN 3
-                WHEN 'worker' THEN 4
+                WHEN 'staff' THEN 2
                 ELSE 99
             END
             LIMIT 1
@@ -69,7 +67,22 @@ def _ensure_admin_operational_role(conn) -> tuple[int | None, int | None]:
         print("[ERROR] no operational role found in roles table for org", org_id)
         return user_id, org_id
     role_id = int(role_row["id"])
-    role_name = str(role_row["name"])
+    role_name = str(role_row["name"]).lower()
+    if role_name != "owner":
+        owner_row = conn.execute(
+            text(
+                """
+                SELECT id, name
+                FROM roles
+                WHERE org_id = :org_id AND lower(name) = 'owner'
+                LIMIT 1
+                """
+            ),
+            {"org_id": org_id},
+        ).mappings().first()
+        if owner_row:
+            role_id = int(owner_row["id"])
+            role_name = str(owner_row["name"]).lower()
 
     existing = conn.execute(
         text(
@@ -132,10 +145,21 @@ def seed_inventory() -> None:
     if not insp.has_table("inventory_items"):
         print("[ERROR] inventory_items table not found")
         return
-    columns = [c["name"] for c in insp.get_columns("inventory_items")]
+    with engine.connect() as conn:
+        dialect = (engine.dialect.name or "").lower()
+        if dialect == "postgresql":
+            result = conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'inventory_items' ORDER BY ordinal_position"
+                )
+            )
+            columns = [str(row[0]) for row in result]
+        else:
+            columns = [str(c["name"]) for c in insp.get_columns("inventory_items")]
     print(f"Columns: {columns}")
 
-    required = {"organization_id", "sku_name", "quantity", "location"}
+    required = {"organization_id", "sku_name", "quantity", "location", "unit_price"}
     if not required.issubset(set(columns)):
         print("[ERROR] inventory_items missing required columns:", sorted(required - set(columns)))
         return
