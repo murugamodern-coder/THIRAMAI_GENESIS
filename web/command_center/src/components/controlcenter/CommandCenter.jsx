@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-/** `calm` = Layer 1 (home): chat-first, minimal chrome. `default` = full command UI when deeper context is open. */
-const QUICK_COMMANDS = [
-  "Prioritize safest high-return opportunity",
-  "Simulate top risk mitigation plan",
-  "Show confidence trend for last 24h",
-  "Run governance health check",
-];
-
 export default function CommandCenter({ onSubmit, safeMode, variant = "default", actionFlashKey = 0 }) {
   const isCalm = variant === "calm";
   const [input, setInput] = useState("");
@@ -38,7 +30,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
         ? "Degraded input channel."
         : isCalm
           ? "Issue command…"
-          : "Type a command or use quick action",
+          : "Type a command…",
     [isCalm, safeMode],
   );
 
@@ -92,12 +84,6 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
 
   return (
     <section className={shellClass}>
-      {!isCalm ? (
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300">Command Input</h2>
-          <span className="rounded-md border border-slate-700 px-2 py-0.5 text-xs text-slate-300">Voice-ready layout</span>
-        </div>
-      ) : null}
       <div
         className={
           isCalm
@@ -105,20 +91,6 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
             : "rounded-xl border border-slate-700 bg-slate-900/60 p-3"
         }
       >
-        {!isCalm ? (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {QUICK_COMMANDS.map((q) => (
-              <button
-                key={q}
-                type="button"
-                className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 hover:border-blue-500/40 hover:text-blue-200"
-                onClick={() => submit(q)}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-        ) : null}
         <div
           className={`space-y-2 overflow-y-auto rounded-lg border border-slate-800/40 bg-slate-950/40 p-2 ${isCalm ? "max-h-56 min-h-[7rem]" : "max-h-48"}`}
         >
@@ -215,11 +187,6 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
           >
             Send
           </button>
-          {!isCalm ? (
-            <button type="button" className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200">
-              Voice
-            </button>
-          ) : null}
         </div>
       </div>
     </section>

@@ -43,7 +43,7 @@ export default function ShellLayout() {
           Menu
         </button>
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Thiramai</div>
-        <div className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300">{role}</div>
+        <div className="h-8 w-8" aria-hidden="true" />
       </header>
 
       {mobileNavOpen ? (
@@ -74,7 +74,7 @@ export default function ShellLayout() {
             <NavLink
               key={`m_${item.key}`}
               to={item.to}
-              end={item.key === "brain"}
+              end={item.key !== "business" && item.key !== "personal"}
               onClick={() => setMobileNavOpen(false)}
               className={({ isActive }) =>
                 `block rounded-lg px-4 py-3 text-base transition ${
@@ -88,33 +88,30 @@ export default function ShellLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-6 space-y-2">
-          <div className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-400">
-            Role: <span className="font-medium text-slate-200">{role}</span>
-          </div>
+        <div className="mt-8 space-y-2">
           <button
             type="button"
             onClick={onSignOut}
-            className="w-full rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200"
+            className="w-full rounded-lg border border-slate-800 px-4 py-3 text-sm text-slate-400 transition hover:border-slate-700 hover:text-slate-200"
           >
             Sign out
           </button>
         </div>
       </aside>
 
-      <aside className="hidden w-64 shrink-0 border-r border-slate-800 bg-slate-950/90 p-4 md:flex md:flex-col">
-        <div className="mb-6 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Thiramai</div>
-        <nav className="space-y-1">
+      <aside className="hidden w-56 shrink-0 border-r border-slate-900 bg-slate-950/80 p-5 md:flex md:flex-col">
+        <div className="mb-8 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Thiramai</div>
+        <nav className="space-y-1.5">
           {visibleNav.map((item) => (
             <NavLink
               key={item.key}
               to={item.to}
-              end={item.key === "brain"}
+              end={item.key !== "business" && item.key !== "personal"}
               className={({ isActive }) =>
-                `block rounded-lg px-3 py-2 text-sm transition ${
+                `block rounded-xl px-3 py-2.5 text-sm transition ${
                   isActive
-                    ? "bg-slate-800 text-white"
-                    : "text-slate-300 hover:bg-slate-900 hover:text-white"
+                    ? "bg-white text-slate-950 shadow-[0_8px_24px_-18px_rgba(255,255,255,0.55)]"
+                    : "text-slate-500 hover:bg-slate-900/70 hover:text-slate-200"
                 }`
               }
             >
@@ -123,21 +120,18 @@ export default function ShellLayout() {
           ))}
         </nav>
         <div className="mt-auto space-y-2">
-          <div className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-400">
-            Role: <span className="font-medium text-slate-200">{role}</span>
-          </div>
           <button
             type="button"
             onClick={onSignOut}
-            className="w-full rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            className="w-full rounded-xl border border-slate-900 px-3 py-2.5 text-sm text-slate-500 transition hover:border-slate-700 hover:text-slate-200"
           >
             Sign out
           </button>
         </div>
       </aside>
       <main id="cc-main-content" className="flex-1 overflow-y-auto px-2 pb-28 pt-3 sm:px-4 md:p-6">
-        <div className="mx-auto w-full max-w-6xl">
-          <section className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40 p-3 sm:p-4">
+        <div className="mx-auto w-full max-w-5xl">
+          <section className="overflow-x-auto rounded-2xl border border-slate-900 bg-slate-950/20 p-3 sm:p-4">
             <Outlet />
           </section>
         </div>

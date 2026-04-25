@@ -41,7 +41,7 @@ export default function BusinessShellLayout() {
 
   useEffect(() => {
     if (!orgId || Number.isNaN(idNum) || idNum < 1) {
-      navigate("/dashboard", { replace: true });
+      navigate("/business", { replace: true });
       return;
     }
     let cancelled = false;
@@ -154,8 +154,8 @@ export default function BusinessShellLayout() {
             </div>
           )}
         </div>
-        <NavLink to="/today" className="cc-muted" style={{ fontSize: 13 }}>
-          Command Center
+        <NavLink to="/command-center" className="cc-muted" style={{ fontSize: 13 }}>
+          Command
         </NavLink>
       </header>
 

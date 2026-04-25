@@ -43,8 +43,8 @@ export function can(roleOrMe, permission) {
 }
 
 export function defaultRouteForRole(role) {
-  if (role === ROLES.STAFF) return "/dashboard/inventory";
+  if (role === ROLES.STAFF) return "/command-center";
   if (role === ROLES.FAMILY) return "/personal";
-  return "/dashboard";
+  return "/command-center";
 }
 

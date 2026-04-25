@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  if (token) return <Navigate to="/today" replace />;
+  if (token) return <Navigate to="/command-center" replace />;
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -24,7 +24,7 @@ export default function LoginPage() {
       const out = await loginWithPassword(username.trim(), password);
       if (out?.access_token) setToken(out.access_token);
       showToastDedup({ type: "success", message: "Welcome back" });
-      let dest = "/today";
+      let dest = "/command-center";
       try {
         const boot = await fetchProductBootstrap();
         const ob = boot?.product_profile?.onboarding || {};
@@ -32,7 +32,7 @@ export default function LoginPage() {
           dest = "/onboarding";
         }
       } catch {
-        /* default today */
+        /* default command center */
       }
       navigate(dest, { replace: true });
     } catch (err) {

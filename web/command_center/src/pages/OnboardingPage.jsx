@@ -61,12 +61,12 @@ export default function OnboardingPage() {
         setUserId(uid);
         setOrgName(me.organization?.name || "");
         if (uid > 0 && isOnboardingDone(uid)) {
-          navigate("/today", { replace: true });
+          navigate("/command-center", { replace: true });
           return;
         }
         const boot = await fetchProductBootstrap().catch(() => null);
         if (boot?.hints?.onboarding_complete) {
-          navigate("/today", { replace: true });
+          navigate("/command-center", { replace: true });
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -100,7 +100,7 @@ export default function OnboardingPage() {
         /* non-blocking */
       }
     }
-    navigate("/today", { replace: true });
+    navigate("/command-center", { replace: true });
   }
 
   async function runDemo() {
@@ -176,7 +176,7 @@ export default function OnboardingPage() {
           </button>
         </div>
         <p style={{ marginTop: 20, fontSize: 13 }}>
-          <button type="button" className="cc-link-btn" onClick={() => navigate("/today", { replace: true })}>
+          <button type="button" className="cc-link-btn" onClick={() => navigate("/command-center", { replace: true })}>
             Skip for now
           </button>
           {" · "}

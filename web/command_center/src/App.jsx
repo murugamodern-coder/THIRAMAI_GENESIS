@@ -56,6 +56,9 @@ import { fetchAuthMe, postUsageEvent } from "./api/commandCenterApi.js";
 import { clearAuthStorage } from "./api/client.js";
 import { defaultRouteForRole, ROLES } from "./lib/rbac.js";
 
+const ENABLE_FOCUS_MODE = true;
+const FOCUS_HOME = "/command-center";
+
 function Protected({ children }) {
   const token = useCommandStore((s) => s.token);
   return token ? children : <Navigate to="/login" replace />;
@@ -70,6 +73,14 @@ function RoleProtected({ allow, children }) {
 
 function ProtectedRoute({ children }) {
   return <Protected>{children}</Protected>;
+}
+
+function FocusRedirect() {
+  return (
+    <Protected>
+      <Navigate to={FOCUS_HOME} replace />
+    </Protected>
+  );
 }
 
 function LegacyRouteRedirect({ to, from }) {
@@ -115,7 +126,7 @@ export default function App() {
   return (
     <Suspense fallback={<div className="cc-card">Loading page...</div>}>
       <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route path="/" element={token ? <Navigate to={FOCUS_HOME} replace /> : <LandingPage />} />
       <Route path="/pricing" element={<PricingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
@@ -140,18 +151,10 @@ export default function App() {
         <Route index element={<TodayPage />} />
       </Route>
       <Route
-        path="/central"
+        path="/command-center"
         element={
           <Protected>
-            <Navigate to="/brain" replace />
-          </Protected>
-        }
-      />
-      <Route
-        path="/brain"
-        element={
-          <Protected>
-            <RoleProtected allow={[ROLES.OWNER]}>
+            <RoleProtected allow={[ROLES.OWNER, ROLES.STAFF]}>
               <ShellLayout />
             </RoleProtected>
           </Protected>
@@ -160,13 +163,41 @@ export default function App() {
         <Route index element={<BrainPage />} />
       </Route>
       <Route
-        path="/automation"
+        path="/central"
         element={
           <Protected>
-            <RoleProtected allow={[ROLES.OWNER]}>
-              <ShellLayout />
-            </RoleProtected>
+            <Navigate to={ENABLE_FOCUS_MODE ? FOCUS_HOME : "/brain"} replace />
           </Protected>
+        }
+      />
+      <Route
+        path="/brain"
+        element={
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <Protected>
+              <RoleProtected allow={[ROLES.OWNER]}>
+                <ShellLayout />
+              </RoleProtected>
+            </Protected>
+          )
+        }
+      >
+        <Route index element={<BrainPage />} />
+      </Route>
+      <Route
+        path="/automation"
+        element={
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <Protected>
+              <RoleProtected allow={[ROLES.OWNER]}>
+                <ShellLayout />
+              </RoleProtected>
+            </Protected>
+          )
         }
       >
         <Route index element={<AutomationPage />} />
@@ -174,11 +205,15 @@ export default function App() {
       <Route
         path="/integrations"
         element={
-          <Protected>
-            <RoleProtected allow={[ROLES.OWNER]}>
-              <ShellLayout />
-            </RoleProtected>
-          </Protected>
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <Protected>
+              <RoleProtected allow={[ROLES.OWNER]}>
+                <ShellLayout />
+              </RoleProtected>
+            </Protected>
+          )
         }
       >
         <Route index element={<IntegrationsPage />} />
@@ -186,11 +221,15 @@ export default function App() {
       <Route
         path="/opportunities"
         element={
-          <Protected>
-            <RoleProtected allow={[ROLES.OWNER]}>
-              <ShellLayout />
-            </RoleProtected>
-          </Protected>
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <Protected>
+              <RoleProtected allow={[ROLES.OWNER]}>
+                <ShellLayout />
+              </RoleProtected>
+            </Protected>
+          )
         }
       >
         <Route index element={<OpportunitiesPage />} />
@@ -198,11 +237,15 @@ export default function App() {
       <Route
         path="/learning"
         element={
-          <Protected>
-            <RoleProtected allow={[ROLES.OWNER]}>
-              <ShellLayout />
-            </RoleProtected>
-          </Protected>
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <Protected>
+              <RoleProtected allow={[ROLES.OWNER]}>
+                <ShellLayout />
+              </RoleProtected>
+            </Protected>
+          )
         }
       >
         <Route index element={<LearningInsightsPage />} />
@@ -246,11 +289,15 @@ export default function App() {
       <Route
         path="/research-projects"
         element={
-          <Protected>
-            <RoleProtected allow={[ROLES.OWNER]}>
-              <ShellLayout />
-            </RoleProtected>
-          </Protected>
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <Protected>
+              <RoleProtected allow={[ROLES.OWNER]}>
+                <ShellLayout />
+              </RoleProtected>
+            </Protected>
+          )
         }
       >
         <Route index element={<ResearchProjectsPage />} />
@@ -265,11 +312,29 @@ export default function App() {
           </Protected>
         }
       >
-        <Route index element={<Navigate to="/brain" replace />} />
+        <Route index element={<Navigate to={FOCUS_HOME} replace />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="stocks" element={<LegacyRouteRedirect from="/dashboard/stocks" to="/os/stock" />} />
-        <Route path="website-builder" element={<LegacyRouteRedirect from="/dashboard/website-builder" to="/os/agentic-platform" />} />
-        <Route path="research" element={<LegacyRouteRedirect from="/dashboard/research" to="/os/research" />} />
+        <Route
+          path="website-builder"
+          element={
+            ENABLE_FOCUS_MODE ? (
+              <Navigate to={FOCUS_HOME} replace />
+            ) : (
+              <LegacyRouteRedirect from="/dashboard/website-builder" to="/os/agentic-platform" />
+            )
+          }
+        />
+        <Route
+          path="research"
+          element={
+            ENABLE_FOCUS_MODE ? (
+              <Navigate to={FOCUS_HOME} replace />
+            ) : (
+              <LegacyRouteRedirect from="/dashboard/research" to="/os/research" />
+            )
+          }
+        />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="billing" element={<BillingPage />} />
         <Route path="production" element={<ProductionPage />} />
@@ -289,11 +354,15 @@ export default function App() {
       <Route
         path="/research"
         element={
-          <Protected>
-            <RoleProtected allow={[ROLES.OWNER]}>
-              <ShellLayout />
-            </RoleProtected>
-          </Protected>
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <Protected>
+              <RoleProtected allow={[ROLES.OWNER]}>
+                <ShellLayout />
+              </RoleProtected>
+            </Protected>
+          )
         }
       >
         <Route index element={<ResearchPage />} />
@@ -302,7 +371,7 @@ export default function App() {
         path="/agentic"
         element={
           <Protected>
-            <Navigate to="/os/agentic-platform" replace />
+            <Navigate to={ENABLE_FOCUS_MODE ? FOCUS_HOME : "/os/agentic-platform"} replace />
           </Protected>
         }
       />
@@ -316,13 +385,16 @@ export default function App() {
           </Protected>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<Navigate to={FOCUS_HOME} replace />} />
         <Route path="personal" element={<Navigate to="/personal" replace />} />
         <Route path="business" element={<Navigate to="/business" replace />} />
         <Route path="stock" element={<StockOSPage />} />
-        <Route path="research" element={<ResearchPage />} />
-        <Route path="agentic-platform" element={<AgenticOSPage />} />
-        <Route path="agentic" element={<Navigate to="/os/agentic-platform" replace />} />
+        <Route path="research" element={ENABLE_FOCUS_MODE ? <Navigate to={FOCUS_HOME} replace /> : <ResearchPage />} />
+        <Route
+          path="agentic-platform"
+          element={ENABLE_FOCUS_MODE ? <Navigate to={FOCUS_HOME} replace /> : <AgenticOSPage />}
+        />
+        <Route path="agentic" element={<Navigate to={ENABLE_FOCUS_MODE ? FOCUS_HOME : "/os/agentic-platform"} replace />} />
       </Route>
       <Route
         path="/analytics"
@@ -413,9 +485,27 @@ export default function App() {
       >
         <Route index element={<CopilotPage />} />
       </Route>
-      <Route path="/agentic-platform" element={<LegacyRouteRedirect from="/agentic-platform" to="/os/agentic-platform" />} />
+      <Route
+        path="/agentic-platform"
+        element={
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <LegacyRouteRedirect from="/agentic-platform" to="/os/agentic-platform" />
+          )
+        }
+      />
       <Route path="/os/stock/settings" element={<LegacyRouteRedirect from="/os/stock/settings" to="/os/stock" />} />
-      <Route path="/os/research/settings" element={<LegacyRouteRedirect from="/os/research/settings" to="/os/research" />} />
+      <Route
+        path="/os/research/settings"
+        element={
+          ENABLE_FOCUS_MODE ? (
+            <FocusRedirect />
+          ) : (
+            <LegacyRouteRedirect from="/os/research/settings" to="/os/research" />
+          )
+        }
+      />
       <Route path="/os/personal/settings" element={<LegacyRouteRedirect from="/os/personal/settings" to="/os/personal" />} />
       <Route
         path="/personal"

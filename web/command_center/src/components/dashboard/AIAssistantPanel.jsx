@@ -5,6 +5,8 @@ import BrainResponseBlock from "../BrainResponseBlock.jsx";
 import { postBrainCommand } from "../../lib/brainExecuteClient.js";
 import { showToastDedup } from "../../lib/toastDedup.js";
 
+const ENABLE_VOICE_INPUT = false;
+
 function normalizeStep(raw, idx) {
   if (raw && typeof raw === "object") {
     return {
@@ -172,19 +174,11 @@ export default function AIAssistantPanel() {
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      <section className="flex flex-col gap-4">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <h2 className="text-lg font-semibold text-slate-100">Jarvis</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            One brain: commands run through <code className="text-slate-300">POST /brain/execute</code>. You see plan,
-            execution, and status in a single response.
-          </p>
-        </div>
-
-        <div className="max-h-[62vh] overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+      <section className="flex flex-col gap-3">
+        <div className="max-h-[62vh] min-h-64 overflow-y-auto rounded-3xl border border-slate-900 bg-slate-950/50 p-4 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.9)]">
           {messages.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-400">
-              Start by typing or using voice.
+            <div className="flex min-h-52 items-center justify-center text-center text-sm text-slate-500">
+              Ask for a decision, action, or system check.
             </div>
           ) : null}
 
@@ -235,16 +229,16 @@ export default function AIAssistantPanel() {
               );
             })}
             {loading ? (
-              <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-400">Running brain…</div>
+              <div className="rounded-2xl bg-slate-900/50 px-4 py-3 text-xs text-slate-500">Thinking…</div>
             ) : null}
             <div ref={endRef} />
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+        <div className="rounded-3xl border border-slate-900 bg-slate-950/60 p-3">
           <div className="flex gap-2">
             <input
-              className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none ring-blue-500/40 focus:ring-2"
+              className="flex-1 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-slate-600"
               placeholder="Type a command…"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -256,19 +250,21 @@ export default function AIAssistantPanel() {
               type="button"
               onClick={() => submit()}
               disabled={loading}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-60"
+              className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:opacity-50"
             >
               Send
             </button>
-            <button
-              type="button"
-              onClick={startVoice}
-              disabled={loading || listening}
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-60"
-              title="Voice input"
-            >
-              {listening ? "Listening…" : "Voice"}
-            </button>
+            {ENABLE_VOICE_INPUT ? (
+              <button
+                type="button"
+                onClick={startVoice}
+                disabled={loading || listening}
+                className="rounded-2xl border border-slate-800 px-4 py-3 text-sm text-slate-300 hover:bg-slate-900 disabled:opacity-60"
+                title="Voice input"
+              >
+                {listening ? "Listening…" : "Voice"}
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
