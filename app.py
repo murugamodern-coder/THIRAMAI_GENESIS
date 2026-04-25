@@ -31,6 +31,7 @@ _wrap_stdio_utf8(sys.stderr, name="stderr")
 import logging
 import re
 import signal
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -123,6 +124,7 @@ def _cors_allow_origins() -> list[str]:
 _s_app = get_settings()
 _docs_url = None if _s_app.disable_openapi_uis() else "/docs"
 _redoc_url = None if _s_app.disable_openapi_uis() else "/redoc"
+logger = logging.getLogger("thiramai")
 
 app = FastAPI(
     title="THIRAMAI Genesis",
@@ -132,6 +134,17 @@ app = FastAPI(
     docs_url=_docs_url,
     redoc_url=_redoc_url,
 )
+
+
+@app.middleware("http")
+async def add_performance_headers(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    elapsed = time.time() - start
+    response.headers["X-Response-Time"] = f"{elapsed * 1000:.1f}ms"
+    if elapsed > 2.0:
+        logger.warning("SLOW: %s took %.2fs", request.url.path, elapsed)
+    return response
 
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 

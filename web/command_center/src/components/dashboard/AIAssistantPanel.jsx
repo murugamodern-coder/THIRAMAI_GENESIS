@@ -38,7 +38,7 @@ function normalizeStep(raw, idx) {
   return { id: `s${idx + 1}`, label: String(raw || `Step ${idx + 1}`), status: "pending", stepOrder: idx + 1, result: null };
 }
 
-export default function AIAssistantPanel() {
+export default function AIAssistantPanel({ onLoadingChange = null }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
@@ -66,6 +66,12 @@ export default function AIAssistantPanel() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (typeof onLoadingChange === "function") {
+      onLoadingChange(Boolean(loading));
+    }
+  }, [loading, onLoadingChange]);
 
   useEffect(() => {
     if (loading) return undefined;
