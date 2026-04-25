@@ -4682,5 +4682,175 @@ class EvolutionTrigger(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class CausalEdge(Base):
+    """
+    Self-Evolution Phase 2: a directed edge ``cause → effect`` with running mean
+    and variance of observed strengths.
+
+    ``observation_count``/``sum_strength``/``sum_strength_sq`` are running statistics
+    used by ``services.causal.causal_graph.CausalGraph`` to derive ``strength``
+    (mean) and ``confidence`` (1 / (1 + stddev) bounded to [0, 1]) without
+    re-aggregating from raw logs.
+    """
+
+    __tablename__ = "causal_edges"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    cause_variable: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    effect_variable: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    strength: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    observation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sum_strength: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    sum_strength_sq: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    evidence_payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    last_updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "cause_variable",
+            "effect_variable",
+            name="uq_causal_edges_scope",
+        ),
+    )
+
+
+class FeatureArchive(Base):
+    """
+    Self-Evolution Phase 2: idempotent daily snapshot of a single feature value.
+
+    Unique on ``(organization_id, scope, feature_name, captured_date)`` so a
+    daily archive job can be re-run safely.
+    """
+
+    __tablename__ = "feature_archive"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    feature_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    captured_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "scope",
+            "feature_name",
+            "captured_date",
+            name="uq_feature_archive_daily",
+        ),
+        Index("ix_feature_archive_scope_name", "scope", "feature_name"),
+    )
+
+
+class PredictionPending(Base):
+    """
+    Self-Evolution Phase 2: a single prediction awaiting outcome resolution
+    by ``services.ml.online_learner``.
+
+    Workflow:
+        1. ``predict()`` → row created with ``resolved=False`` and
+           ``resolve_after = now + horizon``.
+        2. After ``resolve_after`` an outcome resolver fills ``actual_outcome``
+           and computes ``accuracy_score``, then ``model.partial_fit(...)``.
+    """
+
+    __tablename__ = "predictions_pending"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False, default="", index=True)
+    model_version: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    action_id: Mapped[str] = mapped_column(String(128), nullable=False, default="", index=True)
+    action_type: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    features_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    predicted_outcome: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    predicted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolve_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    actual_outcome: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    accuracy_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+
+class DomainDefinition(Base):
+    """
+    Self-Evolution Phase 2: persisted definition of a domain plugin (mirrors the
+    in-process ``DomainRegistry``). The registry seeds rows here on boot so new
+    deployments can introspect / extend domains without code changes.
+    """
+
+    __tablename__ = "domain_definitions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    models: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: []
+    )
+    features: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: []
+    )
+    tables: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: []
+    )
+    prompts: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    policies: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (UniqueConstraint("name", name="uq_domain_definitions_name"),)
+
+
 # Back-compat alias (deprecated)
 Org = Organization
