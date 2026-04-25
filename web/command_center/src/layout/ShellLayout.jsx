@@ -32,7 +32,11 @@ export default function ShellLayout() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+    <div className="relative flex min-h-screen overflow-hidden bg-[linear-gradient(to_bottom,#0f172a,#020617)] text-slate-100">
+      <div
+        className="pointer-events-none absolute left-1/2 top-1/3 h-96 w-96 -translate-x-1/2 rounded-full bg-cyan-500/5 blur-3xl"
+        aria-hidden="true"
+      />
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-3 backdrop-blur md:hidden">
         <button
           type="button"
@@ -99,7 +103,7 @@ export default function ShellLayout() {
         </div>
       </aside>
 
-      <aside className="hidden w-56 shrink-0 border-r border-slate-900 bg-slate-950/80 p-5 md:flex md:flex-col">
+      <aside className="relative z-10 hidden w-56 shrink-0 border-r border-slate-900/80 bg-slate-950/55 p-5 backdrop-blur md:flex md:flex-col">
         <div className="mb-8 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Thiramai</div>
         <nav className="space-y-1.5">
           {visibleNav.map((item) => (
@@ -129,9 +133,9 @@ export default function ShellLayout() {
           </button>
         </div>
       </aside>
-      <main id="cc-main-content" className="flex-1 overflow-y-auto px-2 pb-28 pt-3 sm:px-4 md:p-6">
+      <main id="cc-main-content" className="relative z-10 flex-1 overflow-y-auto px-2 pb-28 pt-3 sm:px-4 md:p-6">
         <div className="mx-auto w-full max-w-5xl">
-          <section className="overflow-x-auto rounded-2xl border border-slate-900 bg-slate-950/20 p-3 sm:p-4">
+          <section className="overflow-x-auto rounded-2xl bg-transparent p-3 sm:p-4">
             <Outlet />
           </section>
         </div>

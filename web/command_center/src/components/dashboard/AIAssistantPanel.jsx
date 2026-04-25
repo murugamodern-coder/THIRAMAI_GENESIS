@@ -28,6 +28,15 @@ export default function AIAssistantPanel() {
   const [approvingMissionId, setApprovingMissionId] = useState(null);
   const recognitionRef = useRef(null);
   const endRef = useRef(null);
+  const lastAssistant = messages.findLast?.((m) => m.role === "assistant");
+  const hasError = Boolean(lastAssistant?.error);
+  const systemInsight = loading
+    ? "Execution path under evaluation."
+    : hasError
+      ? "Risk detected. Awaiting correction."
+      : messages.length > 1
+        ? "Execution stable. Monitoring outcomes."
+        : "No critical signals detected.";
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -173,21 +182,26 @@ export default function AIAssistantPanel() {
   }, [messages]);
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
-      <section className="flex flex-col gap-3">
-        <div className="max-h-[62vh] min-h-64 overflow-y-auto rounded-3xl border border-slate-900 bg-slate-950/50 p-4 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.9)]">
+    <div className="mx-auto w-full max-w-[720px]">
+      <p className="mb-7 text-center text-[15px] font-normal leading-7 text-slate-400" aria-live="polite">
+        {systemInsight}
+      </p>
+      <section className="flex flex-col gap-4">
+        <div className="max-h-[62vh] min-h-72 overflow-y-auto rounded-[2rem] bg-slate-950/25 p-5 shadow-[0_28px_90px_-56px_rgba(15,23,42,0.95)]">
           {messages.length === 0 ? (
-            <div className="flex min-h-52 items-center justify-center text-center text-sm text-slate-500">
+            <div className="flex min-h-56 items-center justify-center text-center text-[15px] font-normal leading-7 text-slate-500">
               Ask for a decision, action, or system check.
             </div>
           ) : null}
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {messages.map((m, idx) => {
               if (m.role === "user") {
                 return (
                   <div key={`u_${m.ts}_${idx}`} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-2xl bg-blue-600/20 px-4 py-2 text-sm text-slate-100">{m.text}</div>
+                    <div className="max-w-[85%] rounded-3xl bg-sky-500/10 px-5 py-3 text-[15px] font-normal leading-7 text-slate-200">
+                      {m.text}
+                    </div>
                   </div>
                 );
               }
@@ -195,15 +209,15 @@ export default function AIAssistantPanel() {
                 <div key={`a_${m.ts}_${idx}`} className="flex justify-start">
                   <div className="w-full max-w-[92%]">
                     {m.error ? (
-                      <div className="rounded-2xl border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+                      <div className="rounded-3xl bg-red-950/20 px-5 py-4 text-[15px] font-normal leading-7 text-red-200/90">
                         {m.error}
                       </div>
                     ) : m.brain ? (
                       <BrainResponseBlock brain={m.brain} />
                     ) : (
-                      <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100">
+                      <div className="rounded-3xl bg-slate-900/35 px-5 py-4 text-[15px] font-normal leading-7 text-slate-300">
                         {m.type === "mission" ? (
-                          <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3">
+                          <div className="rounded-2xl bg-purple-500/10 p-3">
                             <div className="mb-2 text-xs uppercase tracking-wide text-purple-300">Mission</div>
                             <div className="text-xs text-purple-200">
                               mission_id: {m.missionId || "n/a"} | status: {m.missionStatus || m.status || "planned"}
@@ -229,16 +243,18 @@ export default function AIAssistantPanel() {
               );
             })}
             {loading ? (
-              <div className="rounded-2xl bg-slate-900/50 px-4 py-3 text-xs text-slate-500">Thinking…</div>
+              <div className="rounded-3xl bg-slate-900/25 px-5 py-3 text-sm font-normal leading-7 text-slate-500">
+                thinking…
+              </div>
             ) : null}
             <div ref={endRef} />
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-900 bg-slate-950/60 p-3">
-          <div className="flex gap-2">
+        <div className="rounded-[1.75rem] bg-slate-950/70 p-2.5 shadow-[0_18px_70px_-42px_rgba(56,189,248,0.38)] ring-1 ring-slate-800/60">
+          <div className="flex gap-2.5">
             <input
-              className="flex-1 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-slate-600"
+              className="flex-1 rounded-2xl border border-transparent bg-slate-950 px-5 py-4 text-[15px] font-normal leading-6 text-slate-200 outline-none shadow-inner shadow-black/20 transition duration-300 placeholder:text-slate-600 focus:border-sky-400/40 focus:shadow-[0_0_0_4px_rgba(56,189,248,0.09)]"
               placeholder="Type a command…"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -250,7 +266,7 @@ export default function AIAssistantPanel() {
               type="button"
               onClick={() => submit()}
               disabled={loading}
-              className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:opacity-50"
+              className="rounded-2xl bg-slate-100 px-5 py-4 text-sm font-medium text-slate-950 shadow-[0_10px_30px_-18px_rgba(255,255,255,0.65)] transition duration-300 hover:-translate-y-0.5 hover:bg-white active:scale-[0.97] disabled:translate-y-0 disabled:opacity-50"
             >
               Send
             </button>
