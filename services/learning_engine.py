@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, String, cast, func, or_, select
 
 from core.database import get_session_factory
 from core.db.models import LearningLog, StrategyProfile
@@ -23,6 +24,27 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _user_uuid_text_or_none(user_id: int | str) -> str | None:
+    try:
+        return str(UUID(str(user_id).strip()))
+    except Exception:
+        return None
+
+
+def _learning_log_user_scope(user_id: int | str):
+    scope: list[Any] = []
+    try:
+        scope.append(LearningLog.resolved_by_user_id == int(user_id))
+    except Exception:
+        pass
+    uid_txt = _user_uuid_text_or_none(user_id)
+    if uid_txt:
+        scope.append(cast(LearningLog.user_id, String) == uid_txt)
+    if not scope:
+        return LearningLog.id == -1
+    return or_(*scope)
+
+
 def record_outcome(
     *,
     user_id: int,
@@ -38,8 +60,10 @@ def record_outcome(
     outcome_data = outcome or {}
     pnl = float(outcome_data.get("profit_loss") or outcome_data.get("realized_profit") or 0)
     success = bool(outcome_data.get("success")) if "success" in outcome_data else pnl >= 0
+    user_uuid = _user_uuid_text_or_none(user_id)
     with factory() as session:
         row = LearningLog(
+            user_id=user_uuid,
             resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type=str(source_type or "")[:32],
@@ -61,7 +85,7 @@ def record_outcome(
 def _fetch_recent_logs(session, user_id: int, limit: int = 120) -> list[LearningLog]:
     q: Select[tuple[LearningLog]] = (
         select(LearningLog)
-        .where(LearningLog.resolved_by_user_id == int(user_id))
+        .where(_learning_log_user_scope(user_id))
         .order_by(LearningLog.created_at.desc(), LearningLog.id.desc())
         .limit(max(1, min(int(limit), 1000)))
     )

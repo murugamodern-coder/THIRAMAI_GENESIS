@@ -263,6 +263,18 @@ export default function App() {
         <Route index element={<ControlCenterPage />} />
       </Route>
       <Route
+        path="/os/control-center"
+        element={
+          <Protected>
+            <RoleProtected allow={[ROLES.OWNER]}>
+              <ShellLayout />
+            </RoleProtected>
+          </Protected>
+        }
+      >
+        <Route index element={<ControlCenterPage />} />
+      </Route>
+      <Route
         path="/money-loop"
         element={
           <Protected>

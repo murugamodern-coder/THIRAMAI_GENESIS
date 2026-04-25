@@ -16,6 +16,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
   ]);
 
   const [shellPulseClass, setShellPulseClass] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   useEffect(() => {
     if (!actionFlashKey || actionFlashKey === lastFlashKey.current) return;
     lastFlashKey.current = actionFlashKey;
@@ -82,8 +83,48 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
     .filter(Boolean)
     .join(" ");
 
+  const inputRowStyle = {
+    position: "fixed",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    width: "100%",
+    maxWidth: "720px",
+    margin: "0 auto",
+    padding: "16px",
+    background: "rgba(10,15,30,0.95)",
+    backdropFilter: "blur(10px)",
+    borderTop: "1px solid rgba(255,255,255,0.06)",
+    zIndex: 40,
+    boxSizing: "border-box",
+  };
+
+  const inputFieldStyle = {
+    width: "100%",
+    background: "rgba(255,255,255,0.06)",
+    border: inputFocused ? "1px solid rgba(59,130,246,0.5)" : "1px solid rgba(255,255,255,0.12)",
+    borderRadius: "10px",
+    padding: "14px 16px",
+    color: "#ffffff",
+    fontSize: "15px",
+    outline: "none",
+    transition: "border-color 0.15s ease",
+  };
+
+  const sendBtnStyle = {
+    background: "#3b82f6",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "8px",
+    padding: "10px 20px",
+    fontSize: "14px",
+    fontWeight: "600",
+    cursor: "pointer",
+    transition: "all 0.15s ease",
+  };
+
   return (
-    <section className={shellClass}>
+    <section className={`${shellClass} relative pb-28`}>
       <div
         className={
           isCalm
@@ -176,41 +217,38 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
             );
           })}
         </div>
-        <div className={`mt-3 flex gap-2 ${isCalm ? "items-center" : ""}`}>
-          <input
-            className={`flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-[border-color,box-shadow,transform] duration-300 ease-out ${
-              isCalm
-                ? `border-slate-800 py-3 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.18)] ${isSending ? "scale-[0.985]" : "scale-100"}`
-                : `border-slate-700 py-2 ${isSending ? "scale-[0.99]" : "scale-100"}`
-            }`}
-            style={{
-              background: "rgba(255,255,255,0.08)",
-              color: "#ffffff",
-              border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: "8px",
-              padding: "12px 16px",
-              width: "100%",
-              outline: "none",
-            }}
-            placeholder={placeholder}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit(input);
-              }
-            }}
-          />
-          <button
-            type="button"
-            className={`shrink-0 rounded-xl bg-gradient-to-b from-white to-slate-200 px-5 font-semibold shadow-[0_1px_0_rgba(255,255,255,0.5)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(255,255,255,0.25)] active:scale-[0.97] active:translate-y-0 ${isCalm ? "py-3 text-sm" : "py-2 text-sm"}`}
-            style={{ color: "#0f172a" }}
-            onClick={() => submit(input)}
-          >
-            Send
-          </button>
-        </div>
+      </div>
+      <div
+        className={isCalm ? "flex items-center gap-2" : "flex gap-2 items-center"}
+        style={inputRowStyle}
+      >
+        <input
+          className={`flex-1 outline-none transition-[box-shadow,transform] duration-300 ease-out ${
+            isCalm
+              ? `${isSending ? "scale-[0.985]" : "scale-100"} focus:shadow-[0_0_0_3px_rgba(59,130,246,0.18)]`
+              : `${isSending ? "scale-[0.99]" : "scale-100"}`
+          }`}
+          style={inputFieldStyle}
+          placeholder={placeholder}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit(input);
+            }
+          }}
+        />
+        <button
+          type="button"
+          className={`shrink-0 ${isCalm ? "py-3 text-sm" : "py-2 text-sm"}`}
+          style={sendBtnStyle}
+          onClick={() => submit(input)}
+        >
+          Send
+        </button>
       </div>
     </section>
   );

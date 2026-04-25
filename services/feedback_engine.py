@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, or_, select
 
 from core.database import get_session_factory
 from core.db.models import LearningLog
@@ -20,6 +21,27 @@ def _session_factory_or_none():
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _user_uuid_text_or_none(user_id: int | str) -> str | None:
+    try:
+        return str(UUID(str(user_id).strip()))
+    except Exception:
+        return None
+
+
+def _learning_log_user_scope(user_id: int | str):
+    scope: list[Any] = []
+    try:
+        scope.append(LearningLog.resolved_by_user_id == int(user_id))
+    except Exception:
+        pass
+    uid_txt = _user_uuid_text_or_none(user_id)
+    if uid_txt:
+        scope.append(cast(LearningLog.user_id, String) == uid_txt)
+    if not scope:
+        return LearningLog.id == -1
+    return or_(*scope)
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:
@@ -55,8 +77,10 @@ def record_prediction_vs_actual(
     actual_success = bool((actual or {}).get("success", _safe_float((actual or {}).get("profit"), 0) >= 0))
     calibration_gap = abs((1.0 if actual_success else 0.0) - confidence)
     strategy = str((predicted or {}).get("strategy") or (predicted or {}).get("source_type") or "general")
+    user_uuid = _user_uuid_text_or_none(user_id)
     with factory() as session:
         row = LearningLog(
+            user_id=user_uuid,
             resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type="feedback",
@@ -93,7 +117,7 @@ def _fetch_feedback_rows(user_id: int, limit: int = 300) -> list[LearningLog]:
         return (
             session.execute(
                 select(LearningLog)
-                .where(LearningLog.resolved_by_user_id == int(user_id), LearningLog.source_type == "feedback")
+                .where(_learning_log_user_scope(user_id), LearningLog.source_type == "feedback")
                 .order_by(LearningLog.created_at.desc(), LearningLog.id.desc())
                 .limit(max(1, min(int(limit), 1000)))
             )

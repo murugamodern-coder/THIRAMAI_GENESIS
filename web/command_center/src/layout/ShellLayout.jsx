@@ -2,8 +2,73 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { fetchAuthMe } from "../api/commandCenterApi.js";
-import { visibleNavForRole } from "../lib/navigationVisibility.js";
+import { ROLES } from "../lib/rbac.js";
 import { useCommandStore } from "../store/useCommandStore.js";
+
+const menuItems = [
+  { key: "command", label: "Command", path: "/command-center", icon: "⚡", roles: [ROLES.OWNER, ROLES.STAFF] },
+  { key: "control", label: "Control", path: "/os/control-center", icon: "🎛️", roles: [ROLES.OWNER] },
+  { key: "business", label: "Business", path: "/dashboard", icon: "💼", roles: [ROLES.OWNER, ROLES.STAFF] },
+  { key: "personal", label: "Personal", path: "/today", icon: "👤", roles: [ROLES.OWNER, ROLES.STAFF, ROLES.FAMILY] },
+];
+
+const sidebarStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "240px",
+  height: "100vh",
+  background: "rgba(10, 15, 30, 0.98)",
+  backdropFilter: "blur(20px)",
+  borderRight: "1px solid rgba(255,255,255,0.06)",
+  zIndex: 1000,
+  display: "flex",
+  flexDirection: "column",
+  padding: "24px 16px",
+};
+
+const logoStyle = {
+  fontSize: "18px",
+  fontWeight: "700",
+  color: "#ffffff",
+  letterSpacing: "0.1em",
+  marginBottom: "32px",
+  paddingLeft: "12px",
+};
+
+const itemBaseStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "10px 12px",
+  borderRadius: "8px",
+  color: "#94a3b8",
+  textDecoration: "none",
+  fontSize: "14px",
+  fontWeight: "500",
+  cursor: "pointer",
+  transition: "all 0.15s ease",
+  marginBottom: "4px",
+};
+
+const itemActiveStyle = {
+  background: "rgba(59, 130, 246, 0.15)",
+  color: "#ffffff",
+  borderLeft: "2px solid #3b82f6",
+};
+
+const footerStyle = {
+  marginTop: "auto",
+  borderTop: "1px solid rgba(255,255,255,0.06)",
+  paddingTop: "16px",
+};
+
+function itemsForRole(role) {
+  if (role === ROLES.FAMILY) {
+    return menuItems.filter((m) => m.key === "personal");
+  }
+  return menuItems.filter((m) => m.roles.includes(role));
+}
 
 export default function ShellLayout() {
   const navigate = useNavigate();
@@ -22,14 +87,68 @@ export default function ShellLayout() {
       .catch(() => {});
   }, [token, setMe]);
 
-  const visibleNav = useMemo(() => {
-    return visibleNavForRole(role);
-  }, [role]);
+  const visibleMenu = useMemo(() => itemsForRole(role), [role]);
 
   const onSignOut = () => {
     logout();
     navigate("/login", { replace: true });
   };
+
+  const emailPreview = useCommandStore((s) => s.me?.email) || "Account";
+
+  const renderNav = (onNavigate) => (
+    <>
+      <div style={logoStyle}>THIRAMAI</div>
+      <nav>
+        {visibleMenu.map((item) => (
+          <NavLink
+            key={item.key}
+            to={item.path}
+            end={item.key !== "business" && item.key !== "personal"}
+            onClick={onNavigate}
+            style={({ isActive }) => ({
+              ...itemBaseStyle,
+              borderLeft: isActive ? "2px solid #3b82f6" : "2px solid transparent",
+              ...(isActive ? itemActiveStyle : {}),
+            })}
+          >
+            <span aria-hidden="true">{item.icon}</span>
+            <span style={{ color: "inherit" }}>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+      <div style={footerStyle}>
+        <div
+          style={{
+            fontSize: "12px",
+            color: "#94a3b8",
+            paddingLeft: "12px",
+            marginBottom: "12px",
+            wordBreak: "break-all",
+          }}
+        >
+          {String(emailPreview)}
+        </div>
+        <button
+          type="button"
+          onClick={onSignOut}
+          style={{
+            width: "100%",
+            textAlign: "left",
+            padding: "10px 12px",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "transparent",
+            color: "#ffffff",
+            fontSize: "14px",
+            cursor: "pointer",
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <div
@@ -65,95 +184,42 @@ export default function ShellLayout() {
 
       {mobileNavOpen ? (
         <div
-          className="fixed inset-0 z-50 bg-slate-950/70 md:hidden"
+          className="fixed inset-0 z-[999] bg-black/50 md:hidden"
           onClick={() => setMobileNavOpen(false)}
+          onKeyDown={(e) => e.key === "Escape" && setMobileNavOpen(false)}
+          role="presentation"
           aria-hidden="true"
         />
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 transform border-r border-slate-800 bg-slate-950 p-4 transition-transform md:hidden ${
-          mobileNavOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className="md:hidden"
+        style={{
+          ...sidebarStyle,
+          transform: mobileNavOpen ? "translateX(0)" : "translateX(-100%)",
+          transition: "transform 0.2s ease",
+        }}
       >
-        <div className="mb-6 flex items-center justify-between">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "#ffffff" }}>
-            Thiramai
-          </div>
+        <div className="mb-4 flex items-center justify-end">
           <button
             type="button"
             onClick={() => setMobileNavOpen(false)}
-            className="rounded-lg border border-slate-700 px-2 py-1 text-xs"
-            style={{ color: "#ffffff" }}
+            style={{ color: "#94a3b8", fontSize: "12px", background: "none", border: "none", cursor: "pointer" }}
           >
             Close
           </button>
         </div>
-        <nav className="space-y-2">
-          {visibleNav.map((item) => (
-            <NavLink
-              key={`m_${item.key}`}
-              to={item.to}
-              end={item.key !== "business" && item.key !== "personal"}
-              onClick={() => setMobileNavOpen(false)}
-              className={({ isActive }) =>
-                `block rounded-lg px-4 py-3 text-base transition ${
-                  isActive ? "bg-slate-800" : "hover:bg-slate-900"
-                }`
-              }
-              style={{ color: "#ffffff" }}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="mt-8 space-y-2">
-          <button
-            type="button"
-            onClick={onSignOut}
-            className="w-full rounded-lg border border-slate-800 px-4 py-3 text-sm transition hover:border-slate-700"
-            style={{ color: "#ffffff" }}
-          >
-            Sign out
-          </button>
-        </div>
+        {renderNav(() => setMobileNavOpen(false))}
       </aside>
 
-      <aside className="relative z-10 hidden w-56 shrink-0 border-r border-slate-900/80 bg-slate-950/80 p-5 backdrop-blur md:flex md:flex-col">
-        <div className="mb-8 text-xs font-semibold uppercase tracking-[0.22em]" style={{ color: "#ffffff" }}>
-          Thiramai
-        </div>
-        <nav className="space-y-1.5">
-          {visibleNav.map((item) => (
-            <NavLink
-              key={item.key}
-              to={item.to}
-              end={item.key !== "business" && item.key !== "personal"}
-              className={({ isActive }) =>
-                `block rounded-xl px-3 py-2.5 text-sm transition ${
-                  isActive
-                    ? "bg-white shadow-[0_8px_24px_-18px_rgba(255,255,255,0.55)]"
-                    : "hover:bg-slate-900/70"
-                }`
-              }
-              style={({ isActive }) => ({ color: isActive ? "#0f172a" : "#ffffff" })}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="mt-auto space-y-2">
-          <button
-            type="button"
-            onClick={onSignOut}
-            className="w-full rounded-xl border border-slate-900 px-3 py-2.5 text-sm transition hover:border-slate-700"
-            style={{ color: "#ffffff" }}
-          >
-            Sign out
-          </button>
-        </div>
+      <aside className="relative z-10 hidden md:flex" style={sidebarStyle}>
+        {renderNav(() => {})}
       </aside>
-      <main id="cc-main-content" className="relative z-10 flex-1 overflow-y-auto px-2 pb-28 pt-3 sm:px-4 md:p-6">
+
+      <main
+        id="cc-main-content"
+        className="relative z-10 flex-1 overflow-y-auto px-2 pb-28 pt-3 sm:px-4 md:ml-[240px] md:p-6"
+      >
         <div className="mx-auto w-full max-w-5xl">
           <section className="overflow-x-auto rounded-2xl bg-transparent p-3 sm:p-4">
             <Outlet />

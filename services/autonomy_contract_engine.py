@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, or_, select
 
 from core.database import get_session_factory
 from core.db.models import LearningLog
@@ -34,6 +35,27 @@ def _coerce_mode(mode: str | None) -> str:
     return m if m in _ALLOWED_MODES else _DEFAULT_MODE
 
 
+def _user_uuid_text_or_none(user_id: int | str) -> str | None:
+    try:
+        return str(UUID(str(user_id).strip()))
+    except Exception:
+        return None
+
+
+def _learning_log_user_scope(user_id: int | str):
+    scope: list[Any] = []
+    try:
+        scope.append(LearningLog.resolved_by_user_id == int(user_id))
+    except Exception:
+        pass
+    uid_txt = _user_uuid_text_or_none(user_id)
+    if uid_txt:
+        scope.append(cast(LearningLog.user_id, String) == uid_txt)
+    if not scope:
+        return LearningLog.id == -1
+    return or_(*scope)
+
+
 def get_autonomy_state(user_id: int) -> dict[str, Any]:
     factory = _session_factory_or_none()
     if factory is None:
@@ -48,7 +70,7 @@ def get_autonomy_state(user_id: int) -> dict[str, Any]:
             session.execute(
                 select(LearningLog)
                 .where(
-                    LearningLog.resolved_by_user_id == int(user_id),
+                    _learning_log_user_scope(user_id),
                     LearningLog.source_type == _SOURCE_TYPE,
                     LearningLog.source_id == _SOURCE_ID,
                 )
@@ -87,8 +109,10 @@ def set_autonomy_state(
     if factory is None:
         return {"ok": False, "error": "Database unavailable"}
     mode_norm = _coerce_mode(mode)
+    user_uuid = _user_uuid_text_or_none(user_id)
     with factory() as session:
         row = LearningLog(
+            user_id=user_uuid,
             resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type=_SOURCE_TYPE,

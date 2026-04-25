@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, or_, select
 
 from core.database import get_session_factory
 from core.db.models import LearningLog
@@ -22,6 +23,27 @@ def _session_factory_or_none():
         return get_session_factory()
     except Exception:
         return None
+
+
+def _user_uuid_text_or_none(user_id: int | str) -> str | None:
+    try:
+        return str(UUID(str(user_id).strip()))
+    except Exception:
+        return None
+
+
+def _learning_log_user_scope(user_id: int | str):
+    scope: list[Any] = []
+    try:
+        scope.append(LearningLog.resolved_by_user_id == int(user_id))
+    except Exception:
+        pass
+    uid_txt = _user_uuid_text_or_none(user_id)
+    if uid_txt:
+        scope.append(cast(LearningLog.user_id, String) == uid_txt)
+    if not scope:
+        return LearningLog.id == -1
+    return or_(*scope)
 
 
 def generate_hypotheses(user_id: int, domain: str) -> dict[str, Any]:
@@ -50,8 +72,10 @@ def run_experiment(user_id: int, organization_id: int, hypothesis_id: str, varia
     candidate = float(variant.get("candidate_score") or 0.55)
     delta = candidate - baseline
     success = delta >= 0
+    user_uuid = _user_uuid_text_or_none(user_id)
     with factory() as session:
         row = LearningLog(
+            user_id=user_uuid,
             resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type="research_experiment",
@@ -79,7 +103,7 @@ def compare_experiment_results(user_id: int, experiment_group_id: str) -> dict[s
         rows = (
             session.execute(
                 select(LearningLog)
-                .where(LearningLog.resolved_by_user_id == int(user_id), LearningLog.source_type == "research_experiment")
+                .where(_learning_log_user_scope(user_id), LearningLog.source_type == "research_experiment")
                 .order_by(LearningLog.created_at.desc(), LearningLog.id.desc())
                 .limit(40)
             )
