@@ -55,3 +55,14 @@ def test_security_headers_strip_server_in_production(monkeypatch: pytest.MonkeyP
         h = client.get("/probe").headers
     assert "server" not in h
     assert "x-powered-by" not in h
+
+
+def test_security_headers_allow_inline_styles_for_spa():
+    async def route(_):
+        return JSONResponse({})
+
+    app = Starlette(routes=[Route("/", route)])
+    app.add_middleware(SecurityHeadersMiddleware)
+    with TestClient(app) as client:
+        csp = client.get("/").headers.get("content-security-policy", "")
+    assert "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'" in csp

@@ -87,7 +87,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             csp = (
                 "default-src 'self'; "
                 "script-src 'self' https://cdn.tailwindcss.com; "
-                "style-src 'self' https://fonts.googleapis.com; "
+                "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
                 "font-src 'self' https://fonts.gstatic.com data:; "
                 "img-src 'self' data:; "
                 "connect-src 'self'; "
