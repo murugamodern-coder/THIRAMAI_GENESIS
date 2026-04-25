@@ -28,3 +28,22 @@ Thumbs.db
 .env.production
 .env.local
 *.env
+
+# Python caches / binaries
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Local databases / backups
+*.sqlite
+*.sqlite3
+thiramai/data/backups/
+
+# Runtime state / generated logs
+logs/
+var/
+vault/
+*.jsonl
+*.log
