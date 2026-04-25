@@ -107,6 +107,21 @@ function normalizeSubmitResult(raw) {
   return raw;
 }
 
+function buildFollowUpSuggestions(command, responseText) {
+  const q = String(command || "").toLowerCase();
+  const r = String(responseText || "").toLowerCase();
+  if (q.includes("inventory") || r.includes("stock") || r.includes("inventory")) {
+    return ["Check low stock", "Add new item", "View suppliers"];
+  }
+  if (q.includes("revenue") || q.includes("sales") || r.includes("revenue")) {
+    return ["View this week", "Compare last month", "Top products"];
+  }
+  if (q.includes("invoice") || r.includes("invoice")) {
+    return ["Show pending invoices", "Record payment", "Create invoice"];
+  }
+  return ["Show revenue", "Show inventory", "Show pending invoices"];
+}
+
 export default function CommandCenter({ onSubmit, safeMode, variant = "default", actionFlashKey = 0 }) {
   const isCalm = variant === "calm";
   const [input, setInput] = useState("");
@@ -155,6 +170,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
 
       if (isBrainExecutePayload(result)) {
         const { text, warn } = formatBrainExecuteResponse(result);
+        const suggestions = buildFollowUpSuggestions(cmd, text);
         const aid = `a_${Date.now()}`;
         setHistory((prev) => [
           ...prev,
@@ -164,6 +180,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
             text,
             blocks: null,
             tone: warn ? "warn" : "ok",
+            suggestions,
           },
         ]);
         setEnterAssistantId(aid);
@@ -184,6 +201,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
         }
       }
       const aid = `a_${Date.now()}`;
+      const suggestions = buildFollowUpSuggestions(cmd, assistantText || core);
       setHistory((prev) => [
         ...prev,
         {
@@ -192,6 +210,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
           text: assistantText,
           blocks,
           tone: ok ? "ok" : "warn",
+          suggestions,
         },
       ]);
       setEnterAssistantId(aid);
@@ -324,23 +343,40 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                     })}
                   </div>
                 ) : (
-                  h.text.split("\n").map((line, i) => (
-                    <span
-                      key={`${h.id}_ln_${i}`}
-                      className={
-                        i > 0
-                          ? warnTone
-                            ? "mt-1 block text-[13px] leading-6"
-                            : "mt-1 block text-[13px] leading-6"
-                          : "block leading-6"
-                      }
-                      style={{
-                        color: warnTone && line.trimStart().startsWith("⚠️") ? "#fbbf24" : "#ffffff",
-                      }}
-                    >
-                      {line}
-                    </span>
-                  ))
+                  <>
+                    {h.text.split("\n").map((line, i) => (
+                      <span
+                        key={`${h.id}_ln_${i}`}
+                        className={
+                          i > 0
+                            ? warnTone
+                              ? "mt-1 block text-[13px] leading-6"
+                              : "mt-1 block text-[13px] leading-6"
+                            : "block leading-6"
+                        }
+                        style={{
+                          color: warnTone && line.trimStart().startsWith("⚠️") ? "#fbbf24" : "#ffffff",
+                        }}
+                      >
+                        {line}
+                      </span>
+                    ))}
+                    {h.role === "assistant" && Array.isArray(h.suggestions) && h.suggestions.length > 0 ? (
+                      <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {h.suggestions.slice(0, 3).map((s) => (
+                          <button
+                            key={`${h.id}_${s}`}
+                            type="button"
+                            className="cc-btn cc-btn-secondary"
+                            style={{ fontSize: 12, padding: "4px 8px" }}
+                            onClick={() => submit(String(s))}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
             );

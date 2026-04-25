@@ -1,0 +1,2 @@
+import{k as e}from"./cc-vendor-CyTesiP1.js";import{C as t}from"./cc-app-M5Zhkgln.js";import"./cc-vendor-router-De2AVtcB.js";import"./cc-vendor-state-WWOKp67T.js";function n(){return e.jsx(t,{title:"Analytics",icon:"??",description:"Deep business intelligence with AI-powered insights",expectedDate:"Q2 2026",features:["Revenue trend analysis","Customer behavior patterns","Predictive forecasting","Custom dashboards"]})}export{n as default};
+//# sourceMappingURL=cc-AnalyticsPage-03NEiSV9.js.map

@@ -242,7 +242,12 @@ def list_bills_sync(*, organization_id: int, limit: int = 100) -> dict[str, Any]
     return {"ok": True, "bills": items}
 
 
-def list_invoices_sync(*, organization_id: int, limit: int = 200) -> dict[str, Any]:
+def list_invoices_sync(
+    *,
+    organization_id: int,
+    limit: int = 200,
+    status: str | None = None,
+) -> dict[str, Any]:
     oid = int(organization_id)
     if oid <= 0:
         return {"ok": False, "error": "organization_id required"}
@@ -250,17 +255,17 @@ def list_invoices_sync(*, organization_id: int, limit: int = 200) -> dict[str, A
     if factory is None:
         return {"ok": False, "error": "DATABASE_URL is not configured"}
     lim = max(1, min(int(limit), 500))
+    wanted_status = (status or "").strip().lower()
     with factory() as session:
-        rows = list(
-            session.scalars(
-                select(Invoice)
-                .where(Invoice.organization_id == oid)
-                .order_by(Invoice.id.desc())
-                .limit(lim)
-            ).all()
-        )
+        stmt = select(Invoice).where(Invoice.organization_id == oid)
+        if wanted_status:
+            if wanted_status == "pending":
+                stmt = stmt.where(Invoice.payment_status.in_(("unpaid", "partial")))
+            else:
+                stmt = stmt.where(Invoice.payment_status == wanted_status)
+        rows = list(session.scalars(stmt.order_by(Invoice.id.desc()).limit(lim)).all())
         items = [_serialize_invoice(r, session, include_lines=True) for r in rows]
-    return {"ok": True, "invoices": items}
+    return {"ok": True, "invoices": items, "status_filter": wanted_status or None}
 
 
 def _recompute_payment_status(session: Session, inv: Invoice) -> None:

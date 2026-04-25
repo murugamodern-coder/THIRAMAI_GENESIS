@@ -1,2 +1,0 @@
-import{k as t}from"./cc-vendor-CyTesiP1.js";import{C as i}from"./cc-app-DCbgLW3v.js";import"./cc-vendor-router-De2AVtcB.js";import"./cc-vendor-state-WWOKp67T.js";function a(){return t.jsx(i,{title:"GST Filing",icon:"???",description:"Automated GST returns and compliance",expectedDate:"Q3 2026",features:["GSTR-1, GSTR-3B auto-fill","Input tax credit tracking","E-invoice generation","Direct filing integration"]})}export{a as default};
-//# sourceMappingURL=cc-GSTPage-DjeyzluZ.js.map

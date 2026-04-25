@@ -596,9 +596,20 @@ async def billing_list_cash_bills(
 @router.get("/billing/invoices")
 async def billing_phase2_list_invoices(
     limit: int = 200,
+    status: str | None = Query(
+        default=None,
+        description="Optional payment status filter (pending, unpaid, partial, paid).",
+    ),
+    org_id: int | None = Query(default=None, ge=1, description="Optional org_id (must match caller org)."),
     _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
-    out = list_invoices_sync(organization_id=_user.organization_id, limit=limit)
+    if org_id is not None and int(org_id) != int(_user.organization_id):
+        raise HTTPException(status_code=403, detail="org_id must match your active organization")
+    out = list_invoices_sync(
+        organization_id=_user.organization_id,
+        limit=limit,
+        status=status,
+    )
     if not out.get("ok"):
         raise HTTPException(status_code=503, detail=out.get("error") or "list failed")
     return JSONResponse(content=out)

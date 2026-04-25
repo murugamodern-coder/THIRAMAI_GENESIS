@@ -218,6 +218,14 @@ export async function fetchInventoryList() {
   return data;
 }
 
+export async function fetchDashboardBusinessSummary(orgId, threshold) {
+  const params = {};
+  if (orgId != null && Number.isFinite(Number(orgId)) && Number(orgId) > 0) params.org_id = Number(orgId);
+  if (threshold != null && Number.isFinite(Number(threshold))) params.threshold = Number(threshold);
+  const { data } = await api.get("/dashboard/business-summary", { params });
+  return data;
+}
+
 export async function fetchInventoryAlerts(threshold) {
   const { data } = await api.get("/inventory/alerts", {
     params: threshold != null ? { threshold } : {},
@@ -522,6 +530,13 @@ export async function postSystemEmergencyStop() {
 
 export async function fetchInvoices(limit = 200) {
   const { data } = await api.get("/billing/invoices", { params: { limit } });
+  return data;
+}
+
+export async function fetchPendingInvoices(orgId, limit = 200) {
+  const params = { limit, status: "pending" };
+  if (orgId != null && Number.isFinite(Number(orgId)) && Number(orgId) > 0) params.org_id = Number(orgId);
+  const { data } = await api.get("/billing/invoices", { params });
   return data;
 }
 

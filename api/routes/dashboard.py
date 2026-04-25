@@ -286,6 +286,29 @@ def _threshold() -> int:
 
 
 @router.get(
+    "/business-summary",
+    summary="Business summary (tenant-scoped, active org)",
+    description=(
+        "Authenticated tenant snapshot with revenue today/week/month and GST summaries. "
+        "Accepts optional org_id for compatibility; it must match the active JWT org."
+    ),
+)
+async def dashboard_business_summary(
+    org_id: int | None = Query(default=None, ge=1),
+    threshold: int = Query(5, ge=0, le=10_000, description="Low-stock threshold echoed in payload"),
+    _user: CurrentUser = Depends(get_current_user),
+) -> JSONResponse:
+    if org_id is not None and int(org_id) != int(_user.organization_id):
+        raise HTTPException(status_code=403, detail="org_id must match your active organization")
+    data = await asyncio.to_thread(
+        compute_dashboard_summary_sync,
+        _user.organization_id,
+        low_stock_threshold=threshold,
+    )
+    return JSONResponse(content=data)
+
+
+@router.get(
     "/summary",
     summary="Bills revenue, GST, top SKUs",
     description="Admin only. Aggregates ``bills`` for this org: revenue today/week/month, GST, top 5 SKUs.",

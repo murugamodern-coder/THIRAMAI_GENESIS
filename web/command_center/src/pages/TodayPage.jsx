@@ -40,6 +40,12 @@ function weatherLabel(w) {
   return `${t}°C`;
 }
 
+function fmtINR(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+}
+
 function saluteForHour(h) {
   if (h >= 5 && h < 12) return "Good morning";
   if (h >= 12 && h < 17) return "Good afternoon";
@@ -538,20 +544,26 @@ export default function TodayPage() {
             <dl className="cc-today-dl">
               <div>
                 <dt>Revenue today</dt>
-                <dd>₹{biz.revenue_today_inr ?? "—"}</dd>
+                <dd>{fmtINR(biz.revenue_today_inr)}</dd>
               </div>
               <div>
                 <dt>This week</dt>
-                <dd>₹{biz.revenue_week_inr ?? "—"}</dd>
+                <dd>{fmtINR(biz.revenue_week_inr)}</dd>
               </div>
-              {(biz.pending_invoices_count ?? 0) > 0 && (
-                <div>
-                  <dt>Pending invoices</dt>
-                  <dd>
-                    {biz.pending_invoices_count} · ₹{biz.pending_invoices_total_inr ?? "—"}
-                  </dd>
-                </div>
-              )}
+              <div>
+                <dt>Inventory items</dt>
+                <dd>{biz.inventory_items_count ?? biz.inventory_total_items ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Low stock alerts</dt>
+                <dd>{biz.low_stock_alert_count ?? biz.low_stock_count ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Pending invoices</dt>
+                <dd>
+                  {biz.pending_invoices_count ?? 0} · {fmtINR(biz.pending_invoices_total_inr)}
+                </dd>
+              </div>
             </dl>
           ) : (
             <p className="cc-muted">No org revenue data, or you&apos;re in personal-only mode.</p>

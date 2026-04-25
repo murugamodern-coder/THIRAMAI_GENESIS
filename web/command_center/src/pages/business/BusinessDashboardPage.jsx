@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 
 import {
+  fetchDashboardBusinessSummary,
+  fetchInventoryAlerts,
+  fetchInventoryList,
+  fetchPendingInvoices,
   fetchBusinessPlDaily,
   fetchBusinessSnapshot,
   fetchSubsidyCases,
@@ -44,6 +48,10 @@ export default function BusinessDashboardPage() {
   const [snap, setSnap] = useState(null);
   const [pl, setPl] = useState(null);
   const [subs, setSubs] = useState([]);
+  const [bizSummary, setBizSummary] = useState(null);
+  const [invSummary, setInvSummary] = useState({ totalItems: 0, lowStockCount: 0, totalValue: 0 });
+  const [pendingSummary, setPendingSummary] = useState({ count: 0, amount: 0 });
+  const [stockAlerts, setStockAlerts] = useState([]);
   const [err, setErr] = useState(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,18 +79,54 @@ export default function BusinessDashboardPage() {
         withTimeout(fetchBusinessPlDaily(), "Business P&L"),
         hint?.subsidy ? withTimeout(fetchSubsidyCases(50), "Subsidy list") : Promise.resolve([]),
       ]);
+      const orgId = Number(
+        s?.organization_id ?? s?.org_id ?? outlet?.orgId ?? outlet?.organizationId ?? 0,
+      ) || null;
+      const [summaryRes, invRes, pendingRes, alertsRes] = await Promise.all([
+        withTimeout(fetchDashboardBusinessSummary(orgId), "Business summary"),
+        withTimeout(fetchInventoryList(), "Inventory"),
+        withTimeout(fetchPendingInvoices(orgId, 200), "Pending invoices"),
+        withTimeout(fetchInventoryAlerts(), "Stock alerts"),
+      ]);
       if (isStale()) return;
       const safeS = s && typeof s === "object" ? s : {};
       const safeP = p && typeof p === "object" ? p : {};
       setSnap(safeS);
       setPl(safeP.ok === false ? null : safeP);
       setSubs(hint?.subsidy ? subsidyCasesList(subsidyRaw) : []);
+      setBizSummary(summaryRes && typeof summaryRes === "object" ? summaryRes : {});
+      const invItems = safeArray(invRes?.items ?? invRes?.inventory ?? invRes?.rows);
+      const totalValue = invItems.reduce((sum, row) => {
+        const qty = Number(row?.quantity ?? 0);
+        const price = Number(row?.unit_price ?? row?.unit_price_pre_tax ?? 0);
+        if (!Number.isFinite(qty) || !Number.isFinite(price)) return sum;
+        return sum + qty * price;
+      }, 0);
+      setInvSummary({
+        totalItems: Number(invRes?.total ?? invItems.length) || 0,
+        lowStockCount: Number(invRes?.low_stock_count ?? invRes?.low_stock?.count ?? 0) || 0,
+        totalValue,
+      });
+      const pendingInvoices = safeArray(pendingRes?.invoices);
+      const pendingAmount = pendingInvoices.reduce(
+        (sum, row) => sum + (Number(row?.grand_total_inr ?? 0) || 0),
+        0,
+      );
+      setPendingSummary({
+        count: Number(pendingRes?.count ?? pendingInvoices.length) || 0,
+        amount: pendingAmount,
+      });
+      setStockAlerts(safeArray(alertsRes?.items));
     } catch (e) {
       if (isStale()) return;
       setErr(e?.response?.data?.detail || e?.message || "Load failed");
       setSnap(null);
       setPl(null);
       setSubs([]);
+      setBizSummary(null);
+      setInvSummary({ totalItems: 0, lowStockCount: 0, totalValue: 0 });
+      setPendingSummary({ count: 0, amount: 0 });
+      setStockAlerts([]);
     } finally {
       const stale = isStale();
       if (!stale) {
@@ -90,7 +134,7 @@ export default function BusinessDashboardPage() {
         setRefreshing(false);
       }
     }
-  }, [hint?.subsidy]);
+  }, [hint?.subsidy, outlet?.orgId, outlet?.organizationId]);
 
   useEffect(() => {
     load();
@@ -125,6 +169,7 @@ export default function BusinessDashboardPage() {
       ? lowStockRaw.length
       : Number(lowStockRaw?.length ?? lowStockRaw?.count ?? 0) || 0;
   }, [snapSafe]);
+  const revenueInr = useMemo(() => (bizSummary?.revenue_inr && typeof bizSummary.revenue_inr === "object" ? bizSummary.revenue_inr : {}), [bizSummary]);
   const checkedIn = useMemo(
     () =>
       snapSafe?.attendance_today?.checked_in_today ??
@@ -174,6 +219,53 @@ export default function BusinessDashboardPage() {
       </div>
 
       <div className="cc-card">
+        <h2>Business intelligence (live)</h2>
+        <div className="biz-grid-2" style={{ marginTop: 8 }}>
+          <div>
+            <div className="cc-muted" style={{ fontSize: 12 }}>
+              Revenue Today
+            </div>
+            <div style={{ fontWeight: 700 }}>{fmtINR(revenueInr.today)}</div>
+          </div>
+          <div>
+            <div className="cc-muted" style={{ fontSize: 12 }}>
+              This Week
+            </div>
+            <div style={{ fontWeight: 700 }}>{fmtINR(revenueInr.this_week)}</div>
+          </div>
+          <div>
+            <div className="cc-muted" style={{ fontSize: 12 }}>
+              This Month
+            </div>
+            <div style={{ fontWeight: 700 }}>{fmtINR(revenueInr.this_month)}</div>
+          </div>
+          <div>
+            <div className="cc-muted" style={{ fontSize: 12 }}>
+              Inventory Items
+            </div>
+            <div style={{ fontWeight: 700 }}>{invSummary.totalItems}</div>
+          </div>
+          <div>
+            <div className="cc-muted" style={{ fontSize: 12 }}>
+              Low Stock Alerts
+            </div>
+            <div style={{ fontWeight: 700 }}>{invSummary.lowStockCount || lowStockCount}</div>
+          </div>
+          <div>
+            <div className="cc-muted" style={{ fontSize: 12 }}>
+              Pending Invoices
+            </div>
+            <div style={{ fontWeight: 700 }}>
+              {pendingSummary.count} ({fmtINR(pendingSummary.amount)})
+            </div>
+          </div>
+        </div>
+        <p className="cc-muted" style={{ fontSize: 12, marginTop: 8 }}>
+          Inventory value: {fmtINR(invSummary.totalValue)}
+        </p>
+      </div>
+
+      <div className="cc-card">
         <h2>Today &amp; month (P&amp;L)</h2>
         {pl && pl.ok !== false ? (
           <div className="biz-grid-2" style={{ marginTop: 8 }}>
@@ -220,6 +312,47 @@ export default function BusinessDashboardPage() {
           </ul>
         </div>
       ) : null}
+
+      <div className="cc-card">
+        <h2>Stock alerts</h2>
+        {stockAlerts.length === 0 ? (
+          <p className="cc-muted">No low stock alerts right now.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {stockAlerts.slice(0, 8).map((item, idx) => (
+              <div
+                key={`${item?.sku_name || "item"}-${idx}`}
+                style={{
+                  border: "1px solid rgba(245, 158, 11, 0.35)",
+                  background: "rgba(245, 158, 11, 0.08)",
+                  borderRadius: 10,
+                  padding: 10,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700 }}>{item?.sku_name ?? "Item"}</div>
+                  <div className="cc-muted" style={{ fontSize: 12 }}>
+                    Qty: {item?.quantity ?? "—"} · Reorder point: {item?.reorder_point ?? item?.threshold ?? "—"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="cc-btn cc-btn-secondary"
+                  onClick={() => {
+                    window.location.hash = "#/dashboard/inventory";
+                  }}
+                >
+                  Reorder Now
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {hint?.subsidy && (
         <div className="cc-card">
