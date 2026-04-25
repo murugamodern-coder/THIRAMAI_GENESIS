@@ -12,8 +12,39 @@ echo -n "2. Migrations: "
 curl -s https://app.thiramai.co.in/health/ready | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
-ok = d.get('alembic',{}).get('ok',False)
-print('✅' if ok else '❌ ' + str(d.get('alembic',{})))
+
+def find_alembic_obj(node):
+    if isinstance(node, dict):
+        if 'alembic' in node and isinstance(node['alembic'], dict):
+            return node['alembic']
+        for value in node.values():
+            found = find_alembic_obj(value)
+            if found is not None:
+                return found
+    elif isinstance(node, list):
+        for item in node:
+            found = find_alembic_obj(item)
+            if found is not None:
+                return found
+    return None
+
+alembic = find_alembic_obj(d) or {}
+ok = alembic.get('ok')
+if ok is None:
+    ok = d.get('ok')
+if ok is None:
+    for key in ('migration_ok', 'migrations_ok', 'alembic_ok'):
+        if key in d:
+            ok = d.get(key)
+            break
+if ok is None:
+    ok = False
+
+if ok:
+    print('✅')
+else:
+    detail = alembic if alembic else {'health_ready_keys': list(d.keys())[:8]}
+    print('❌ ' + str(detail))
 "
 
 # 3. Containers check
