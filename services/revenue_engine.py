@@ -38,7 +38,7 @@ def record_real_income(
     amt = float(amount or 0)
     with factory() as session:
         row = LearningLog(
-            user_id=int(user_id),
+            resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type="revenue_engine",
             source_id=None,
@@ -67,7 +67,7 @@ def revenue_snapshot(user_id: int, hours: int = 24 * 7) -> dict[str, Any]:
             session.execute(
                 select(LearningLog)
                 .where(
-                    LearningLog.user_id == int(user_id),
+                    LearningLog.resolved_by_user_id == int(user_id),
                     LearningLog.source_type == "revenue_engine",
                     LearningLog.created_at >= since,
                 )

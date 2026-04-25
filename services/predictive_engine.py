@@ -157,7 +157,7 @@ def predict_opportunity_success(user_id: int, opportunity_id: int | None = None)
     if factory is None:
         return {"success_probability": 0.5, "confidence": 0.4}
     with factory() as session:
-        q = select(LearningLog).where(LearningLog.user_id == int(user_id), LearningLog.source_type == "opportunity")
+        q = select(LearningLog).where(LearningLog.resolved_by_user_id == int(user_id), LearningLog.source_type == "opportunity")
         if opportunity_id:
             q = q.where(LearningLog.source_id == int(opportunity_id))
         rows = session.execute(q.order_by(LearningLog.created_at.desc(), LearningLog.id.desc()).limit(50)).scalars().all()

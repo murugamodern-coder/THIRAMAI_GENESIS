@@ -40,7 +40,7 @@ def record_outcome(
     success = bool(outcome_data.get("success")) if "success" in outcome_data else pnl >= 0
     with factory() as session:
         row = LearningLog(
-            user_id=int(user_id),
+            resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type=str(source_type or "")[:32],
             source_id=int(source_id) if source_id else None,
@@ -61,7 +61,7 @@ def record_outcome(
 def _fetch_recent_logs(session, user_id: int, limit: int = 120) -> list[LearningLog]:
     q: Select[tuple[LearningLog]] = (
         select(LearningLog)
-        .where(LearningLog.user_id == int(user_id))
+        .where(LearningLog.resolved_by_user_id == int(user_id))
         .order_by(LearningLog.created_at.desc(), LearningLog.id.desc())
         .limit(max(1, min(int(limit), 1000)))
     )

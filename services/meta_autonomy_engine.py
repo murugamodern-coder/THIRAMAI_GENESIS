@@ -50,7 +50,7 @@ def consolidate_stable_knowledge(
         logs = (
             session.execute(
                 select(LearningLog).where(
-                    LearningLog.user_id == int(user_id),
+                    LearningLog.resolved_by_user_id == int(user_id),
                     LearningLog.organization_id == int(organization_id),
                     LearningLog.created_at >= since,
                 )
@@ -154,7 +154,7 @@ def monitor_system_performance(
         learn_rows = (
             session.execute(
                 select(LearningLog).where(
-                    LearningLog.user_id == int(user_id),
+                    LearningLog.resolved_by_user_id == int(user_id),
                     LearningLog.organization_id == int(organization_id),
                     LearningLog.created_at >= since,
                 )

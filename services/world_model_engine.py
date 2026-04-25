@@ -61,7 +61,7 @@ def persist_world_model(user_id: int, organization_id: int) -> dict[str, Any]:
         return model
     with factory() as session:
         row = LearningLog(
-            user_id=int(user_id),
+            resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type=_SOURCE_TYPE,
             source_id=_SOURCE_ID,
@@ -88,7 +88,7 @@ def get_world_model(user_id: int) -> dict[str, Any]:
             session.execute(
                 select(LearningLog)
                 .where(
-                    LearningLog.user_id == int(user_id),
+                    LearningLog.resolved_by_user_id == int(user_id),
                     LearningLog.source_type == _SOURCE_TYPE,
                     LearningLog.source_id == _SOURCE_ID,
                 )

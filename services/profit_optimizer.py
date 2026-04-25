@@ -36,7 +36,7 @@ def _past_success_factor(user_id: int, source_id: int | None = None) -> float:
     if factory is None:
         return 0.5
     with factory() as session:
-        q = select(LearningLog).where(LearningLog.user_id == int(user_id), LearningLog.source_type == "opportunity")
+        q = select(LearningLog).where(LearningLog.resolved_by_user_id == int(user_id), LearningLog.source_type == "opportunity")
         if source_id:
             q = q.where(LearningLog.source_id == int(source_id))
         rows = session.execute(q.order_by(LearningLog.created_at.desc(), LearningLog.id.desc()).limit(40)).scalars().all()

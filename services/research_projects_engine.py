@@ -132,7 +132,7 @@ def _collect_internal_signals(user_id: int, topic: str) -> list[dict[str, Any]]:
         learns = (
             session.execute(
                 select(LearningLog)
-                .where(LearningLog.user_id == int(user_id))
+                .where(LearningLog.resolved_by_user_id == int(user_id))
                 .order_by(LearningLog.created_at.desc(), LearningLog.id.desc())
                 .limit(8)
             )

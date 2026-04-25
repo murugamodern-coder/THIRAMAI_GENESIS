@@ -52,7 +52,7 @@ def run_experiment(user_id: int, organization_id: int, hypothesis_id: str, varia
     success = delta >= 0
     with factory() as session:
         row = LearningLog(
-            user_id=int(user_id),
+            resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type="research_experiment",
             source_id=None,
@@ -79,7 +79,7 @@ def compare_experiment_results(user_id: int, experiment_group_id: str) -> dict[s
         rows = (
             session.execute(
                 select(LearningLog)
-                .where(LearningLog.user_id == int(user_id), LearningLog.source_type == "research_experiment")
+                .where(LearningLog.resolved_by_user_id == int(user_id), LearningLog.source_type == "research_experiment")
                 .order_by(LearningLog.created_at.desc(), LearningLog.id.desc())
                 .limit(40)
             )

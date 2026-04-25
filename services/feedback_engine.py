@@ -57,7 +57,7 @@ def record_prediction_vs_actual(
     strategy = str((predicted or {}).get("strategy") or (predicted or {}).get("source_type") or "general")
     with factory() as session:
         row = LearningLog(
-            user_id=int(user_id),
+            resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type="feedback",
             source_id=None,
@@ -93,7 +93,7 @@ def _fetch_feedback_rows(user_id: int, limit: int = 300) -> list[LearningLog]:
         return (
             session.execute(
                 select(LearningLog)
-                .where(LearningLog.user_id == int(user_id), LearningLog.source_type == "feedback")
+                .where(LearningLog.resolved_by_user_id == int(user_id), LearningLog.source_type == "feedback")
                 .order_by(LearningLog.created_at.desc(), LearningLog.id.desc())
                 .limit(max(1, min(int(limit), 1000)))
             )

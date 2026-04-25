@@ -48,7 +48,7 @@ def get_autonomy_state(user_id: int) -> dict[str, Any]:
             session.execute(
                 select(LearningLog)
                 .where(
-                    LearningLog.user_id == int(user_id),
+                    LearningLog.resolved_by_user_id == int(user_id),
                     LearningLog.source_type == _SOURCE_TYPE,
                     LearningLog.source_id == _SOURCE_ID,
                 )
@@ -89,7 +89,7 @@ def set_autonomy_state(
     mode_norm = _coerce_mode(mode)
     with factory() as session:
         row = LearningLog(
-            user_id=int(user_id),
+            resolved_by_user_id=int(user_id),
             organization_id=int(organization_id),
             source_type=_SOURCE_TYPE,
             source_id=_SOURCE_ID,
