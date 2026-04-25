@@ -93,6 +93,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
       >
         <div
           className={`space-y-2 overflow-y-auto rounded-lg border border-slate-800/80 bg-slate-950/80 p-3 ${isCalm ? "max-h-56 min-h-[7rem]" : "max-h-48"}`}
+          style={{ color: "#ffffff" }}
         >
           {history.slice(-6).map((h) => {
             const isEnter = h.role === "assistant" && h.id === enterAssistantId;
@@ -103,14 +104,20 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                 key={h.id}
                 className={`rounded-xl px-3 py-2.5 text-sm leading-6 transition-[transform,background-color] duration-300 ease-out ${
                   h.role === "user"
-                    ? "bg-sky-500/15 text-sky-50 ring-1 ring-sky-400/15"
+                    ? "bg-sky-500/15 ring-1 ring-sky-400/15"
                     : warnTone
-                      ? "bg-amber-500/10 text-amber-50 ring-1 ring-amber-500/20"
-                      : "bg-[rgba(255,255,255,0.05)] text-[#e2e8f0] ring-1 ring-white/[0.06]"
+                      ? "bg-amber-500/10 ring-1 ring-amber-500/20"
+                      : "bg-[rgba(255,255,255,0.05)] ring-1 ring-white/[0.06]"
                 } ${isEnter ? "cc-msg-enter" : ""}`}
+                style={{ color: "#ffffff" }}
               >
                 {!isCalm ? (
-                  <span className="mr-2 text-[10px] uppercase tracking-[0.1em] text-white">{h.role}</span>
+                  <span
+                    className="mr-2 uppercase tracking-[0.1em]"
+                    style={{ color: "#ffffff", fontSize: "13px", fontWeight: "500" }}
+                  >
+                    {h.role}
+                  </span>
                 ) : null}
                 {blocks ? (
                   <div className="space-y-2.5">
@@ -127,18 +134,23 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                                 : "";
                       const bodyClass =
                         b.kind === "next"
-                          ? "text-[13px] font-medium leading-6 text-emerald-100"
+                          ? "text-[13px] font-medium leading-6"
                           : b.kind === "outcome"
-                            ? "text-[13px] leading-6 text-slate-100"
+                            ? "text-[13px] leading-6"
                             : b.kind === "signal"
-                              ? "text-[13px] leading-6 text-white"
-                              : "text-[13px] leading-6 text-[#e2e8f0]";
+                              ? "text-[13px] leading-6"
+                              : "text-[13px] leading-6";
                       return (
                         <div key={`${h.id}_b_${bi}`}>
-                          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white">
+                          <span
+                            className="font-semibold uppercase tracking-[0.16em]"
+                            style={{ color: "#ffffff", fontSize: "13px", fontWeight: "500" }}
+                          >
                             {label}
                           </span>
-                          <p className={`mt-0.5 ${bodyClass}`}>{b.text}</p>
+                          <p className={`mt-0.5 ${bodyClass}`} style={{ color: "#ffffff" }}>
+                            {b.text}
+                          </p>
                         </div>
                       );
                     })}
@@ -150,10 +162,11 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                       className={
                         i > 0
                           ? warnTone
-                            ? "mt-1 block text-[13px] leading-6 text-amber-100"
-                            : "mt-1 block text-[13px] leading-6 text-emerald-100"
+                            ? "mt-1 block text-[13px] leading-6"
+                            : "mt-1 block text-[13px] leading-6"
                           : "block leading-6"
                       }
+                      style={{ color: "#ffffff" }}
                     >
                       {line}
                     </span>
@@ -165,11 +178,16 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
         </div>
         <div className={`mt-3 flex gap-2 ${isCalm ? "items-center" : ""}`}>
           <input
-            className={`flex-1 rounded-xl border bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition-[border-color,box-shadow,transform] duration-300 ease-out placeholder:text-slate-200 focus:border-slate-200 ${
+            className={`flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-[border-color,box-shadow,transform] duration-300 ease-out ${
               isCalm
                 ? `border-slate-800 py-3 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.18)] ${isSending ? "scale-[0.985]" : "scale-100"}`
                 : `border-slate-700 py-2 ${isSending ? "scale-[0.99]" : "scale-100"}`
             }`}
+            style={{
+              background: "rgba(255,255,255,0.1)",
+              color: "#ffffff",
+              border: "1px solid rgba(255,255,255,0.2)",
+            }}
             placeholder={placeholder}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -182,7 +200,8 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
           />
           <button
             type="button"
-            className={`shrink-0 rounded-xl bg-gradient-to-b from-white to-slate-200 px-5 font-semibold text-slate-900 shadow-[0_1px_0_rgba(255,255,255,0.5)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(255,255,255,0.25)] active:scale-[0.97] active:translate-y-0 ${isCalm ? "py-3 text-sm" : "py-2 text-sm"}`}
+            className={`shrink-0 rounded-xl bg-gradient-to-b from-white to-slate-200 px-5 font-semibold shadow-[0_1px_0_rgba(255,255,255,0.5)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(255,255,255,0.25)] active:scale-[0.97] active:translate-y-0 ${isCalm ? "py-3 text-sm" : "py-2 text-sm"}`}
+            style={{ color: "#0f172a" }}
             onClick={() => submit(input)}
           >
             Send

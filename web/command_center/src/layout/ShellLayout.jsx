@@ -32,21 +32,27 @@ export default function ShellLayout() {
   };
 
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-[linear-gradient(to_bottom,#0f172a,#020617)] text-white">
+    <div
+      className="relative flex min-h-screen overflow-hidden bg-[linear-gradient(to_bottom,#0f172a,#020617)]"
+      style={{ color: "white" }}
+    >
       <div
         className="pointer-events-none absolute left-1/2 top-1/3 z-0 h-96 w-96 -translate-x-1/2 rounded-full bg-cyan-500/5 blur-3xl"
         aria-hidden="true"
       />
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-3 text-white backdrop-blur md:hidden">
+      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-3 backdrop-blur md:hidden">
         <button
           type="button"
           onClick={() => setMobileNavOpen((v) => !v)}
-          className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-100"
+          className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium"
+          style={{ color: "#ffffff" }}
           aria-label="Toggle menu"
         >
           Menu
         </button>
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white">Thiramai</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "#ffffff" }}>
+          Thiramai
+        </div>
         <div className="h-8 w-8" aria-hidden="true" />
       </header>
 
@@ -64,11 +70,14 @@ export default function ShellLayout() {
         }`}
       >
         <div className="mb-6 flex items-center justify-between">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white">Thiramai</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "#ffffff" }}>
+            Thiramai
+          </div>
           <button
             type="button"
             onClick={() => setMobileNavOpen(false)}
-            className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-200"
+            className="rounded-lg border border-slate-700 px-2 py-1 text-xs"
+            style={{ color: "#ffffff" }}
           >
             Close
           </button>
@@ -82,11 +91,10 @@ export default function ShellLayout() {
               onClick={() => setMobileNavOpen(false)}
               className={({ isActive }) =>
                 `block rounded-lg px-4 py-3 text-base transition ${
-                  isActive
-                    ? "bg-slate-800 text-white"
-                    : "text-slate-300 hover:bg-slate-900 hover:text-white"
+                  isActive ? "bg-slate-800" : "hover:bg-slate-900"
                 }`
               }
+              style={{ color: "#ffffff" }}
             >
               {item.label}
             </NavLink>
@@ -96,7 +104,8 @@ export default function ShellLayout() {
           <button
             type="button"
             onClick={onSignOut}
-            className="w-full rounded-lg border border-slate-800 px-4 py-3 text-sm text-white transition hover:border-slate-700 hover:text-white"
+            className="w-full rounded-lg border border-slate-800 px-4 py-3 text-sm transition hover:border-slate-700"
+            style={{ color: "#ffffff" }}
           >
             Sign out
           </button>
@@ -104,7 +113,9 @@ export default function ShellLayout() {
       </aside>
 
       <aside className="relative z-10 hidden w-56 shrink-0 border-r border-slate-900/80 bg-slate-950/80 p-5 backdrop-blur md:flex md:flex-col">
-        <div className="mb-8 text-xs font-semibold uppercase tracking-[0.22em] text-white">Thiramai</div>
+        <div className="mb-8 text-xs font-semibold uppercase tracking-[0.22em]" style={{ color: "#ffffff" }}>
+          Thiramai
+        </div>
         <nav className="space-y-1.5">
           {visibleNav.map((item) => (
             <NavLink
@@ -114,10 +125,11 @@ export default function ShellLayout() {
               className={({ isActive }) =>
                 `block rounded-xl px-3 py-2.5 text-sm transition ${
                   isActive
-                    ? "bg-white text-slate-950 shadow-[0_8px_24px_-18px_rgba(255,255,255,0.55)]"
-                    : "text-slate-200 hover:bg-slate-900/70 hover:text-white"
+                    ? "bg-white shadow-[0_8px_24px_-18px_rgba(255,255,255,0.55)]"
+                    : "hover:bg-slate-900/70"
                 }`
               }
+              style={({ isActive }) => ({ color: isActive ? "#0f172a" : "#ffffff" })}
             >
               {item.label}
             </NavLink>
@@ -127,7 +139,8 @@ export default function ShellLayout() {
           <button
             type="button"
             onClick={onSignOut}
-            className="w-full rounded-xl border border-slate-900 px-3 py-2.5 text-sm text-slate-200 transition hover:border-slate-700 hover:text-white"
+            className="w-full rounded-xl border border-slate-900 px-3 py-2.5 text-sm transition hover:border-slate-700"
+            style={{ color: "#ffffff" }}
           >
             Sign out
           </button>
