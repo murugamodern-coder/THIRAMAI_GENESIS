@@ -390,7 +390,10 @@ async def dashboard_command_center_legacy_admin(_admin: CurrentUser = RequireAdm
     summary="Command Center dashboard (HTML shell)",
     description="Dark UI for GET /dashboard/command-center. Uses JWT from localStorage key `thiramai_jwt`.",
 )
-async def dashboard_command_center_app(request: Request) -> HTMLResponse:
+async def dashboard_command_center_app(
+    request: Request,
+    _user: CurrentUser | None = Depends(get_current_user_optional),
+) -> HTMLResponse:
     return _live_templates.TemplateResponse(
         request,
         "command_center.html",
@@ -403,7 +406,9 @@ async def dashboard_command_center_app(request: Request) -> HTMLResponse:
     summary="Last successful experiences (ticker JSON)",
     description="Up to five newest successful rows from ``logs/experience_buffer.jsonl`` for the live dashboard ticker.",
 )
-async def dashboard_recent_experiences_json() -> JSONResponse:
+async def dashboard_recent_experiences_json(
+    _user: CurrentUser | None = Depends(get_current_user_optional),
+) -> JSONResponse:
     items = await asyncio.to_thread(recent_successful_experiences, limit=5)
     return JSONResponse(
         content={
@@ -420,6 +425,7 @@ async def dashboard_recent_experiences_json() -> JSONResponse:
 )
 async def dashboard_live_state_json(
     profile: str = Query("development", description="'development' or 'production'"),
+    _user: CurrentUser | None = Depends(get_current_user_optional),
 ) -> JSONResponse:
     prof = _normalize_profile(profile)
     report = await _safe_build_report(profile=prof, write_reflection=False)
@@ -692,6 +698,7 @@ async def dashboard_action_predictive_mode(
 async def dashboard_live_sre(
     request: Request,
     profile: str = Query("development", description="'development' or 'production'"),
+    _user: CurrentUser | None = Depends(get_current_user_optional),
 ) -> HTMLResponse:
     prof = _normalize_profile(profile)
     report = await _safe_build_report(profile=prof, write_reflection=False)

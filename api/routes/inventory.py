@@ -10,8 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from api.dependencies import CurrentUser, get_current_user, require_permission, require_roles
-from core.rbac import Permission
+from api.dependencies import CurrentUser, get_current_user, require_any_role, require_staff
 from services.financial_service import financial_performance_summary_for_organization
 from services.usage_log_service import ACTION_INVENTORY_CREATE, ACTION_INVENTORY_UPDATE, log_usage_sync
 from services.inventory_service import (
@@ -54,7 +53,7 @@ def _parse_date(s: str | None) -> date | None:
 async def inventory_list_v2(
     limit: int = Query(500, ge=1, le=500, description="Page size (max 500)"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     out = list_inventory_items_sync(
         organization_id=_user.organization_id,
@@ -82,7 +81,7 @@ class InventoryItemCreateBody(BaseModel):
 @router.post("/inventory/item")
 async def inventory_create_item(
     body: InventoryItemCreateBody,
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     out = create_inventory_item_sync(
         organization_id=_user.organization_id,
@@ -144,7 +143,7 @@ class InventoryItemUpdateBody(BaseModel):
 async def inventory_update_item(
     item_id: int = Path(..., ge=1),
     body: InventoryItemUpdateBody | None = None,
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     b = body or InventoryItemUpdateBody()
     out = update_inventory_item_sync(
@@ -205,7 +204,7 @@ class StockMovementBody(BaseModel):
 @router.post("/inventory/movement")
 async def inventory_movement(
     body: StockMovementBody,
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     out = record_stock_movement_sync(
         organization_id=_user.organization_id,
@@ -244,7 +243,7 @@ async def inventory_movement(
 async def inventory_movements_list(
     limit: int = Query(200, ge=1, le=500),
     inventory_item_id: int | None = Query(None, ge=1),
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     out = list_stock_movements_sync(
         organization_id=_user.organization_id,
@@ -259,7 +258,7 @@ async def inventory_movements_list(
 @router.get("/inventory/alerts")
 async def inventory_alerts(
     threshold: float | None = Query(None, ge=0, description="Optional global qty threshold"),
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     out = list_low_stock_alerts_sync(
         organization_id=_user.organization_id,
@@ -281,7 +280,7 @@ class SupplierCreateBody(BaseModel):
 @router.post("/inventory/supplier")
 async def inventory_create_supplier(
     body: SupplierCreateBody,
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     out = create_supplier_sync(
         organization_id=_user.organization_id,
@@ -299,7 +298,7 @@ async def inventory_create_supplier(
 
 @router.get("/inventory/suppliers")
 async def inventory_list_suppliers(
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     out = list_suppliers_sync(organization_id=_user.organization_id)
     if not out.get("ok"):
@@ -324,7 +323,7 @@ class PurchaseOrderCreateBody(BaseModel):
 @router.post("/inventory/purchase-order")
 async def inventory_create_po(
     body: PurchaseOrderCreateBody,
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     od = _parse_date(body.order_date)
     if od is None:
@@ -355,7 +354,7 @@ class POReceiveBody(BaseModel):
 async def inventory_receive_po_line(
     po_id: int = Path(..., ge=1),
     body: POReceiveBody = ...,
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     out = receive_purchase_order_line_sync(
         organization_id=_user.organization_id,
@@ -374,7 +373,7 @@ async def inventory_receive_po_line(
 @router.get("/inventory/purchase-orders")
 async def inventory_purchase_orders_list(
     limit: int = Query(100, ge=1, le=200),
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     out = list_purchase_orders_sync(organization_id=_user.organization_id, limit=limit)
     if not out.get("ok"):
@@ -391,7 +390,7 @@ class POSupplierInvoiceBody(BaseModel):
 async def inventory_po_supplier_invoice(
     po_id: int = Path(..., ge=1),
     body: POSupplierInvoiceBody | None = None,
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     b = body or POSupplierInvoiceBody()
     inv_date = _parse_date(b.supplier_invoice_date) if b.supplier_invoice_date else None
@@ -419,7 +418,7 @@ class SupplierPaymentBody(BaseModel):
 @router.post("/inventory/supplier-payment")
 async def inventory_supplier_payment(
     body: SupplierPaymentBody,
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     out = record_supplier_payment_sync(
         organization_id=_user.organization_id,
@@ -439,7 +438,7 @@ async def inventory_supplier_payment(
 @router.get("/inventory/supplier-payments")
 async def inventory_supplier_payments_list(
     limit: int = Query(100, ge=1, le=300),
-    _user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ)),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     out = list_supplier_payments_sync(organization_id=_user.organization_id, limit=limit)
     if not out.get("ok"):
@@ -468,7 +467,7 @@ class RetailSellBody(BaseModel):
 @router.post("/inventory/add")
 async def inventory_add(
     body: InventoryAddBody,
-    _user: CurrentUser = Depends(require_roles("owner", "manager", "supervisor", "admin", "staff")),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     """Increase on-hand quantity for a SKU (creates row if needed)."""
     out = add_inventory_sync(
@@ -547,7 +546,7 @@ async def retail_sell(
 @router.get("/assets")
 async def list_assets(
     q: str | None = Query(None, description="Filter by keyword (e.g. HDPE, Invoice)"),
-    _user: CurrentUser = Depends(require_roles("owner", "manager", "supervisor")),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     """List indexed factory files and tenant vault files for the JWT organization only."""
     _ = _user
@@ -557,7 +556,7 @@ async def list_assets(
 
 @router.get("/assets/financial-summary")
 async def financial_summary(
-    _user: CurrentUser = Depends(require_roles("owner", "manager")),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     """Performance metrics from master_index.csv + vault signals + DB interest (tenant-scoped)."""
     _ = _user

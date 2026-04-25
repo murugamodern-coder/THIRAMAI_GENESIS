@@ -12,8 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from api.billing_policy import enforce_billing_tool_policy
-from api.dependencies import CurrentUser, require_permission
-from core.rbac import Permission
+from api.dependencies import CurrentUser, require_any_role, require_staff
 from factory.billing_tool import build_invoice_pdf, default_invoice_path
 from services import approval_store
 from services import audit_log as system_audit
@@ -115,7 +114,7 @@ class InvoiceCreateBody(BaseModel):
 @router.post("/billing/create")
 async def billing_create_simple(
     body: ErpBillingCreateBody,
-    _user: CurrentUser = Depends(require_permission(Permission.BILLING_INVOICE_CREATE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     """
     ERP invoice header + ledger posting. If ``grand_total_inr`` exceeds
@@ -183,7 +182,7 @@ async def billing_create_simple(
 
 @router.get("/actions/pending-approvals")
 async def list_pending_approvals(
-    _user: CurrentUser = Depends(require_permission(Permission.HITL_APPROVE)),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     """Human-in-the-loop queue (invoices, future email/GST). Scoped to caller's org."""
     try:
@@ -198,7 +197,7 @@ async def action_billing_from_production_log(
     request: Request,
     body: BillingFromProductionLogBody,
     background_tasks: BackgroundTasks,
-    _user: CurrentUser = Depends(require_permission(Permission.BILLING_MANAGE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     """
     Draft GST breakdown from DB production log + queue invoice after Sovereign YES.
@@ -286,7 +285,7 @@ async def action_billing_from_production_log(
 async def queue_brain_action_intent(
     request: Request,
     body: QueueBrainIntentBody,
-    _user: CurrentUser = Depends(require_permission(Permission.HITL_APPROVE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     """
     Human-in-the-loop gate for Stage-5 actions: validates ``action_intent`` and creates a pending approval.
@@ -316,7 +315,7 @@ async def resolve_approval_action(
     approval_id: str,
     body: ApprovalResolveBody,
     background_tasks: BackgroundTasks,
-    _user: CurrentUser = Depends(require_permission(Permission.HITL_APPROVE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     # Policy + factory hold **before** DB marks approved (avoid orphaned approved rows on BLOCK).
     if (body.confirm or "").strip().upper() == "YES":
@@ -429,7 +428,7 @@ async def resolve_approval_action(
 async def create_invoice_pdf(
     request: Request,
     body: InvoiceCreateBody,
-    _user: CurrentUser = Depends(require_permission(Permission.BILLING_MANAGE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     """Generate dated invoice PDF, append master_index.csv, return view URL (cursor synced so /chat won't duplicate)."""
     _require_factory_billing_active(_user.organization_id)
@@ -549,7 +548,7 @@ def _parse_iso_date(raw: str | None) -> date | None:
 @router.post("/billing/invoice")
 async def billing_phase2_create_invoice(
     body: StructuredInvoiceBody,
-    _user: CurrentUser = Depends(require_permission(Permission.BILLING_INVOICE_CREATE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     """Create invoice with line items; GST computed per line (taxable + GST = line_total_inr)."""
     _require_factory_billing_active(_user.organization_id)
@@ -586,9 +585,7 @@ async def billing_phase2_create_invoice(
 @router.get("/billing/bills")
 async def billing_list_cash_bills(
     limit: int = 100,
-    _user: CurrentUser = Depends(
-        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
-    ),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     out = list_bills_sync(organization_id=_user.organization_id, limit=limit)
     if not out.get("ok"):
@@ -599,9 +596,7 @@ async def billing_list_cash_bills(
 @router.get("/billing/invoices")
 async def billing_phase2_list_invoices(
     limit: int = 200,
-    _user: CurrentUser = Depends(
-        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
-    ),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     out = list_invoices_sync(organization_id=_user.organization_id, limit=limit)
     if not out.get("ok"):
@@ -612,9 +607,7 @@ async def billing_phase2_list_invoices(
 @router.get("/billing/bill/{bill_id}/html", response_class=HTMLResponse)
 async def billing_cash_bill_print_html(
     bill_id: int = Path(..., ge=1),
-    _user: CurrentUser = Depends(
-        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
-    ),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> HTMLResponse:
     out = build_cash_bill_html_sync(organization_id=_user.organization_id, bill_id=bill_id)
     if not out.get("ok"):
@@ -626,9 +619,7 @@ async def billing_cash_bill_print_html(
 async def billing_invoice_print_html(
     invoice_id: int = Path(..., ge=1),
     supply_mode: str = Query("intra", description="intra (CGST+SGST) or inter (IGST)"),
-    _user: CurrentUser = Depends(
-        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
-    ),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> HTMLResponse:
     out = build_structured_invoice_html_sync(
         organization_id=_user.organization_id,
@@ -644,9 +635,7 @@ async def billing_invoice_print_html(
 async def billing_invoice_pdf(
     invoice_id: int = Path(..., ge=1),
     supply_mode: str = Query("intra", description="intra (CGST+SGST) or inter (IGST)"),
-    _user: CurrentUser = Depends(
-        require_permission(Permission.BILLING_MANAGE, Permission.BILLING_INVOICE_CREATE)
-    ),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> Response:
     """Download structured tax invoice as PDF (requires ``fpdf2``)."""
     out = await asyncio.to_thread(
@@ -681,7 +670,7 @@ class SimpleBillBody(BaseModel):
 @router.post("/billing/simple-bill")
 async def billing_simple_cash_bill(
     body: SimpleBillBody,
-    _user: CurrentUser = Depends(require_permission(Permission.BILLING_INVOICE_CREATE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     """Non-GST cash / local sale bill (lines stored on ``bills``; included in daily P&L sales)."""
     _require_factory_billing_active(_user.organization_id)
@@ -706,7 +695,7 @@ class PaymentRecordBody(BaseModel):
 @router.post("/billing/payment")
 async def billing_phase2_record_payment(
     body: PaymentRecordBody,
-    _user: CurrentUser = Depends(require_permission(Permission.BILLING_MANAGE)),
+    _user: CurrentUser = Depends(require_staff),
 ) -> JSONResponse:
     _require_factory_billing_active(_user.organization_id)
     paid: datetime | None = None
@@ -733,7 +722,7 @@ async def billing_phase2_record_payment(
 async def billing_phase2_gst_report(
     period_start: str = Query(..., description="YYYY-MM-DD"),
     period_end: str = Query(..., description="YYYY-MM-DD"),
-    _user: CurrentUser = Depends(require_permission(Permission.BILLING_MANAGE)),
+    _user: CurrentUser = Depends(require_any_role),
 ) -> JSONResponse:
     ps = _parse_iso_date(period_start)
     pe = _parse_iso_date(period_end)

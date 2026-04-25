@@ -45,7 +45,9 @@ class GoalSubmitBody(BaseModel):
 
 
 @router.get("/version", summary="THIRAMAI build/version identifier")
-def thiramai_build_version() -> dict[str, object]:
+def thiramai_build_version(
+    _user: CurrentUser = Depends(require_goal_read_access()),
+) -> dict[str, object]:
     from thiramai.config import (
         THIRAMAI_GOAL_CACHE_DATA_VERSION,
         THIRAMAI_SAFE_MODE,

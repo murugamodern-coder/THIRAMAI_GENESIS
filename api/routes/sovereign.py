@@ -288,7 +288,9 @@ async def empire_self_heal_run(
 
 
 @router.get("/dashboard", include_in_schema=False)
-async def sovereign_dashboard_page() -> FileResponse:
+async def sovereign_dashboard_page(
+    _user: CurrentUser = Depends(require_roles("owner", "admin")),
+) -> FileResponse:
     path = ROOT / "static" / "sovereign_dashboard.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="sovereign_dashboard.html missing")

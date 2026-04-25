@@ -363,6 +363,30 @@ def require_roles(*allowed_role_names: str) -> Callable[..., CurrentUser]:
     return _dep
 
 
+async def require_owner(current_user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
+    """Only OWNER/ADMIN tier can access."""
+    role = (current_user.role_name or "").strip().lower()
+    if role not in {"owner", "admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required")
+    return current_user
+
+
+async def require_staff(current_user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
+    """Operational staff tier (owner/admin/manager/supervisor/staff/worker)."""
+    role = (current_user.role_name or "").strip().lower()
+    if role not in {"owner", "admin", "manager", "supervisor", "staff", "worker"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff access required")
+    return current_user
+
+
+async def require_any_role(current_user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
+    """Any authenticated business workspace user."""
+    role = (current_user.role_name or "").strip().lower()
+    if role in {"customer", "family"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Business workspace access required")
+    return current_user
+
+
 def require_exact_role(role_name: str) -> Callable[..., CurrentUser]:
     """
     JWT user must match role name exactly (case-insensitive), e.g. ``require_exact_role("admin")``.

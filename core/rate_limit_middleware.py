@@ -28,6 +28,11 @@ from core.distributed_rate_limit import check_distributed_rate_limit
 _RL_LOCK = Lock()
 _HITS: dict[tuple[str, str], list[float]] = defaultdict(list)
 _WINDOW_SEC = 60.0
+_VIOLATION_WINDOW_SEC = 3600.0
+_VIOLATION_THRESHOLD = 3
+_IP_BLOCK_SEC = 3600.0
+_VIOLATIONS: dict[str, list[float]] = defaultdict(list)
+_IP_BLOCK_UNTIL: dict[str, float] = {}
 
 TIER_AUTH = 5
 TIER_CHAT = 20
@@ -202,6 +207,56 @@ async def _audit_rate_limit_exceeded(
         _LOG.debug("security_audit_rate_limit_failed", exc_info=True)
 
 
+async def _audit_ip_blocked(request: Request, *, ip: str, path: str) -> None:
+    try:
+        from services.security_audit import record_security_audit_event
+
+        await asyncio.to_thread(
+            record_security_audit_event,
+            event_type="ip_blocked",
+            user_id=None,
+            ip_address=ip,
+            path=path,
+            details={"block_seconds": int(_IP_BLOCK_SEC)},
+        )
+    except Exception:
+        _LOG.debug("security_audit_ip_block_failed", exc_info=True)
+
+
+def _is_ip_currently_blocked(ip: str, now: float) -> bool:
+    with _RL_LOCK:
+        until = _IP_BLOCK_UNTIL.get(ip)
+        if until is None:
+            return False
+        if until <= now:
+            _IP_BLOCK_UNTIL.pop(ip, None)
+            return False
+        return True
+
+
+async def _register_violation_and_check_block(request: Request, *, path: str) -> bool:
+    """Track rate-limit hits per IP; block for 1h after repeated violations."""
+    now = time.monotonic()
+    ip = _client_key(request)
+    with _RL_LOCK:
+        arr = _VIOLATIONS[ip]
+        cutoff = now - _VIOLATION_WINDOW_SEC
+        arr[:] = [t for t in arr if t >= cutoff]
+        arr.append(now)
+        if len(arr) >= _VIOLATION_THRESHOLD:
+            already = _IP_BLOCK_UNTIL.get(ip, 0.0)
+            if already <= now:
+                _IP_BLOCK_UNTIL[ip] = now + _IP_BLOCK_SEC
+                should_audit = True
+            else:
+                should_audit = False
+        else:
+            should_audit = False
+    if should_audit:
+        await _audit_ip_blocked(request, ip=ip, path=path)
+    return _is_ip_currently_blocked(ip, now)
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """429 when limits exceeded; 401 on /chat/query when JWT missing, expired, or invalid."""
 
@@ -210,6 +265,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         path = request.url.path or ""
+        now = time.monotonic()
+        req_ip = _client_key(request)
+        if _is_ip_currently_blocked(req_ip, now):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many violations. Temporary IP block active."},
+            )
 
         allowed, gmsg = await asyncio.to_thread(check_distributed_rate_limit, request)
         if not allowed:
@@ -219,6 +281,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 limit_per_minute=-1,
                 path=path,
             )
+            if await _register_violation_and_check_block(request, path=path):
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many violations. Temporary IP block active."},
+                )
             return JSONResponse(
                 status_code=429,
                 content={
@@ -245,6 +312,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 await _audit_rate_limit_exceeded(
                     request, bucket=key[1], limit_per_minute=limit, path=path
                 )
+                if await _register_violation_and_check_block(request, path=path):
+                    return JSONResponse(
+                        status_code=429,
+                        content={"detail": "Too many violations. Temporary IP block active."},
+                    )
                 return JSONResponse(
                     status_code=429,
                     content={
@@ -285,6 +357,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 await _audit_rate_limit_exceeded(
                     request, bucket="chat_query_user", limit_per_minute=limit, path=path
                 )
+                if await _register_violation_and_check_block(request, path=path):
+                    return JSONResponse(
+                        status_code=429,
+                        content={"detail": "Too many violations. Temporary IP block active."},
+                    )
                 return JSONResponse(
                     status_code=429,
                     content={
@@ -306,6 +383,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 await _audit_rate_limit_exceeded(
                     request, bucket=bucket_name, limit_per_minute=limit, path=path
                 )
+                if await _register_violation_and_check_block(request, path=path):
+                    return JSONResponse(
+                        status_code=429,
+                        content={"detail": "Too many violations. Temporary IP block active."},
+                    )
                 return JSONResponse(
                     status_code=429,
                     content={
@@ -328,6 +410,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                         await _audit_rate_limit_exceeded(
                             request, bucket="org_all", limit_per_minute=org_limit, path=path
                         )
+                        if await _register_violation_and_check_block(request, path=path):
+                            return JSONResponse(
+                                status_code=429,
+                                content={"detail": "Too many violations. Temporary IP block active."},
+                            )
                         return JSONResponse(
                             status_code=429,
                             content={

@@ -8,8 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api.dependencies import CurrentUser, require_permission
-from core.rbac import Permission
+from api.dependencies import CurrentUser, require_any_role, require_staff
 from services.billing_phase2_service import create_structured_invoice_sync, list_invoices_sync
 from services.inventory_phase2_service import create_inventory_item_sync, list_inventory_items_sync
 
@@ -30,25 +29,25 @@ def _matches_staff_marker(value: str | None, user_id: int) -> bool:
 
 
 class BusinessInventoryCreateBody(BaseModel):
-    sku_name: str = Field(..., min_length=1)
+    sku_name: str = Field(..., min_length=1, max_length=256)
     quantity: float = Field(0, ge=0)
-    location: str = ""
-    unit: str = ""
+    location: str = Field(default="", max_length=256)
+    unit: str = Field(default="", max_length=64)
     unit_price: float | None = Field(None, ge=0)
     reorder_point: float | None = Field(None, ge=0)
-    hsn_code: str | None = None
+    hsn_code: str | None = Field(default=None, max_length=64)
 
 
 class BusinessInvoiceLine(BaseModel):
-    description: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1, max_length=500)
     quantity: float = Field(..., gt=0)
     unit_price_pre_tax: float = Field(..., ge=0)
     gst_rate_percent: float = Field(18.0, ge=0)
-    hsn_code: str | None = None
+    hsn_code: str | None = Field(default=None, max_length=64)
 
 
 class BusinessInvoiceCreateBody(BaseModel):
-    invoice_no: str = ""
+    invoice_no: str = Field(default="", max_length=128)
     invoice_date: str = Field("", description="YYYY-MM-DD; optional")
     lines: list[BusinessInvoiceLine] = Field(..., min_length=1, max_length=100)
 
@@ -56,7 +55,7 @@ class BusinessInvoiceCreateBody(BaseModel):
 @router.get("/inventory", summary="Business inventory list (owner full, staff own records)")
 async def business_inventory(
     limit: int = Query(200, ge=1, le=500),
-    user: CurrentUser = Depends(require_permission(Permission.INVENTORY_READ, Permission.MANAGE_BUSINESS)),
+    user: CurrentUser = Depends(require_any_role),
 ) -> dict[str, Any]:
     out = list_inventory_items_sync(
         organization_id=user.organization_id,
@@ -83,7 +82,7 @@ async def business_inventory(
 @router.post("/inventory", summary="Create inventory item (staff scoped to own records)")
 async def business_inventory_create(
     body: BusinessInventoryCreateBody,
-    user: CurrentUser = Depends(require_permission(Permission.INVENTORY_WRITE, Permission.MANAGE_BUSINESS)),
+    user: CurrentUser = Depends(require_staff),
 ) -> dict[str, Any]:
     out = create_inventory_item_sync(
         organization_id=user.organization_id,
@@ -105,7 +104,7 @@ async def business_inventory_create(
 @router.get("/invoice", summary="Business invoices (owner full, staff own records)")
 async def business_invoice(
     limit: int = Query(100, ge=1, le=500),
-    user: CurrentUser = Depends(require_permission(Permission.BILLING_MANAGE, Permission.MANAGE_BUSINESS)),
+    user: CurrentUser = Depends(require_any_role),
 ) -> dict[str, Any]:
     out = list_invoices_sync(organization_id=user.organization_id, limit=limit)
     if not out.get("ok"):
@@ -130,7 +129,7 @@ async def business_invoice(
 @router.post("/invoice", summary="Create invoice (basic ERP billing)")
 async def business_invoice_create(
     body: BusinessInvoiceCreateBody,
-    user: CurrentUser = Depends(require_permission(Permission.BILLING_INVOICE_CREATE, Permission.MANAGE_BUSINESS)),
+    user: CurrentUser = Depends(require_staff),
 ) -> dict[str, Any]:
     from datetime import date
 
