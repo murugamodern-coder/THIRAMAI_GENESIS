@@ -352,6 +352,7 @@ class ThiramaiScheduler:
             asyncio.create_task(self.autonomous_operations_cron()),
             asyncio.create_task(self.continuity_loop_cron()),
             asyncio.create_task(self.domain_weekly_review_cron()),
+            asyncio.create_task(self.nightly_research_cron()),
         ]
         if _autonomous_business_operator_enabled():
             self.tasks.append(asyncio.create_task(self.autonomous_business_operator_cron()))
@@ -466,6 +467,45 @@ class ThiramaiScheduler:
                     await redis.set(key, json.dumps(payload, ensure_ascii=False), ex=86400)
         except Exception as exc:
             _log.warning("Morning brief error: %s", exc)
+
+    async def nightly_research_cron(self) -> None:
+        """Every day at ~3:00 AM IST — autonomous research agent (Phase 3).
+
+        Disable with ``THIRAMAI_NIGHTLY_RESEARCH_CRON=0``. Hour can be
+        overridden with ``THIRAMAI_NIGHTLY_RESEARCH_HOUR_IST`` (default 3).
+        """
+        if (os.getenv("THIRAMAI_NIGHTLY_RESEARCH_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("nightly_research_cron disabled via env")
+            return
+        try:
+            hour = int((os.getenv("THIRAMAI_NIGHTLY_RESEARCH_HOUR_IST") or "3").strip())
+        except ValueError:
+            hour = 3
+        hour = max(0, min(23, hour))
+        while self.running:
+            try:
+                await asyncio.sleep(seconds_until_next_ist(hour, 0))
+                if not self.running:
+                    break
+                await self._run_nightly_research()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("nightly_research_cron loop error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _run_nightly_research(self) -> None:
+        try:
+            from services.research.autonomous_researcher import run_nightly_research
+
+            summary = await asyncio.to_thread(run_nightly_research)
+            log_structured(
+                "nightly_research_done",
+                ok=bool(summary.get("ok")),
+                users=len(summary.get("users") or []),
+            )
+        except Exception as exc:
+            _log.warning("nightly research run failed: %s", exc)
 
     async def stock_alert_monitor(self) -> None:
         """Every 5 minutes — snapshot active stock alert rules into Redis lists per org."""

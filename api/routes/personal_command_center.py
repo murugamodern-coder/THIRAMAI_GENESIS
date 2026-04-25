@@ -1016,6 +1016,22 @@ def _compute_brain_health(organization_id: int) -> dict[str, Any]:
         score += 5
     score = max(0, min(int(score), 100))
 
+    rl_status: dict[str, Any] = {"available": False}
+    try:
+        from services.ml.rl_trading_agent import get_status as _rl_status
+
+        rl_status = _rl_status()
+    except Exception:
+        rl_status = {"available": False, "error": "rl_module_unavailable"}
+
+    llm_status: dict[str, Any] = {}
+    try:
+        from services.llm.local_llama import get_status as _llm_status
+
+        llm_status = _llm_status()
+    except Exception:
+        llm_status = {"error": "llm_router_unavailable"}
+
     return {
         "ok": True,
         "models": {
@@ -1037,5 +1053,7 @@ def _compute_brain_health(organization_id: int) -> dict[str, Any]:
         "self_coder_proposals": int(open_proposals),
         "evolution_score": int(score),
         "organization_id": int(organization_id),
-        "phase": "self_evolution_phase_1",
+        "phase": "self_evolution_phase_3",
+        "rl_trading": rl_status,
+        "llm_router": llm_status,
     }

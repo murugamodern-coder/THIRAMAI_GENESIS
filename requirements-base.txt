@@ -34,6 +34,9 @@ scikit-learn==1.5.2
 joblib==1.4.2
 # Self-Evolution Phase 2 (services/ml/model_ensemble.py — falls back to GradientBoosting if missing)
 lightgbm==4.5.0
+# Self-Evolution Phase 3 (services/ml/rl_trading_agent.py — module degrades gracefully if missing)
+gymnasium==0.29.1
+stable-baselines3==2.4.0
 python-jose[cryptography]==3.5.0
 bcrypt==5.0.0
 # Security exception pin: 46.0.5 is currently runtime-compatible with python-jose stack here.
