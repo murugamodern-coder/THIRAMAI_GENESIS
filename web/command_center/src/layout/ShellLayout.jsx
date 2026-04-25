@@ -8,7 +8,7 @@ import { useCommandStore } from "../store/useCommandStore.js";
 const menuItems = [
   { key: "command", label: "Command", path: "/command-center", icon: "⚡", roles: [ROLES.OWNER, ROLES.STAFF] },
   { key: "control", label: "Control", path: "/os/control-center", icon: "🎛️", roles: [ROLES.OWNER] },
-  { key: "business", label: "Business", path: "/dashboard", icon: "💼", roles: [ROLES.OWNER, ROLES.STAFF] },
+  { key: "business", label: "Business", path: "/business", icon: "💼", roles: [ROLES.OWNER, ROLES.STAFF] },
   { key: "personal", label: "Personal", path: "/today", icon: "👤", roles: [ROLES.OWNER, ROLES.STAFF, ROLES.FAMILY] },
 ];
 
