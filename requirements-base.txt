@@ -29,6 +29,9 @@ rapidfuzz==3.14.5
 yfinance==1.2.2
 pandas==3.0.2
 ta==0.11.0
+# Self-Evolution Phase 1 (services/ml/*)
+scikit-learn==1.5.2
+joblib==1.4.2
 python-jose[cryptography]==3.5.0
 bcrypt==5.0.0
 # Security exception pin: 46.0.5 is currently runtime-compatible with python-jose stack here.

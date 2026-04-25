@@ -4562,5 +4562,125 @@ class FinancialAuditLog(Base):
     user: Mapped[Optional["User"]] = relationship(back_populates="financial_audit_logs")
 
 
+class LearningPattern(Base):
+    """
+    Self-Evolution Phase 1: extracted patterns from ``LearningLog`` with rolling confidence.
+
+    Populated by ``services.ml.learning_pipeline`` (nightly). Read by the brain-health
+    endpoint and the self-evolution trigger.
+    """
+
+    __tablename__ = "learning_patterns"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    pattern_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    pattern_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    evidence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sample_payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    last_updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "pattern_type", "pattern_key", name="uq_learning_patterns_scope"
+        ),
+    )
+
+
+class OutcomeFeedback(Base):
+    """
+    Self-Evolution Phase 1: predicted vs actual outcome for a single action.
+
+    Used to compute rolling accuracy for ML models and to drive self-evolution triggers.
+    """
+
+    __tablename__ = "outcome_feedback"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False, default="", index=True)
+    action_id: Mapped[str] = mapped_column(String(128), nullable=False, default="", index=True)
+    action_type: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    predicted_outcome: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    actual_outcome: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    accuracy_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    learned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
+class MLModel(Base):
+    """
+    Self-Evolution Phase 1: registered ML models with version + accuracy tracking.
+
+    Persisted artifacts live at ``model_path`` (a path on disk). Only one row per
+    ``(name, version)`` and at most one ``is_active=True`` per ``name`` enforced at
+    application level by ``services.ml.model_registry``.
+    """
+
+    __tablename__ = "ml_models"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(32), nullable=False, default="0.0.1")
+    accuracy: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    metrics: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    training_samples: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    trained_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    model_path: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("name", "version", name="uq_ml_models_name_version"),
+    )
+
+
+class EvolutionTrigger(Base):
+    """
+    Self-Evolution Phase 1: trigger row created when the system detects a condition
+    that may justify a self-coder proposal (low accuracy, recurring error, declining metric).
+
+    Lifecycle: ``proposed`` → (``approved`` | ``rejected``) → (``applied`` | ``failed``).
+    Owner-only API approves and dispatches to ``services.self_coder_agent.run_pipeline``.
+    """
+
+    __tablename__ = "evolution_triggers"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trigger_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    proposed_change: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="proposed", index=True)
+    evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=lambda: {}
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 # Back-compat alias (deprecated)
 Org = Organization

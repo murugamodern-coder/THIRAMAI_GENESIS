@@ -924,3 +924,118 @@ async def meetings_complete(
         if ok and mid:
             mission_id = int(mid)
     return {"status": "ok", "meeting": out, "follow_up_mission_id": mission_id}
+
+
+@router.get("/brain-health", summary="Self-Evolution: model accuracy, patterns, evolution score")
+async def brain_health(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Read-only self-evolution dashboard payload.
+
+    Returns active ML model stats, recent learning patterns, open self-coder
+    proposals, and a coarse 0..100 evolution score derived from those signals.
+    """
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    try:
+        return await asyncio.to_thread(_compute_brain_health, int(user.organization_id))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _LOG.exception("brain_health_unhandled_error")
+        raise HTTPException(status_code=500, detail="Brain health is temporarily unavailable.") from exc
+
+
+def _compute_brain_health(organization_id: int) -> dict[str, Any]:
+    """Synchronous helper executed in a worker thread (DB + filesystem reads)."""
+    from sqlalchemy import func as sa_func, select as sa_select
+
+    from core.db.models import EvolutionTrigger, LearningPattern
+    from services.ml import outcome_predictor
+    from services.ml.model_registry import ModelRegistry
+
+    factory = get_session_factory()
+
+    active = ModelRegistry.get_active(outcome_predictor.MODEL_NAME)
+    latest = ModelRegistry.get_latest(outcome_predictor.MODEL_NAME)
+    rolling = outcome_predictor.get_recent_accuracy(days=7)
+
+    pattern_total = 0
+    open_proposals = 0
+    avg_confidence = 0.0
+    if factory is not None:
+        with factory() as session:
+            pattern_total = int(
+                session.execute(
+                    sa_select(sa_func.count(LearningPattern.id))
+                ).scalar_one()
+                or 0
+            )
+            avg_conf_raw = session.execute(
+                sa_select(sa_func.coalesce(sa_func.avg(LearningPattern.confidence), 0.0))
+            ).scalar_one()
+            try:
+                avg_confidence = float(avg_conf_raw or 0.0)
+            except (TypeError, ValueError):
+                avg_confidence = 0.0
+            open_proposals = int(
+                session.execute(
+                    sa_select(sa_func.count(EvolutionTrigger.id)).where(
+                        EvolutionTrigger.status == "proposed"
+                    )
+                ).scalar_one()
+                or 0
+            )
+
+    rolling_acc = float(rolling.get("accuracy") or 0.0) if rolling.get("ok") else 0.0
+    rolling_samples = int(rolling.get("samples") or 0) if rolling.get("ok") else 0
+
+    learning_rate = "stable"
+    if rolling_acc and active and rolling_acc > float(active.accuracy or 0.0) + 0.02:
+        learning_rate = "improving"
+    elif rolling_acc and active and rolling_acc < float(active.accuracy or 0.0) - 0.05:
+        learning_rate = "regressing"
+
+    sklearn_ok = outcome_predictor.sklearn_available()
+    has_active_model = bool(active)
+
+    score = 10  # Phase 1 floor: scaffolding exists
+    if sklearn_ok:
+        score += 10
+    if has_active_model:
+        score += 15
+    if rolling_samples >= 25:
+        score += 10
+    score += int(round(min(max(rolling_acc, 0.0), 1.0) * 25.0))
+    if pattern_total >= 10:
+        score += 5
+    if pattern_total >= 50:
+        score += 5
+    score += int(round(min(max(avg_confidence, 0.0), 1.0) * 10.0))
+    if open_proposals > 0:
+        score += 5
+    score = max(0, min(int(score), 100))
+
+    return {
+        "ok": True,
+        "models": {
+            "outcome_predictor": {
+                "accuracy": round(float(active.accuracy), 4) if active else 0.0,
+                "training_samples": int(active.training_samples) if active else 0,
+                "last_trained": active.trained_at.isoformat() if active and active.trained_at else None,
+                "version": str(active.version) if active else None,
+                "is_active": bool(active),
+                "rolling_accuracy_7d": round(rolling_acc, 4),
+                "rolling_samples_7d": rolling_samples,
+                "latest_version": str(latest.version) if latest else None,
+                "sklearn_available": sklearn_ok,
+            }
+        },
+        "learning_rate": learning_rate,
+        "patterns_discovered": int(pattern_total),
+        "average_pattern_confidence": round(float(avg_confidence), 4),
+        "self_coder_proposals": int(open_proposals),
+        "evolution_score": int(score),
+        "organization_id": int(organization_id),
+        "phase": "self_evolution_phase_1",
+    }
