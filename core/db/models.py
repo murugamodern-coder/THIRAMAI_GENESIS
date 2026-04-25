@@ -2310,6 +2310,29 @@ class SystemAuditLog(Base):
     organization: Mapped[Optional["Organization"]] = relationship(back_populates="system_audit_logs")
 
 
+class SecurityAuditLog(Base):
+    """Week 1 Day 2: security incidents (failed auth, 403s, rate limits, blocked dangerous routes)."""
+
+    __tablename__ = "security_audit_logs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    path: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    details: Mapped[dict[str, Any]] = mapped_column(
+        "details",
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=lambda: {},
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
 class AuditLog(Base):
     """
     Control plane audit trail (enterprise UI → backend).

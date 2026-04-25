@@ -21,19 +21,25 @@ def attach_domain_routers(app: FastAPI) -> None:
         return
     setattr(app.state, _STATE_FLAG, True)
 
+    from core.dangerous_routes import production_blocks_dangerous_routes
+
+    _prod_danger_off = production_blocks_dangerous_routes()
+
     from api.routes.health import router as health_router
     from api.routes.jarvis_bridge import router as jarvis_bridge_router
     from api.routes.execute import router as execute_router
     from api.routes.brain_execute import router as brain_execute_router
 
     app.include_router(health_router)
-    app.include_router(jarvis_bridge_router)
+    if not _prod_danger_off:
+        app.include_router(jarvis_bridge_router)
     app.include_router(execute_router)
     app.include_router(brain_execute_router)
 
     from api.routes.kernel_microkernel import router as kernel_microkernel_router
 
-    app.include_router(kernel_microkernel_router)
+    if not _prod_danger_off:
+        app.include_router(kernel_microkernel_router)
 
     from api.routes.sovereign import router as sovereign_router
 
@@ -128,7 +134,8 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(personal_router)
     app.include_router(personal_command_center_router)
     app.include_router(stock_assistant_router)
-    app.include_router(website_builder_router)
+    if not _prod_danger_off:
+        app.include_router(website_builder_router)
     app.include_router(ai_erp_router)
     app.include_router(router_executive)
     app.include_router(router_research)
@@ -168,7 +175,8 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(proactive_autonomy_router)
     app.include_router(real_world_autonomy_router)
     app.include_router(full_autonomous_operator_router)
-    app.include_router(tool_builder_router)
+    if not _prod_danger_off:
+        app.include_router(tool_builder_router)
     app.include_router(long_term_memory_router)
     app.include_router(goal_prioritization_router)
     app.include_router(self_expansion_router)
@@ -194,6 +202,7 @@ def attach_domain_routers(app: FastAPI) -> None:
     from api.routes.code_agent import router as code_agent_router
     from api.routes.code_agent import websites_router as code_agent_websites_router
 
-    app.include_router(code_agent_router, prefix="/api/agent")
-    app.include_router(code_agent_websites_router, prefix="/api")
+    if not _prod_danger_off:
+        app.include_router(code_agent_router, prefix="/api/agent")
+        app.include_router(code_agent_websites_router, prefix="/api")
     app.include_router(os_central_brain_router)

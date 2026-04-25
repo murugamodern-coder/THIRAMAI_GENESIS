@@ -27,7 +27,8 @@ def test_cors_never_wildcard_non_production(monkeypatch: pytest.MonkeyPatch) -> 
     s = ThiramaiSettings()
     o = s.cors_allow_origins_list()
     assert "*" not in o
-    assert "http://localhost:8000" in o
+    assert "http://localhost:3000" in o
+    assert "http://127.0.0.1:8000" in o
 
 
 def test_cors_explicit_override(monkeypatch: pytest.MonkeyPatch) -> None:

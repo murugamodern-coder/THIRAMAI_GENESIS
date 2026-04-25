@@ -1,4 +1,4 @@
 """Expected Alembic head revision for production readiness checks (update when adding migrations)."""
 
 # Must match the head revision id in ``alembic/versions`` (``alembic upgrade head``).
-EXPECTED_ALEMBIC_REVISION = "0070_add_performance_indexes"
+EXPECTED_ALEMBIC_REVISION = "0071_security_audit_logs"

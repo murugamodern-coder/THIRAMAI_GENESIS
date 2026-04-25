@@ -35,6 +35,7 @@ from services.audit_log import (
     client_ip_from_request,
     record_system_audit,
 )
+from services.security_audit import EVENT_FAILED_LOGIN, record_security_audit_event
 from services.membership_service import first_active_membership, membership_for_organization
 from services.refresh_token_service import (
     issue_refresh_token,
@@ -261,6 +262,13 @@ async def login(request: Request, form: Annotated[OAuth2PasswordRequestForm, Dep
                     user_agent=ua,
                     metadata={"reason": "bad_credentials", "channel": "auth_login"},
                 )
+                record_security_audit_event(
+                    event_type=EVENT_FAILED_LOGIN,
+                    user_id=None,
+                    ip_address=ip,
+                    path="/auth/login",
+                    details={"reason": "bad_credentials", "channel": "auth_login"},
+                )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Incorrect email or password",
@@ -275,6 +283,13 @@ async def login(request: Request, form: Annotated[OAuth2PasswordRequestForm, Dep
                     client_ip=ip,
                     user_agent=ua,
                     metadata={"reason": "inactive", "channel": "auth_login"},
+                )
+                record_security_audit_event(
+                    event_type=EVENT_FAILED_LOGIN,
+                    user_id=int(user.id),
+                    ip_address=ip,
+                    path="/auth/login",
+                    details={"reason": "inactive", "channel": "auth_login"},
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -291,6 +306,13 @@ async def login(request: Request, form: Annotated[OAuth2PasswordRequestForm, Dep
                     user_agent=ua,
                     metadata={"reason": "no_membership", "channel": "auth_login"},
                 )
+                record_security_audit_event(
+                    event_type=EVENT_FAILED_LOGIN,
+                    user_id=int(user.id),
+                    ip_address=ip,
+                    path="/auth/login",
+                    details={"reason": "no_membership", "channel": "auth_login"},
+                )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="No organization membership",
@@ -305,6 +327,13 @@ async def login(request: Request, form: Annotated[OAuth2PasswordRequestForm, Dep
                     client_ip=ip,
                     user_agent=ua,
                     metadata={"reason": "role_missing", "channel": "auth_login"},
+                )
+                record_security_audit_event(
+                    event_type=EVENT_FAILED_LOGIN,
+                    user_id=int(user.id),
+                    ip_address=ip,
+                    path="/auth/login",
+                    details={"reason": "role_missing", "channel": "auth_login"},
                 )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -326,6 +355,13 @@ async def login(request: Request, form: Annotated[OAuth2PasswordRequestForm, Dep
                     client_ip=ip,
                     user_agent=ua,
                     metadata={"reason": "token_error", "channel": "auth_login"},
+                )
+                record_security_audit_event(
+                    event_type=EVENT_FAILED_LOGIN,
+                    user_id=int(user.id),
+                    ip_address=ip,
+                    path="/auth/login",
+                    details={"reason": "token_error", "channel": "auth_login"},
                 )
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

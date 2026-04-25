@@ -169,8 +169,8 @@ class ThiramaiSettings(BaseSettings):
 
         In **production** (``ENV`` or ``THIRAMAI_ENV`` = ``production``):
         - ``THIRAMAI_CORS_ALLOW_ALL`` is **ignored** (never ``*``).
-        - Only explicit comma-separated ``THIRAMAI_CORS_ORIGINS`` values are allowed
-          (must be non-empty; ``*`` is rejected).
+        - Comma-separated ``THIRAMAI_CORS_ORIGINS`` when set lists allowed origins (``*`` rejected).
+        - When unset or ``*``, defaults to ``https://app.thiramai.co.in`` and ``https://thiramai.co.in``.
 
         Non-production: **never** returns ``*`` (browsers + CORSMiddleware treat wildcard as allow-all).
         ``THIRAMAI_CORS_ALLOW_ALL`` is deprecated: use explicit localhost defaults or ``THIRAMAI_CORS_ORIGINS``.
@@ -178,15 +178,16 @@ class ThiramaiSettings(BaseSettings):
         if self.is_production():
             raw = (self.THIRAMAI_CORS_ORIGINS or "").strip()
             if not raw or raw == "*":
-                raise RuntimeError(
-                    "Production requires non-empty THIRAMAI_CORS_ORIGINS with explicit origins "
-                    "(comma-separated). Wildcard * is not allowed."
-                )
+                return [
+                    "https://app.thiramai.co.in",
+                    "https://thiramai.co.in",
+                ]
             origins = [o.strip() for o in raw.split(",") if o.strip() and o.strip() != "*"]
             if not origins:
-                raise RuntimeError(
-                    "Production THIRAMAI_CORS_ORIGINS must list at least one explicit origin (no *)."
-                )
+                return [
+                    "https://app.thiramai.co.in",
+                    "https://thiramai.co.in",
+                ]
             return origins
 
         # Dev / staging: explicit origins only (no "*" — Starlette allow_origins=["*"] is insecure for creds + ambiguous).
@@ -199,13 +200,9 @@ class ThiramaiSettings(BaseSettings):
             # Legacy: treat "allow all" as the same explicit dev list (log once via app startup if needed).
             pass
         return [
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
             "http://localhost:3000",
-            "http://127.0.0.1:3000",
-            # Vite dev server (Command Center SPA)
             "http://localhost:5173",
-            "http://127.0.0.1:5173",
+            "http://127.0.0.1:8000",
         ]
 
 

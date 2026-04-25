@@ -53,9 +53,9 @@ def test_rate_limit_applies_per_real_ip(monkeypatch: pytest.MonkeyPatch) -> None
 
     req1 = _request("198.51.100.21", xff="1.1.1.1")
     req2 = _request("198.51.100.21", xff="2.2.2.2")
-    key1 = (rlm._client_key(req1), "auth")
-    key2 = (rlm._client_key(req2), "auth")
-    assert key1 == key2 == ("198.51.100.21", "auth")
+    key1 = (f"ip:{rlm._client_key(req1)}", "tier_auth")
+    key2 = (f"ip:{rlm._client_key(req2)}", "tier_auth")
+    assert key1 == key2 == ("ip:198.51.100.21", "tier_auth")
 
     assert rlm._prune_and_count(key1, now=100.0, window=60.0, limit=2) is True
     assert rlm._prune_and_count(key2, now=101.0, window=60.0, limit=2) is True

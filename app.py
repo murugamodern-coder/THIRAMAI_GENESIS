@@ -3,6 +3,7 @@ THIRAMAI Genesis - FastAPI: core app, CORS, static factory mount, dashboard, and
 (api/routes: auth, inventory, factory, billing, ai_chat — see api.routes.registry).
 """
 
+import asyncio
 import io
 import os
 import sys
@@ -45,6 +46,8 @@ from prometheus_fastapi_instrumentator import Instrumentator
 ROOT = Path(__file__).resolve().parent
 load_dotenv(dotenv_path=ROOT / ".env", override=True)
 
+ENV = os.getenv("ENV", "development")
+
 from core.settings import get_settings
 
 import asset_portal
@@ -60,6 +63,8 @@ from api.routes.registry import attach_domain_routers
 from core.exceptions import ThiramaiAppError
 from core.observability import ensure_thiramai_logging
 from core.production_safety import assert_safe_production_config
+from core.dangerous_route_block_middleware import DangerousRouteBlockMiddleware
+from core.dangerous_routes import production_blocks_dangerous_routes
 from core.rate_limit_middleware import RateLimitMiddleware
 from core.safe_errors import (
     log_server_exception,
@@ -233,7 +238,8 @@ class SecureCookieEnforcementMiddleware(BaseHTTPMiddleware):
 
 # Auth: POST /auth/register, /auth/login, GET /auth/me (see api/routes/auth.py).
 app.include_router(auth_router)
-app.include_router(tools_router, prefix="/api/tools")
+if not production_blocks_dangerous_routes():
+    app.include_router(tools_router, prefix="/api/tools")
 
 attach_domain_routers(app)
 
@@ -256,6 +262,8 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(AuthContextMiddleware)
 # Stable correlation id for policy audit + client tracing (echoes X-Correlation-ID).
 app.add_middleware(CorrelationIdMiddleware)
+# Production: block dangerous tool paths (403 + security audit); routers are also omitted.
+app.add_middleware(DangerousRouteBlockMiddleware)
 
 _proxy_hosts = (os.getenv("THIRAMAI_PROXY_TRUSTED_HOSTS") or "").strip()
 if _proxy_hosts:
@@ -456,7 +464,30 @@ async def invoice_body_validation_400(request: Request, exc: RequestValidationEr
 @app.exception_handler(HTTPException)
 async def http_exception_safe_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Mask error bodies in production (THIRAMAI_SAFE_ERRORS=1); preserve auth response headers."""
-    _ = request
+    if exc.status_code == 403:
+        p = request.url.path or ""
+        if not p.startswith("/auth/"):
+            uid = None
+            cu = getattr(request.state, "current_user", None)
+            if cu is not None and getattr(cu, "id", None) is not None:
+                try:
+                    uid = int(cu.id) if int(cu.id) > 0 else None
+                except (TypeError, ValueError):
+                    uid = None
+            ip = request.client.host if request.client and request.client.host else None
+            try:
+                from services.security_audit import EVENT_PERMISSION_DENIED, record_security_audit_event
+
+                await asyncio.to_thread(
+                    record_security_audit_event,
+                    event_type=EVENT_PERMISSION_DENIED,
+                    user_id=uid,
+                    ip_address=ip,
+                    path=p,
+                    details={"status_code": 403},
+                )
+            except Exception:
+                pass
     body = sanitize_http_exception(exc)
     return JSONResponse(
         status_code=exc.status_code,
