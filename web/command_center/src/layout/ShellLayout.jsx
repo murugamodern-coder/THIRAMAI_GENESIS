@@ -45,7 +45,14 @@ export default function ShellLayout() {
           type="button"
           onClick={() => setMobileNavOpen((v) => !v)}
           className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium"
-          style={{ color: "#ffffff" }}
+          style={{
+            background: "rgba(255,255,255,0.1)",
+            color: "#ffffff",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: "6px",
+            padding: "6px 12px",
+            cursor: "pointer",
+          }}
           aria-label="Toggle menu"
         >
           Menu

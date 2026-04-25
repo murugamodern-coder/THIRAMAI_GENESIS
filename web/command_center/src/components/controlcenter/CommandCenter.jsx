@@ -184,9 +184,13 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                 : `border-slate-700 py-2 ${isSending ? "scale-[0.99]" : "scale-100"}`
             }`}
             style={{
-              background: "rgba(255,255,255,0.1)",
+              background: "rgba(255,255,255,0.08)",
               color: "#ffffff",
-              border: "1px solid rgba(255,255,255,0.2)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: "8px",
+              padding: "12px 16px",
+              width: "100%",
+              outline: "none",
             }}
             placeholder={placeholder}
             value={input}
