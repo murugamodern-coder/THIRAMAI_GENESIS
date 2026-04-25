@@ -75,8 +75,8 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
 
   const shellClass = [
     isCalm
-      ? "rounded-2xl border border-slate-800/70 bg-gradient-to-b from-slate-950/70 via-slate-950/50 to-slate-900/40 p-3 shadow-[0_1px_0_rgba(255,255,255,0.04),0_20px_50px_-24px_rgba(0,0,0,0.5)] backdrop-blur-md transition-[box-shadow,transform] duration-500 ease-out hover:shadow-[0_1px_0_rgba(255,255,255,0.05),0_24px_56px_-20px_rgba(59,130,246,0.12)]"
-      : "rounded-2xl border border-slate-800 bg-slate-950/70 p-4",
+      ? "rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-950/80 via-slate-950/80 to-slate-900/80 p-3 shadow-[0_1px_0_rgba(255,255,255,0.04),0_20px_50px_-24px_rgba(0,0,0,0.5)] backdrop-blur-md transition-[box-shadow,transform] duration-500 ease-out hover:shadow-[0_1px_0_rgba(255,255,255,0.05),0_24px_56px_-20px_rgba(59,130,246,0.12)]"
+      : "rounded-2xl border border-slate-800 bg-slate-950/80 p-4",
     shellPulseClass ? "cc-shell-pulse" : "",
   ]
     .filter(Boolean)
@@ -87,12 +87,12 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
       <div
         className={
           isCalm
-            ? "rounded-xl border border-slate-800/50 bg-slate-900/25 p-3 ring-1 ring-white/[0.03]"
-            : "rounded-xl border border-slate-700 bg-slate-900/60 p-3"
+            ? "rounded-xl border border-slate-800/80 bg-slate-900/80 p-3 ring-1 ring-white"
+            : "rounded-xl border border-slate-700 bg-slate-900/80 p-3"
         }
       >
         <div
-          className={`space-y-2 overflow-y-auto rounded-lg border border-slate-800/40 bg-slate-950/40 p-3 ${isCalm ? "max-h-56 min-h-[7rem]" : "max-h-48"}`}
+          className={`space-y-2 overflow-y-auto rounded-lg border border-slate-800/80 bg-slate-950/80 p-3 ${isCalm ? "max-h-56 min-h-[7rem]" : "max-h-48"}`}
         >
           {history.slice(-6).map((h) => {
             const isEnter = h.role === "assistant" && h.id === enterAssistantId;
@@ -110,7 +110,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                 } ${isEnter ? "cc-msg-enter" : ""}`}
               >
                 {!isCalm ? (
-                  <span className="mr-2 text-[10px] uppercase tracking-[0.1em] text-slate-400">{h.role}</span>
+                  <span className="mr-2 text-[10px] uppercase tracking-[0.1em] text-white">{h.role}</span>
                 ) : null}
                 {blocks ? (
                   <div className="space-y-2.5">
@@ -135,7 +135,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                               : "text-[13px] leading-6 text-[#e2e8f0]";
                       return (
                         <div key={`${h.id}_b_${bi}`}>
-                          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white">
                             {label}
                           </span>
                           <p className={`mt-0.5 ${bodyClass}`}>{b.text}</p>
@@ -165,7 +165,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
         </div>
         <div className={`mt-3 flex gap-2 ${isCalm ? "items-center" : ""}`}>
           <input
-            className={`flex-1 rounded-xl border bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition-[border-color,box-shadow,transform] duration-300 ease-out placeholder:text-slate-500 focus:border-slate-500 ${
+            className={`flex-1 rounded-xl border bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition-[border-color,box-shadow,transform] duration-300 ease-out placeholder:text-slate-200 focus:border-slate-200 ${
               isCalm
                 ? `border-slate-800 py-3 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.18)] ${isSending ? "scale-[0.985]" : "scale-100"}`
                 : `border-slate-700 py-2 ${isSending ? "scale-[0.99]" : "scale-100"}`

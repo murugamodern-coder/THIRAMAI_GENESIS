@@ -60,9 +60,8 @@ export default function AIAssistantPanel() {
       ? "Risk detected. Awaiting correction."
       : messages.length > 1
         ? "Execution stable. Monitoring outcomes."
-        : "No critical signals detected.";
+        : "Command channel ready";
   const systemInsight = presenceLine || idleLine || baselineInsight;
-  const presenceMuted = !presenceLine && Boolean(idleLine);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -238,15 +237,14 @@ export default function AIAssistantPanel() {
   return (
     <div className="mx-auto w-full max-w-[720px]">
       <p
-        className={`mb-7 text-center text-[15px] font-normal leading-7 transition-opacity duration-300 ${
-          presenceMuted ? "text-slate-500/70" : "text-slate-400"
-        }`}
+        className="mb-7 text-center text-[15px] leading-7 text-white transition-opacity duration-300"
+        style={{ color: "#ffffff", fontWeight: 500 }}
         aria-live="polite"
       >
         {systemInsight}
       </p>
       <section className="flex flex-col gap-4">
-        <div className="max-h-[62vh] min-h-72 overflow-y-auto rounded-[2rem] bg-slate-950/25 p-5 shadow-[0_28px_90px_-56px_rgba(15,23,42,0.95)]">
+        <div className="max-h-[62vh] min-h-72 overflow-y-auto rounded-[2rem] bg-slate-950/80 p-5 shadow-[0_28px_90px_-56px_rgba(15,23,42,0.95)]">
           {messages.length === 0 ? (
             <div className="min-h-56" aria-hidden="true" />
           ) : null}
@@ -256,7 +254,7 @@ export default function AIAssistantPanel() {
               if (m.role === "user") {
                 return (
                   <div key={`u_${m.ts}_${idx}`} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-3xl bg-sky-500/10 px-5 py-3 text-[15px] font-normal leading-7 text-slate-200">
+                    <div className="max-w-[85%] rounded-3xl bg-sky-500/20 px-5 py-3 text-[15px] font-medium leading-7 text-white">
                       {m.text}
                     </div>
                   </div>
@@ -266,13 +264,13 @@ export default function AIAssistantPanel() {
                 <div key={`a_${m.ts}_${idx}`} className={`flex justify-start ${m.ts === latestResponseTs ? "cc-response-enter" : ""}`}>
                   <div className="w-full max-w-[92%]">
                     {m.error ? (
-                      <div className="rounded-3xl bg-red-950/20 px-5 py-4 text-[15px] font-normal leading-7 text-red-200/90">
+                      <div className="rounded-3xl bg-red-950/80 px-5 py-4 text-[15px] font-medium leading-7 text-red-100">
                         {m.error}
                       </div>
                     ) : m.brain ? (
                       <BrainResponseBlock brain={m.brain} />
                     ) : (
-                      <div className="rounded-3xl bg-slate-900/35 px-5 py-4 text-[15px] font-normal leading-7 text-slate-300">
+                      <div className="rounded-3xl bg-slate-900/80 px-5 py-4 text-[15px] font-medium leading-7 text-[#e2e8f0]">
                         {m.type === "mission" ? (
                           <div className="rounded-2xl bg-purple-500/10 p-3">
                             <div className="mb-2 text-xs uppercase tracking-wide text-purple-300">Mission</div>
@@ -282,7 +280,7 @@ export default function AIAssistantPanel() {
                             {String(m.missionStatus || "").toLowerCase() !== "completed" ? (
                               <button
                                 type="button"
-                                className="mt-3 rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
+                                className="mt-3 rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-80"
                                 disabled={approvingMissionId === m.missionId}
                                 onClick={() => approveMission(m.missionId)}
                               >
@@ -291,7 +289,7 @@ export default function AIAssistantPanel() {
                             ) : null}
                           </div>
                         ) : (
-                          <span className="text-slate-400">No response data.</span>
+                          <span className="text-white">No response data.</span>
                         )}
                       </div>
                     )}
@@ -300,7 +298,7 @@ export default function AIAssistantPanel() {
               );
             })}
             {loading ? (
-              <div className="rounded-3xl bg-slate-900/25 px-5 py-3 text-sm font-normal leading-7 text-slate-500">
+              <div className="rounded-3xl bg-slate-900/80 px-5 py-3 text-sm font-medium leading-7 text-slate-200">
                 thinking<span className="cc-thinking-dots">...</span>
               </div>
             ) : null}
@@ -308,10 +306,10 @@ export default function AIAssistantPanel() {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] bg-slate-950/70 p-2.5 shadow-[0_18px_70px_-42px_rgba(56,189,248,0.38)] ring-1 ring-slate-800/60">
+        <div className="rounded-[1.75rem] bg-slate-950/80 p-2.5 shadow-[0_18px_70px_-42px_rgba(56,189,248,0.38)] ring-1 ring-slate-800/80">
           <div className="flex gap-2.5">
             <input
-              className="flex-1 rounded-2xl border border-transparent bg-slate-950 px-5 py-4 text-[15px] font-normal leading-6 text-slate-200 outline-none shadow-inner shadow-black/20 transition duration-300 placeholder:text-slate-600 focus:border-sky-400/40 focus:shadow-[0_0_0_4px_rgba(56,189,248,0.09)]"
+              className="flex-1 rounded-2xl border border-transparent bg-slate-950 px-5 py-4 text-[15px] font-medium leading-6 text-white outline-none shadow-inner shadow-black/20 transition duration-300 placeholder:text-slate-200 focus:border-sky-400/80 focus:shadow-[0_0_0_4px_rgba(56,189,248,0.18)]"
               placeholder="Type a command…"
               value={message}
               onChange={(e) => {
@@ -327,7 +325,7 @@ export default function AIAssistantPanel() {
               type="button"
               onClick={() => submit()}
               disabled={loading}
-              className="rounded-2xl bg-slate-100 px-5 py-4 text-sm font-medium text-slate-950 shadow-[0_10px_30px_-18px_rgba(255,255,255,0.65)] transition duration-300 hover:-translate-y-0.5 hover:bg-white active:scale-[0.97] disabled:translate-y-0 disabled:opacity-50"
+              className="rounded-2xl bg-slate-100 px-5 py-4 text-sm font-medium text-slate-950 shadow-[0_10px_30px_-18px_rgba(255,255,255,0.65)] transition duration-300 hover:-translate-y-0.5 hover:bg-white active:scale-[0.97] disabled:translate-y-0 disabled:opacity-80"
             >
               Send
             </button>
@@ -336,7 +334,7 @@ export default function AIAssistantPanel() {
                 type="button"
                 onClick={startVoice}
                 disabled={loading || listening}
-                className="rounded-2xl border border-slate-800 px-4 py-3 text-sm text-slate-300 hover:bg-slate-900 disabled:opacity-60"
+                className="rounded-2xl border border-slate-800 px-4 py-3 text-sm text-[#e2e8f0] hover:bg-slate-900 disabled:opacity-80"
                 title="Voice input"
               >
                 {listening ? "Listening…" : "Voice"}
