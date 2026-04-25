@@ -20,6 +20,7 @@ const sidebarStyle = {
   height: "100vh",
   background: "rgba(10, 15, 30, 0.98)",
   backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
   borderRight: "1px solid rgba(255,255,255,0.06)",
   zIndex: 1000,
   display: "flex",
@@ -159,28 +160,25 @@ export default function ShellLayout() {
         className="pointer-events-none absolute left-1/2 top-1/3 z-0 h-96 w-96 -translate-x-1/2 rounded-full bg-cyan-500/5 blur-3xl"
         aria-hidden="true"
       />
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-3 backdrop-blur md:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileNavOpen((v) => !v)}
-          className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium"
-          style={{
-            background: "rgba(255,255,255,0.1)",
-            color: "#ffffff",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: "6px",
-            padding: "6px 12px",
-            cursor: "pointer",
-          }}
-          aria-label="Toggle menu"
-        >
-          Menu
-        </button>
-        <div className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "#ffffff" }}>
-          Thiramai
-        </div>
-        <div className="h-8 w-8" aria-hidden="true" />
-      </header>
+
+      {/* Mobile: hamburger only (no duplicate header row) */}
+      <button
+        type="button"
+        className="fixed left-3 top-3 z-[1001] flex h-11 w-11 items-center justify-center rounded-lg md:hidden"
+        style={{
+          background: "rgba(255,255,255,0.1)",
+          color: "#ffffff",
+          border: "1px solid rgba(255,255,255,0.2)",
+          cursor: "pointer",
+        }}
+        aria-label="Open navigation menu"
+        aria-expanded={mobileNavOpen}
+        onClick={() => setMobileNavOpen((v) => !v)}
+      >
+        <span className="text-lg leading-none" aria-hidden="true">
+          ☰
+        </span>
+      </button>
 
       {mobileNavOpen ? (
         <div
@@ -192,15 +190,20 @@ export default function ShellLayout() {
         />
       ) : null}
 
+      {/* Single glass sidebar: off-canvas on small screens, always visible md+ */}
       <aside
-        className="md:hidden"
+        className={`fixed left-0 top-0 z-[1000] flex h-[100dvh] w-[240px] flex-col transition-transform duration-200 ease-out md:translate-x-0 ${
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
         style={{
-          ...sidebarStyle,
-          transform: mobileNavOpen ? "translateX(0)" : "translateX(-100%)",
-          transition: "transform 0.2s ease",
+          background: sidebarStyle.background,
+          backdropFilter: sidebarStyle.backdropFilter,
+          WebkitBackdropFilter: sidebarStyle.WebkitBackdropFilter,
+          borderRight: sidebarStyle.borderRight,
+          padding: sidebarStyle.padding,
         }}
       >
-        <div className="mb-4 flex items-center justify-end">
+        <div className="mb-4 flex items-center justify-end md:hidden">
           <button
             type="button"
             onClick={() => setMobileNavOpen(false)}
@@ -212,13 +215,9 @@ export default function ShellLayout() {
         {renderNav(() => setMobileNavOpen(false))}
       </aside>
 
-      <aside className="relative z-10 hidden md:flex" style={sidebarStyle}>
-        {renderNav(() => {})}
-      </aside>
-
       <main
         id="cc-main-content"
-        className="relative z-10 flex-1 overflow-y-auto px-2 pb-28 pt-3 sm:px-4 md:ml-[240px] md:p-6"
+        className="relative z-10 flex-1 overflow-y-auto px-2 pb-28 pt-14 sm:px-4 md:ml-[240px] md:pt-6 md:p-6"
       >
         <div className="mx-auto w-full max-w-5xl">
           <section className="overflow-x-auto rounded-2xl bg-transparent p-3 sm:p-4">

@@ -1,5 +1,112 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+const RULE = "─────────────────────";
+
+function isBrainExecutePayload(r) {
+  if (!r || typeof r !== "object") return false;
+  if (Array.isArray(r.blocks) && r.blocks.length) return false;
+  return (
+    Object.prototype.hasOwnProperty.call(r, "result") &&
+    typeof r.result === "object" &&
+    r.result !== null &&
+    (Object.prototype.hasOwnProperty.call(r, "intent") ||
+      Object.prototype.hasOwnProperty.call(r, "status") ||
+      Object.prototype.hasOwnProperty.call(r, "plan"))
+  );
+}
+
+function pickSummary(brain) {
+  if (typeof brain.summary === "string" && brain.summary.trim()) return brain.summary.trim();
+  const inner = brain.result && typeof brain.result === "object" ? brain.result : {};
+  if (typeof inner.summary === "string" && inner.summary.trim()) return inner.summary.trim();
+  const ex = brain.execution_summary;
+  if (typeof ex === "string" && ex.trim()) return ex.trim();
+  if (ex && typeof ex === "object") {
+    const t = ex.summary ?? ex.text ?? ex.message;
+    if (typeof t === "string" && t.trim()) return t.trim();
+  }
+  return "";
+}
+
+/** Human-readable /brain/execute style payloads (not Control Center { blocks } envelopes). */
+function formatBrainExecuteResponse(brain) {
+  const inner = brain.result && typeof brain.result === "object" ? brain.result : {};
+  const status = String(brain.status || "").toLowerCase();
+  const innerOk = inner.ok !== false && !inner.blocked;
+  const topFail = brain.ok === false;
+  const ok =
+    !topFail &&
+    brain.ok !== false &&
+    innerOk &&
+    !["failed", "blocked"].includes(status);
+  const errRaw =
+    inner.error != null
+      ? String(inner.error)
+      : inner.reason != null
+        ? String(inner.reason)
+        : "";
+  const topErr = topFail ? String(brain.error || brain.detail || "").trim() : "";
+  const errMsg = topErr || errRaw.trim() || (ok ? "" : "Request failed.");
+
+  const lines = [];
+  lines.push(RULE);
+  lines.push(`${ok ? "✅" : "⚠️"} System Status`);
+  lines.push(RULE);
+
+  if (!ok) {
+    if (inner.error === "pipeline_violation" || errMsg === "pipeline_violation") {
+      const orig = inner.original_result;
+      const detail =
+        orig && typeof orig === "object"
+          ? String(orig.error || orig.message || errMsg).trim() || errMsg
+          : errMsg;
+      lines.push(`⚠️ Pipeline check failed — ${detail}`);
+    } else {
+      lines.push(`⚠️ ${errMsg}`);
+    }
+  }
+
+  const steps = Array.isArray(inner.steps) ? inner.steps : Array.isArray(brain.steps) ? brain.steps : [];
+  for (const step of steps) {
+    const kind = String(step.step_kind || step.kind || "step");
+    const st = String(step.status || step.outcome || "").toLowerCase();
+    const stepOk = step.ok !== false && !["failed", "error"].includes(st);
+    const mark = stepOk ? "✅" : "❌";
+    lines.push(`${kind}: ${mark}`);
+  }
+
+  const summary = pickSummary(brain);
+  if (summary) {
+    lines.push("");
+    lines.push(`Summary: ${summary}`);
+  }
+
+  const conf = brain.confidence;
+  const score = conf && typeof conf === "object" && conf.score != null ? Number(conf.score) : null;
+  if (score != null && Number.isFinite(score)) {
+    const pct = Math.min(100, Math.max(0, Math.round(score * 100)));
+    lines.push(`Confidence: ${pct}%`);
+  }
+
+  lines.push(RULE);
+  return { text: lines.join("\n"), warn: !ok };
+}
+
+function normalizeSubmitResult(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  if (isBrainExecutePayload(raw)) return raw;
+  const msg = raw.message;
+  if (typeof msg === "string" && msg.trim().startsWith("{")) {
+    try {
+      const j = JSON.parse(msg);
+      if (isBrainExecutePayload(j)) return { ...raw, ...j, message: undefined };
+    } catch {
+      /* ignore */
+    }
+  }
+  return raw;
+}
+
 export default function CommandCenter({ onSubmit, safeMode, variant = "default", actionFlashKey = 0 }) {
   const isCalm = variant === "calm";
   const [input, setInput] = useState("");
@@ -43,7 +150,27 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
     setHistory((prev) => [...prev, { id: itemId, role: "user", text: cmd }]);
     setInput("");
     try {
-      const result = await onSubmit?.(cmd);
+      const payload = await onSubmit?.(cmd);
+      const result = normalizeSubmitResult(payload);
+
+      if (isBrainExecutePayload(result)) {
+        const { text, warn } = formatBrainExecuteResponse(result);
+        const aid = `a_${Date.now()}`;
+        setHistory((prev) => [
+          ...prev,
+          {
+            id: aid,
+            role: "assistant",
+            text,
+            blocks: null,
+            tone: warn ? "warn" : "ok",
+          },
+        ]);
+        setEnterAssistantId(aid);
+        setTimeout(() => setEnterAssistantId(null), 520);
+        return;
+      }
+
       const ok = result?.ok !== false;
       const blocks = ok && Array.isArray(result?.blocks) && result.blocks.length ? result.blocks : null;
       const impact = result?.impact ? String(result.impact).trim() : "";
@@ -207,7 +334,9 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                             : "mt-1 block text-[13px] leading-6"
                           : "block leading-6"
                       }
-                      style={{ color: "#ffffff" }}
+                      style={{
+                        color: warnTone && line.trimStart().startsWith("⚠️") ? "#fbbf24" : "#ffffff",
+                      }}
                     >
                       {line}
                     </span>
