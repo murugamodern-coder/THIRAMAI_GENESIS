@@ -92,7 +92,7 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
         }
       >
         <div
-          className={`space-y-2 overflow-y-auto rounded-lg border border-slate-800/40 bg-slate-950/40 p-2 ${isCalm ? "max-h-56 min-h-[7rem]" : "max-h-48"}`}
+          className={`space-y-2 overflow-y-auto rounded-lg border border-slate-800/40 bg-slate-950/40 p-3 ${isCalm ? "max-h-56 min-h-[7rem]" : "max-h-48"}`}
         >
           {history.slice(-6).map((h) => {
             const isEnter = h.role === "assistant" && h.id === enterAssistantId;
@@ -101,19 +101,19 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
             return (
               <div
                 key={h.id}
-                className={`rounded-lg px-2 py-2 text-sm leading-relaxed transition-[transform,background-color] duration-300 ease-out ${
+                className={`rounded-xl px-3 py-2.5 text-sm leading-6 transition-[transform,background-color] duration-300 ease-out ${
                   h.role === "user"
-                    ? "bg-gradient-to-r from-blue-500/12 to-transparent text-slate-100"
+                    ? "bg-sky-500/15 text-sky-50 ring-1 ring-sky-400/15"
                     : warnTone
-                      ? "bg-amber-500/5 text-amber-100/90 ring-1 ring-amber-500/15"
-                      : "text-slate-300"
+                      ? "bg-amber-500/10 text-amber-50 ring-1 ring-amber-500/20"
+                      : "bg-[rgba(255,255,255,0.05)] text-[#e2e8f0] ring-1 ring-white/[0.06]"
                 } ${isEnter ? "cc-msg-enter" : ""}`}
               >
                 {!isCalm ? (
-                  <span className="mr-2 text-[10px] uppercase tracking-[0.1em] text-slate-500">{h.role}</span>
+                  <span className="mr-2 text-[10px] uppercase tracking-[0.1em] text-slate-400">{h.role}</span>
                 ) : null}
                 {blocks ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {blocks.map((b, bi) => {
                       const label =
                         b.kind === "signal"
@@ -127,18 +127,18 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                                 : "";
                       const bodyClass =
                         b.kind === "next"
-                          ? "text-[13px] font-medium text-emerald-200/90"
+                          ? "text-[13px] font-medium leading-6 text-emerald-100"
                           : b.kind === "outcome"
-                            ? "text-[13px] text-slate-200/95"
+                            ? "text-[13px] leading-6 text-slate-100"
                             : b.kind === "signal"
-                              ? "text-[13px] text-slate-100"
-                              : "text-[13px] text-slate-300";
+                              ? "text-[13px] leading-6 text-white"
+                              : "text-[13px] leading-6 text-[#e2e8f0]";
                       return (
                         <div key={`${h.id}_b_${bi}`}>
-                          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                             {label}
                           </span>
-                          <p className={`mt-0.5 leading-snug ${bodyClass}`}>{b.text}</p>
+                          <p className={`mt-0.5 ${bodyClass}`}>{b.text}</p>
                         </div>
                       );
                     })}
@@ -150,9 +150,9 @@ export default function CommandCenter({ onSubmit, safeMode, variant = "default",
                       className={
                         i > 0
                           ? warnTone
-                            ? "mt-1 block text-xs text-amber-200/85"
-                            : "mt-1 block text-xs text-emerald-200/90"
-                          : ""
+                            ? "mt-1 block text-[13px] leading-6 text-amber-100"
+                            : "mt-1 block text-[13px] leading-6 text-emerald-100"
+                          : "block leading-6"
                       }
                     >
                       {line}
