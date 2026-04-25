@@ -6,6 +6,24 @@ import { postBrainCommand } from "../../lib/brainExecuteClient.js";
 import { showToastDedup } from "../../lib/toastDedup.js";
 
 const ENABLE_VOICE_INPUT = false;
+const ACTIVE_PRESENCE_LINES = [
+  "Analyzing signals...",
+  "Evaluating execution path...",
+  "Scanning for outcomes...",
+  "Verifying system state...",
+  "Recalculating next move...",
+];
+const IDLE_PRESENCE_LINES = ["Monitoring system state...", "No new signals.", "Standing by."];
+
+function naturalResponseDelay(seq) {
+  return 200 + (((seq || 1) * 73) % 301);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 function normalizeStep(raw, idx) {
   if (raw && typeof raw === "object") {
@@ -26,21 +44,41 @@ export default function AIAssistantPanel() {
   const [listening, setListening] = useState(false);
   const [messages, setMessages] = useState([]);
   const [approvingMissionId, setApprovingMissionId] = useState(null);
+  const [presenceLine, setPresenceLine] = useState("");
+  const [idleLine, setIdleLine] = useState("");
+  const [interactionSeq, setInteractionSeq] = useState(0);
+  const [latestResponseTs, setLatestResponseTs] = useState(null);
   const recognitionRef = useRef(null);
   const endRef = useRef(null);
+  const presenceIndexRef = useRef(0);
+  const idleIndexRef = useRef(0);
   const lastAssistant = messages.findLast?.((m) => m.role === "assistant");
   const hasError = Boolean(lastAssistant?.error);
-  const systemInsight = loading
+  const baselineInsight = loading
     ? "Execution path under evaluation."
     : hasError
       ? "Risk detected. Awaiting correction."
       : messages.length > 1
         ? "Execution stable. Monitoring outcomes."
         : "No critical signals detected.";
+  const systemInsight = presenceLine || idleLine || baselineInsight;
+  const presenceMuted = !presenceLine && Boolean(idleLine);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (loading) return undefined;
+    setIdleLine("");
+    const idleDelay = 5000 + ((interactionSeq % 6) * 700);
+    const timer = window.setTimeout(() => {
+      const line = IDLE_PRESENCE_LINES[idleIndexRef.current % IDLE_PRESENCE_LINES.length];
+      idleIndexRef.current += 1;
+      setIdleLine(line);
+    }, idleDelay);
+    return () => window.clearTimeout(timer);
+  }, [interactionSeq, loading]);
 
   const approveMission = useCallback(
     async (missionId) => {
@@ -73,25 +111,41 @@ export default function AIAssistantPanel() {
     async (textOverride = "") => {
       const text = String(textOverride || message).trim();
       if (!text || loading) return;
+      const nextSeq = presenceIndexRef.current + 1;
+      const line = ACTIVE_PRESENCE_LINES[presenceIndexRef.current % ACTIVE_PRESENCE_LINES.length];
+      presenceIndexRef.current = nextSeq;
+      setPresenceLine(line);
+      setIdleLine("");
+      setInteractionSeq((v) => v + 1);
       setLoading(true);
       setMessages((prev) => [...prev, { role: "user", text, ts: Date.now() }]);
       if (!textOverride) setMessage("");
       try {
         const data = await postBrainCommand(text);
+        await delay(naturalResponseDelay(nextSeq));
+        const ts = Date.now();
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            ts: Date.now(),
+            ts,
             brain: data,
           },
         ]);
+        setLatestResponseTs(ts);
+        window.setTimeout(() => setLatestResponseTs((current) => (current === ts ? null : current)), 260);
       } catch (e) {
         const d = e?.response?.data?.detail;
         const err = typeof d === "string" ? d : e?.message || "Brain execute failed";
-        setMessages((prev) => [...prev, { role: "assistant", ts: Date.now(), error: err }]);
+        await delay(naturalResponseDelay(nextSeq));
+        const ts = Date.now();
+        setMessages((prev) => [...prev, { role: "assistant", ts, error: err }]);
+        setLatestResponseTs(ts);
+        window.setTimeout(() => setLatestResponseTs((current) => (current === ts ? null : current)), 260);
         showToastDedup({ type: "error", message: err });
       } finally {
+        setPresenceLine("");
+        setInteractionSeq((v) => v + 1);
         setLoading(false);
       }
     },
@@ -183,15 +237,18 @@ export default function AIAssistantPanel() {
 
   return (
     <div className="mx-auto w-full max-w-[720px]">
-      <p className="mb-7 text-center text-[15px] font-normal leading-7 text-slate-400" aria-live="polite">
+      <p
+        className={`mb-7 text-center text-[15px] font-normal leading-7 transition-opacity duration-300 ${
+          presenceMuted ? "text-slate-500/70" : "text-slate-400"
+        }`}
+        aria-live="polite"
+      >
         {systemInsight}
       </p>
       <section className="flex flex-col gap-4">
         <div className="max-h-[62vh] min-h-72 overflow-y-auto rounded-[2rem] bg-slate-950/25 p-5 shadow-[0_28px_90px_-56px_rgba(15,23,42,0.95)]">
           {messages.length === 0 ? (
-            <div className="flex min-h-56 items-center justify-center text-center text-[15px] font-normal leading-7 text-slate-500">
-              Ask for a decision, action, or system check.
-            </div>
+            <div className="min-h-56" aria-hidden="true" />
           ) : null}
 
           <div className="space-y-4">
@@ -206,7 +263,7 @@ export default function AIAssistantPanel() {
                 );
               }
               return (
-                <div key={`a_${m.ts}_${idx}`} className="flex justify-start">
+                <div key={`a_${m.ts}_${idx}`} className={`flex justify-start ${m.ts === latestResponseTs ? "cc-response-enter" : ""}`}>
                   <div className="w-full max-w-[92%]">
                     {m.error ? (
                       <div className="rounded-3xl bg-red-950/20 px-5 py-4 text-[15px] font-normal leading-7 text-red-200/90">
@@ -244,7 +301,7 @@ export default function AIAssistantPanel() {
             })}
             {loading ? (
               <div className="rounded-3xl bg-slate-900/25 px-5 py-3 text-sm font-normal leading-7 text-slate-500">
-                thinking…
+                thinking<span className="cc-thinking-dots">...</span>
               </div>
             ) : null}
             <div ref={endRef} />
@@ -257,7 +314,11 @@ export default function AIAssistantPanel() {
               className="flex-1 rounded-2xl border border-transparent bg-slate-950 px-5 py-4 text-[15px] font-normal leading-6 text-slate-200 outline-none shadow-inner shadow-black/20 transition duration-300 placeholder:text-slate-600 focus:border-sky-400/40 focus:shadow-[0_0_0_4px_rgba(56,189,248,0.09)]"
               placeholder="Type a command…"
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                setIdleLine("");
+                setInteractionSeq((v) => v + 1);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submit();
               }}
