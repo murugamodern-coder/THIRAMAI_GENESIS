@@ -1139,3 +1139,94 @@ def _self_evolution_schedule_coverage() -> dict[str, Any]:
     out["enabled_count"] = enabled_count
     out["total"] = len(crons)
     return out
+
+
+@router.get("/quant-status", summary="Self-Evolution 90/100: quant + tick stream + HAL status")
+async def quant_status(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Snapshot for the Self-Evolution 90/100 milestone.
+
+    Reports on the OHLCV store, backtester registry, Kite tick stream worker,
+    and HAL device registry; rolls them up into a coarse 0..100 ``quant_score``.
+    """
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    try:
+        return await asyncio.to_thread(_compute_quant_status)
+    except Exception as exc:
+        _LOG.exception("quant_status_unhandled_error")
+        raise HTTPException(status_code=500, detail="Quant status is temporarily unavailable.") from exc
+
+
+def _compute_quant_status() -> dict[str, Any]:
+    ohlcv_summary: dict[str, Any] = {"tables_exist": False, "symbol_count": 0, "total_candles": 0}
+    try:
+        from services.quant.ohlcv_store import store_summary
+
+        ohlcv_summary = store_summary()
+    except Exception as exc:
+        _LOG.debug("ohlcv_summary_unavailable: %s", exc)
+
+    backtester_info: dict[str, Any] = {"available": False, "strategies_registered": 0}
+    try:
+        from services.quant.backtester import RSIMACDStrategy  # noqa: F401
+        from services.quant.strategy_registry import StrategyRegistry
+
+        backtester_info = {
+            "available": True,
+            "strategies_registered": len(StrategyRegistry.list_active()),
+        }
+    except Exception as exc:
+        _LOG.debug("backtester_unavailable: %s", exc)
+
+    tick_info: dict[str, Any] = {"is_running": False, "kite_enabled": False}
+    try:
+        from workers.market_tick_stream import get_tick_stream
+
+        tick_info = get_tick_stream().status()
+    except Exception as exc:
+        _LOG.debug("tick_stream_unavailable: %s", exc)
+
+    hal_info: dict[str, Any] = {"registered": 0, "connected": 0, "mqtt_enabled": False}
+    try:
+        import os as _os
+
+        from services.hal.hal_base import DeviceRegistry
+
+        hal_info = {
+            "registered": DeviceRegistry.total(),
+            "connected": DeviceRegistry.connected_count(),
+            "mqtt_enabled": bool((_os.getenv("MQTT_BROKER_HOST") or "").strip()),
+        }
+    except Exception as exc:
+        _LOG.debug("hal_unavailable: %s", exc)
+
+    score = 0
+    if ohlcv_summary.get("tables_exist"):
+        score += 25
+        if int(ohlcv_summary.get("total_candles") or 0) > 0:
+            score += 10
+    if backtester_info.get("available"):
+        score += 20
+        if int(backtester_info.get("strategies_registered") or 0) > 0:
+            score += 5
+    if tick_info.get("kite_enabled"):
+        score += 10
+        if tick_info.get("is_running"):
+            score += 10
+    if int(hal_info.get("registered") or 0) > 0:
+        score += 10
+        if int(hal_info.get("connected") or 0) > 0:
+            score += 10
+    score = max(0, min(int(score), 100))
+
+    return {
+        "ok": True,
+        "ohlcv_store": ohlcv_summary,
+        "backtester": backtester_info,
+        "tick_stream": tick_info,
+        "hal_devices": hal_info,
+        "quant_score": int(score),
+        "phase": "self_evolution_phase_5",
+    }

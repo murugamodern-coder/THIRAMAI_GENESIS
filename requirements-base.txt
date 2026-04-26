@@ -48,3 +48,6 @@ pywebpush==2.3.0
 docker==7.1.0
 chromadb==1.5.7
 slowapi==0.1.9
+# Self-Evolution 90/100 — HAL (MQTT) + online learning
+paho-mqtt==2.0.0
+river==0.21.0

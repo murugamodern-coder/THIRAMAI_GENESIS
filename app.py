@@ -425,6 +425,25 @@ async def _startup_thiramai_scheduler() -> None:
     app.state.scheduler = scheduler
 
 
+@app.on_event("startup")
+async def _startup_hal() -> None:
+    """Self-Evolution 90/100 — register physical irrigation valves on boot.
+
+    Connection failures (no MQTT broker, paho-mqtt missing, hardware offline) are
+    logged and swallowed; the registry stays populated so ``/personal/os/quant-status``
+    can still report device coverage.
+    """
+    if (os.getenv("THIRAMAI_HAL_AUTOSTART") or "1").strip().lower() in ("0", "false", "off", "no"):
+        return
+    try:
+        from services.hal.irrigation_valve import setup_irrigation_devices
+
+        result = await asyncio.to_thread(setup_irrigation_devices)
+        logging.getLogger("thiramai").info("hal_startup result=%s", result)
+    except Exception as exc:
+        logging.getLogger("thiramai").warning("hal_startup_skipped: %s", exc)
+
+
 @app.on_event("shutdown")
 def _shutdown_thiramai() -> None:
     try:

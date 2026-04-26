@@ -373,6 +373,8 @@ class ThiramaiScheduler:
             asyncio.create_task(self.causal_graph_populate_cron()),
             asyncio.create_task(self.feature_archive_daily_cron()),
             asyncio.create_task(self.model_ensemble_train_cron()),
+            asyncio.create_task(self.ohlcv_daily_fetch_cron()),
+            asyncio.create_task(self.hal_state_snapshot_cron()),
         ]
         if _autonomous_business_operator_enabled():
             self.tasks.append(asyncio.create_task(self.autonomous_business_operator_cron()))
@@ -1490,3 +1492,99 @@ class ThiramaiScheduler:
             except Exception as exc:
                 _log.warning("autonomous_operations_cron error: %s", exc)
                 await asyncio.sleep(60)
+
+    async def ohlcv_daily_fetch_cron(self) -> None:
+        """Self-Evolution 90/100 — daily OHLCV pull after market close (16:30 IST).
+
+        Disable with ``THIRAMAI_OHLCV_CRON=0``. Override hour/minute with
+        ``THIRAMAI_OHLCV_HOUR_IST`` (default 16) / ``THIRAMAI_OHLCV_MINUTE_IST`` (default 30).
+        Silently degrades when Kite credentials are not configured — the worker logs and
+        continues sleeping until the next IST window.
+        """
+        if (os.getenv("THIRAMAI_OHLCV_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("ohlcv_daily_fetch_cron disabled via env")
+            return
+        try:
+            hour = int((os.getenv("THIRAMAI_OHLCV_HOUR_IST") or "16").strip())
+        except ValueError:
+            hour = 16
+        try:
+            minute = int((os.getenv("THIRAMAI_OHLCV_MINUTE_IST") or "30").strip())
+        except ValueError:
+            minute = 30
+        hour = max(0, min(23, hour))
+        minute = max(0, min(59, minute))
+        while self.running:
+            try:
+                await asyncio.sleep(seconds_until_next_ist(hour, minute))
+                if not self.running:
+                    break
+                await self._run_ohlcv_daily_fetch()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("ohlcv_daily_fetch_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _run_ohlcv_daily_fetch(self) -> None:
+        try:
+            from services.quant.ohlcv_store import fetch_and_store_ohlcv, get_default_symbols
+
+            symbols = get_default_symbols()
+            ok = 0
+            stored = 0
+            for sym in symbols:
+                try:
+                    res = await asyncio.to_thread(fetch_and_store_ohlcv, sym, "day", 1)
+                    if res.get("ok"):
+                        ok += 1
+                        stored += int(res.get("stored") or 0)
+                except Exception as exc:
+                    _log.debug("ohlcv_fetch sym=%s err=%s", sym, exc)
+            log_structured(
+                "ohlcv_daily_fetch_done",
+                symbols=len(symbols),
+                ok=ok,
+                stored=stored,
+            )
+        except Exception as exc:
+            _log.warning("ohlcv_cron_error: %s", exc)
+
+    async def hal_state_snapshot_cron(self) -> None:
+        """Self-Evolution 90/100 — every N minutes log a HAL device state snapshot.
+
+        Disable with ``THIRAMAI_HAL_CRON=0``. Override cadence with
+        ``THIRAMAI_HAL_INTERVAL_MIN`` (default 5).
+        """
+        if (os.getenv("THIRAMAI_HAL_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("hal_state_snapshot_cron disabled via env")
+            return
+        interval_min = max(1, _env_int("THIRAMAI_HAL_INTERVAL_MIN", 5, low=1, high=240))
+        # Light initial offset so HAL doesn't fight registration on startup.
+        await asyncio.sleep(30)
+        while self.running:
+            try:
+                await self._run_hal_state_snapshot()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("hal_cron_error: %s", exc)
+            try:
+                await asyncio.sleep(interval_min * 60)
+            except asyncio.CancelledError:
+                break
+
+    async def _run_hal_state_snapshot(self) -> None:
+        try:
+            from services.hal.hal_base import DeviceRegistry
+
+            states = await asyncio.to_thread(DeviceRegistry.read_all_states)
+            log_structured(
+                "hal_snapshot",
+                devices=len(states),
+                connected=sum(
+                    1 for s in states.values() if isinstance(s, dict) and s.get("connected")
+                ),
+            )
+        except Exception as exc:
+            _log.warning("hal snapshot run failed: %s", exc)

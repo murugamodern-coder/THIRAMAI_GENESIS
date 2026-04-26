@@ -22,6 +22,27 @@ def _configured_env_only() -> bool:
     return bool(key and secret and token)
 
 
+def get_kite_client() -> Any | None:
+    """Return an env-configured ``KiteConnect`` client, or ``None`` when unavailable.
+
+    Used by quant ingestion (``services.quant.ohlcv_store``) and the websocket tick
+    stream worker. Never raises — callers handle the ``None`` return as "kite disabled".
+    """
+    key = (os.getenv("KITE_API_KEY") or "").strip()
+    token = (os.getenv("KITE_ACCESS_TOKEN") or "").strip()
+    if not key or not token:
+        return None
+    try:
+        from kiteconnect import KiteConnect  # type: ignore[import-not-found]
+
+        client = KiteConnect(api_key=key)
+        client.set_access_token(token)
+        return client
+    except Exception as exc:
+        _log.warning("get_kite_client failed: %s", exc)
+        return None
+
+
 class ZerodhaAdapter(BaseBrokerAdapter):
     """Live broker via ``kiteconnect.KiteConnect`` when configured."""
 
