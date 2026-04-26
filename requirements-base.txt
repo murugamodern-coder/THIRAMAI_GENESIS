@@ -27,7 +27,7 @@ httpx==0.28.1
 numpy>=1.26.0,<2.0
 rapidfuzz==3.14.5
 yfinance==1.2.2
-pandas==3.0.2
+pandas>=2.1.0,<3.0
 ta==0.11.0
 # Self-Evolution Phase 1 (services/ml/*)
 scikit-learn==1.5.2
@@ -50,4 +50,4 @@ chromadb==1.5.7
 slowapi==0.1.9
 # Self-Evolution 90/100 — HAL (MQTT) + online learning
 paho-mqtt==2.0.0
-river==0.21.0
+river>=0.21.0
