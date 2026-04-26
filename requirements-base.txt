@@ -24,7 +24,7 @@ pypdf==6.10.2
 fpdf2==2.8.7
 pydantic-settings==2.13.1
 httpx==0.28.1
-numpy==2.4.4
+numpy>=1.26.0,<2.0
 rapidfuzz==3.14.5
 yfinance==1.2.2
 pandas==3.0.2
@@ -36,7 +36,7 @@ joblib==1.4.2
 lightgbm==4.5.0
 # Self-Evolution Phase 3 (services/ml/rl_trading_agent.py — module degrades gracefully if missing)
 gymnasium==0.29.1
-stable-baselines3==2.4.0
+stable-baselines3==2.3.2
 python-jose[cryptography]==3.5.0
 bcrypt==5.0.0
 # Security exception pin: 46.0.5 is currently runtime-compatible with python-jose stack here.
