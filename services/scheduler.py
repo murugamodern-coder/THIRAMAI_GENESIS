@@ -375,6 +375,8 @@ class ThiramaiScheduler:
             asyncio.create_task(self.model_ensemble_train_cron()),
             asyncio.create_task(self.ohlcv_daily_fetch_cron()),
             asyncio.create_task(self.hal_state_snapshot_cron()),
+            asyncio.create_task(self.paper_trading_cron()),
+            asyncio.create_task(self.weekly_backtest_cron()),
         ]
         if _autonomous_business_operator_enabled():
             self.tasks.append(asyncio.create_task(self.autonomous_business_operator_cron()))
@@ -1588,3 +1590,85 @@ class ThiramaiScheduler:
             )
         except Exception as exc:
             _log.warning("hal snapshot run failed: %s", exc)
+
+    async def paper_trading_cron(self) -> None:
+        """Self-Evolution 95/100 — every N minutes during NSE hours, run the paper trader.
+
+        Disabled by default; enable with ``THIRAMAI_PAPER_TRADING=1``. Override
+        cadence with ``THIRAMAI_PAPER_TRADING_INTERVAL_MIN`` (default 15).
+        """
+        interval_min = max(1, _env_int("THIRAMAI_PAPER_TRADING_INTERVAL_MIN", 15, low=1, high=240))
+        await asyncio.sleep(min(60, interval_min * 60 // 4))
+        while self.running:
+            try:
+                if (os.getenv("THIRAMAI_PAPER_TRADING") or "0").strip() not in ("0", "false", "off", "no"):
+                    await self._run_paper_trading_cycle()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("paper_trading_cron_error: %s", exc)
+            try:
+                await asyncio.sleep(interval_min * 60)
+            except asyncio.CancelledError:
+                break
+
+    async def _run_paper_trading_cycle(self) -> None:
+        try:
+            from services.quant.paper_trader import PaperTrader
+
+            pt = PaperTrader()
+            result = await asyncio.to_thread(pt.auto_run_strategy)
+            log_structured(
+                "paper_trading_cron",
+                ok=bool(result.get("ok")),
+                orders_placed=int(result.get("orders_placed") or 0),
+                message=str(result.get("message") or ""),
+            )
+        except Exception as exc:
+            _log.warning("paper_trading run failed: %s", exc)
+
+    async def weekly_backtest_cron(self) -> None:
+        """Self-Evolution 95/100 — Sunday 02:00 IST, refresh OHLCV via yfinance.
+
+        Disable with ``THIRAMAI_WEEKLY_BACKTEST_CRON=0``. Day/hour overrides:
+        ``THIRAMAI_WEEKLY_BACKTEST_DAY_IST`` (0=Mon … 6=Sun, default 6),
+        ``THIRAMAI_WEEKLY_BACKTEST_HOUR_IST`` (default 2).
+        """
+        if (os.getenv("THIRAMAI_WEEKLY_BACKTEST_CRON") or "1").strip() in ("0", "false", "off", "no"):
+            _log.info("weekly_backtest_cron disabled via env")
+            return
+        try:
+            target_day = int((os.getenv("THIRAMAI_WEEKLY_BACKTEST_DAY_IST") or "6").strip())
+        except ValueError:
+            target_day = 6
+        try:
+            target_hour = int((os.getenv("THIRAMAI_WEEKLY_BACKTEST_HOUR_IST") or "2").strip())
+        except ValueError:
+            target_hour = 2
+        target_day = max(0, min(6, target_day))
+        target_hour = max(0, min(23, target_hour))
+        while self.running:
+            try:
+                await asyncio.sleep(_seconds_until_next_ist_weekday(target_day, target_hour))
+                if not self.running:
+                    break
+                await self._run_weekly_backtest_refresh()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                _log.warning("weekly_backtest_cron error: %s", exc)
+                await asyncio.sleep(60)
+
+    async def _run_weekly_backtest_refresh(self) -> None:
+        try:
+            from services.quant.ohlcv_store import fetch_default_symbols_yfinance
+
+            res = await asyncio.to_thread(fetch_default_symbols_yfinance)
+            log_structured(
+                "weekly_ohlcv_refresh",
+                ok=bool(res.get("ok")),
+                total=int(res.get("total") or 0),
+                stored_total=int(res.get("stored_total") or 0),
+            )
+        except Exception as exc:
+            _log.warning("weekly_backtest_refresh failed: %s", exc)

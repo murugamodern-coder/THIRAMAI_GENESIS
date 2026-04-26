@@ -1068,6 +1068,16 @@ def _compute_brain_health(organization_id: int) -> dict[str, Any]:
     schedule_coverage = _self_evolution_schedule_coverage()
     # Reward each wired-and-enabled cron up to +15.
     score = min(100, score + int(schedule_coverage.get("scheduled_score") or 0))
+
+    quant_trading_block: dict[str, Any] = {}
+    try:
+        quant_trading_block = _compute_quant_trading_block()
+        # Phase 5 reward — full quant_trading block contributes up to +10 to the master score.
+        score = min(100, score + int(quant_trading_block.get("trading_score", 0) // 10))
+    except Exception:
+        _LOG.debug("quant_trading_block_unavailable", exc_info=True)
+        quant_trading_block = {}
+
     score = max(0, min(int(score), 100))
 
     return {
@@ -1098,6 +1108,7 @@ def _compute_brain_health(organization_id: int) -> dict[str, Any]:
         "world_model_v2": world_model_status,
         "meta_learner": meta_learner_status,
         "schedule": schedule_coverage,
+        "quant_trading": quant_trading_block,
     }
 
 
@@ -1230,3 +1241,205 @@ def _compute_quant_status() -> dict[str, Any]:
         "quant_score": int(score),
         "phase": "self_evolution_phase_5",
     }
+
+
+@router.get("/paper-trading", summary="Self-Evolution 95/100: paper trading positions + P&L summary")
+async def paper_trading_status(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Open paper positions (mark-to-market) plus a closed-trade PnL summary."""
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _read() -> dict[str, Any]:
+        try:
+            from services.quant.paper_trader import PaperTrader
+
+            pt = PaperTrader(org_id=int(user.organization_id))
+            return {
+                "ok": True,
+                "open_positions": pt.get_open_positions(),
+                "summary": pt.get_paper_pnl_summary(),
+                "paper_mode": True,
+            }
+        except Exception as exc:
+            _LOG.exception("paper_trading_status_failed")
+            return {"ok": False, "error": str(exc)}
+
+    return await asyncio.to_thread(_read)
+
+
+@router.post("/paper-trading/run", summary="Self-Evolution 95/100: trigger one paper-trading cycle")
+async def paper_trading_run(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Run one auto-strategy cycle and place paper orders during NSE hours."""
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+
+    def _run() -> dict[str, Any]:
+        try:
+            from services.quant.paper_trader import PaperTrader
+
+            pt = PaperTrader(org_id=int(user.organization_id))
+            return pt.auto_run_strategy()
+        except Exception as exc:
+            _LOG.exception("paper_trading_run_failed")
+            return {"ok": False, "error": str(exc)}
+
+    return await asyncio.to_thread(_run)
+
+
+@router.get("/backtest-results", summary="Self-Evolution 95/100: recent strategy_runs from DB")
+async def backtest_results(
+    limit: int = 25,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """List recent backtest runs ordered by created_at DESC (max 100 rows)."""
+    if int(user.id) <= 0:
+        raise HTTPException(status_code=400, detail="Real user id required")
+    capped = max(1, min(int(limit), 100))
+
+    def _read() -> dict[str, Any]:
+        from sqlalchemy import text as _text
+
+        from core.database import get_engine as _get_engine
+
+        engine = _get_engine()
+        if engine is None:
+            return {"ok": False, "error": "database_unavailable", "results": []}
+        try:
+            with engine.connect() as conn:
+                rows = conn.execute(
+                    _text(
+                        """
+                        SELECT strategy_name, symbol, run_type,
+                               total_trades, win_rate, total_pnl,
+                               sharpe_ratio, max_drawdown, created_at
+                        FROM strategy_runs
+                        ORDER BY created_at DESC
+                        LIMIT :lim
+                        """
+                    ),
+                    {"lim": int(capped)},
+                ).fetchall()
+        except Exception as exc:
+            _LOG.exception("backtest_results_failed")
+            return {"ok": False, "error": str(exc), "results": []}
+
+        items = [
+            {
+                "strategy_name": r[0],
+                "symbol": r[1],
+                "run_type": r[2],
+                "total_trades": int(r[3] or 0),
+                "win_rate": float(r[4] or 0),
+                "total_pnl": float(r[5] or 0),
+                "sharpe_ratio": float(r[6] or 0),
+                "max_drawdown": float(r[7] or 0),
+                "created_at": str(r[8]) if r[8] else None,
+            }
+            for r in rows
+        ]
+        return {"ok": True, "count": len(items), "results": items}
+
+    return await asyncio.to_thread(_read)
+
+
+def _compute_quant_trading_block() -> dict[str, Any]:
+    """Build the ``quant_trading`` payload + 0..100 score used by ``brain-health``.
+
+    Score breakdown:
+      * +20 ohlcv_data has 10+ symbols
+      * +20 at least one backtest run completed
+      * +20 paper trades present (open or closed)
+      * +20 closed-trade win rate > 50%
+      * +20 best Sharpe ratio across runs > 0.5
+    """
+    from sqlalchemy import text as _text
+
+    from core.database import get_engine as _get_engine
+
+    out: dict[str, Any] = {
+        "ohlcv_symbols": 0,
+        "ohlcv_total_candles": 0,
+        "backtest_runs": 0,
+        "best_sharpe": 0.0,
+        "paper_trades": 0,
+        "paper_pnl": 0.0,
+        "win_rate": 0.0,
+        "trading_score": 0,
+    }
+
+    engine = _get_engine()
+    if engine is None:
+        return out
+
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                _text(
+                    """
+                    SELECT COUNT(DISTINCT symbol), COUNT(*)
+                    FROM ohlcv_data
+                    """
+                )
+            ).first()
+            if row:
+                out["ohlcv_symbols"] = int(row[0] or 0)
+                out["ohlcv_total_candles"] = int(row[1] or 0)
+    except Exception as exc:
+        _LOG.debug("ohlcv_count_failed: %s", exc)
+
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                _text(
+                    """
+                    SELECT COUNT(*), COALESCE(MAX(sharpe_ratio), 0)
+                    FROM strategy_runs
+                    """
+                )
+            ).first()
+            if row:
+                out["backtest_runs"] = int(row[0] or 0)
+                out["best_sharpe"] = float(row[1] or 0)
+    except Exception as exc:
+        _LOG.debug("strategy_runs_count_failed: %s", exc)
+
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                _text(
+                    """
+                    SELECT COUNT(*),
+                           COALESCE(SUM(realized_pnl), 0),
+                           SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END),
+                           SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END)
+                    FROM paper_trades
+                    """
+                )
+            ).first()
+            if row:
+                total = int(row[0] or 0)
+                closed = int(row[3] or 0)
+                wins = int(row[2] or 0)
+                out["paper_trades"] = total
+                out["paper_pnl"] = float(row[1] or 0)
+                out["win_rate"] = (wins / closed) if closed else 0.0
+    except Exception as exc:
+        _LOG.debug("paper_trades_count_failed: %s", exc)
+
+    score = 0
+    if int(out["ohlcv_symbols"]) >= 10:
+        score += 20
+    if int(out["backtest_runs"]) > 0:
+        score += 20
+    if int(out["paper_trades"]) > 0:
+        score += 20
+    if float(out["win_rate"]) > 0.5:
+        score += 20
+    if float(out["best_sharpe"]) > 0.5:
+        score += 20
+    out["trading_score"] = int(max(0, min(score, 100)))
+    return out

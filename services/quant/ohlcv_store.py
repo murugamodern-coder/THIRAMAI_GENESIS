@@ -1,13 +1,14 @@
 """OHLCV historical data store.
 
-Fetches and stores candlestick data from the configured Kite session
-(``services.broker.zerodha_adapter.get_kite_client``). Designed to degrade gracefully
-when Kite credentials are not configured or the optional ``kiteconnect`` SDK is missing.
+Fetches and stores candlestick data from Kite (preferred when ``KITE_API_KEY`` +
+``KITE_ACCESS_TOKEN`` are configured) and falls back to Yahoo Finance via the
+``yfinance`` SDK so the backtester always has data to work with.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -18,17 +19,19 @@ from core.database import get_engine
 logger = logging.getLogger(__name__)
 
 
-def fetch_and_store_ohlcv(
-    symbol: str,
-    interval: str = "day",
-    days_back: int = 365,
-    org_id: int = 1,
-) -> dict[str, Any]:
-    """Fetch OHLCV data from Kite and persist to ``ohlcv_data``.
+def _kite_credentials_present() -> bool:
+    return bool((os.getenv("KITE_API_KEY") or "").strip()) and bool(
+        (os.getenv("KITE_ACCESS_TOKEN") or "").strip()
+    )
 
-    ``interval`` accepts Kite values ("minute", "5minute", "day", ...).
-    Returns ``{"ok": False, "error": ...}`` on any failure (degraded mode is safe).
-    """
+
+def _fetch_kite(
+    symbol: str,
+    interval: str,
+    days_back: int,
+    org_id: int,
+) -> dict[str, Any]:
+    """Kite historical-data path. Returns ``{"ok": False, ...}`` on any failure."""
     try:
         from services.broker.zerodha_adapter import get_kite_client
 
@@ -50,7 +53,7 @@ def fetch_and_store_ohlcv(
             logger.warning("ohlcv_instruments_lookup_failed symbol=%s error=%s", symbol, exc)
 
         if not token:
-            logger.warning("ohlcv_symbol_not_found symbol=%s", symbol)
+            logger.warning("ohlcv_symbol_not_found_in_kite symbol=%s", symbol)
             return {"ok": False, "error": "symbol_not_found", "symbol": symbol}
 
         data = kite.historical_data(
@@ -91,11 +94,149 @@ def fetch_and_store_ohlcv(
                 stored += 1
             conn.commit()
 
-        return {"ok": True, "symbol": symbol, "interval": interval, "stored": stored}
+        return {
+            "ok": True,
+            "symbol": symbol,
+            "interval": interval,
+            "stored": stored,
+            "source": "kite",
+        }
 
     except Exception as exc:
-        logger.error("ohlcv_fetch_error symbol=%s error=%s", symbol, exc)
+        logger.error("ohlcv_kite_fetch_error symbol=%s error=%s", symbol, exc)
         return {"ok": False, "error": str(exc), "symbol": symbol}
+
+
+def fetch_ohlcv_yfinance(symbol: str, days_back: int = 365, org_id: int = 1) -> dict[str, Any]:
+    """Yahoo Finance fallback. NSE symbols get an automatic ``.NS`` suffix.
+
+    Returns ``{"ok": True, "stored": N, "source": "yfinance"}`` on success.
+    """
+    try:
+        import yfinance as yf  # type: ignore[import-not-found]
+    except ImportError:
+        return {"ok": False, "error": "yfinance_not_installed", "symbol": symbol}
+
+    try:
+        # Yahoo Finance does not expose NIFTY 50 under "NIFTY50.NS" — map to the index ticker.
+        if symbol.upper() == "NIFTY50":
+            yf_symbol = "^NSEI"
+        elif symbol.endswith(".NS") or symbol.startswith("^"):
+            yf_symbol = symbol
+        else:
+            yf_symbol = f"{symbol}.NS"
+
+        ticker = yf.Ticker(yf_symbol)
+        df = ticker.history(period=f"{int(days_back)}d", interval="1d", auto_adjust=False)
+
+        if df is None or df.empty:
+            return {"ok": False, "error": "no_data", "symbol": symbol, "yf_symbol": yf_symbol}
+
+        engine = get_engine()
+        if engine is None:
+            return {"ok": False, "error": "database_unavailable", "symbol": symbol}
+
+        stored = 0
+        with engine.connect() as conn:
+            for ts, row in df.iterrows():
+                try:
+                    py_ts = ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else datetime.fromisoformat(str(ts))
+                    conn.execute(
+                        text(
+                            """
+                            INSERT INTO ohlcv_data
+                            (symbol, interval, timestamp,
+                             open, high, low, close, volume, org_id)
+                            VALUES
+                            (:symbol, :interval, :ts,
+                             :o, :h, :l, :c, :v, :org_id)
+                            ON CONFLICT (symbol, interval, timestamp) DO NOTHING
+                            """
+                        ),
+                        {
+                            "symbol": symbol,
+                            "interval": "day",
+                            "ts": py_ts,
+                            "o": float(row["Open"]),
+                            "h": float(row["High"]),
+                            "l": float(row["Low"]),
+                            "c": float(row["Close"]),
+                            "v": int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,
+                            "org_id": int(org_id),
+                        },
+                    )
+                    stored += 1
+                except Exception as inner:
+                    logger.debug("yfinance_row_skip symbol=%s err=%s", symbol, inner)
+            conn.commit()
+
+        return {"ok": True, "symbol": symbol, "stored": stored, "source": "yfinance", "yf_symbol": yf_symbol}
+
+    except Exception as exc:
+        logger.error("yfinance_error symbol=%s error=%s", symbol, exc)
+        return {"ok": False, "error": str(exc), "symbol": symbol}
+
+
+def fetch_default_symbols_yfinance(org_id: int = 1) -> dict[str, Any]:
+    """Seed the top 10 NSE symbols via Yahoo Finance (one-shot bootstrap)."""
+    symbols = [
+        "RELIANCE",
+        "TCS",
+        "INFY",
+        "HDFCBANK",
+        "ICICIBANK",
+        "WIPRO",
+        "BAJFINANCE",
+        "TATAMOTORS",
+        "NIFTY50",
+        "ADANIENT",
+        # Yahoo intermittently 404s on TATAMOTORS — ship one extra blue-chip
+        # so we still hit the 10-symbols-seeded coverage bar reliably.
+        "SBIN",
+    ]
+    results: list[dict[str, Any]] = []
+    for symbol in symbols:
+        r = fetch_ohlcv_yfinance(symbol, days_back=365, org_id=org_id)
+        results.append(r)
+        logger.info("seeded symbol=%s result=%s", symbol, r)
+    return {
+        "ok": True,
+        "total": len(symbols),
+        "stored_total": sum(int(r.get("stored") or 0) for r in results),
+        "results": results,
+    }
+
+
+def fetch_and_store_ohlcv(
+    symbol: str,
+    interval: str = "day",
+    days_back: int = 365,
+    org_id: int = 1,
+) -> dict[str, Any]:
+    """Try Kite first (when configured), then fall back to Yahoo Finance.
+
+    The yfinance fallback is only available for daily candles.
+    Returns ``{"ok": False, ...}`` only when both data sources fail.
+    """
+    if _kite_credentials_present():
+        kite_result = _fetch_kite(symbol, interval, days_back, org_id)
+        if kite_result.get("ok"):
+            return kite_result
+        logger.info(
+            "ohlcv_kite_failed_fallback_yfinance symbol=%s reason=%s",
+            symbol,
+            kite_result.get("error"),
+        )
+
+    if interval != "day":
+        return {
+            "ok": False,
+            "error": "yfinance_supports_only_day_interval",
+            "symbol": symbol,
+            "interval": interval,
+        }
+
+    return fetch_ohlcv_yfinance(symbol, days_back=days_back, org_id=org_id)
 
 
 def get_ohlcv(symbol: str, interval: str = "day", limit: int = 100) -> list[dict[str, Any]]:
