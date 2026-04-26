@@ -187,11 +187,10 @@ def fetch_default_symbols_yfinance(org_id: int = 1) -> dict[str, Any]:
         "ICICIBANK",
         "WIPRO",
         "BAJFINANCE",
-        "TATAMOTORS",
         "NIFTY50",
         "ADANIENT",
-        # Yahoo intermittently 404s on TATAMOTORS — ship one extra blue-chip
-        # so we still hit the 10-symbols-seeded coverage bar reliably.
+        # Yahoo no longer returns TATAMOTORS.NS reliably after ticker changes.
+        # SBIN keeps the default yfinance seed set at 10 active symbols.
         "SBIN",
     ]
     results: list[dict[str, Any]] = []
@@ -285,7 +284,7 @@ def get_default_symbols() -> list[str]:
         "ICICIBANK",
         "WIPRO",
         "BAJFINANCE",
-        "TATAMOTORS",
+        "SBIN",
         "ADANIENT",
     ]
 
