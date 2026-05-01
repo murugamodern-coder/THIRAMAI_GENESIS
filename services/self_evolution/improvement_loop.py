@@ -23,12 +23,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from services.self_evolution.curriculum_manager import reset_curriculum_manager
 from services.self_evolution.improvement_generator import (
     ImprovementGenerator,
     ImprovementHypothesis,
     get_improvement_generator,
     reset_improvement_generator,
 )
+from services.self_evolution.meta_learner import reset_meta_learner
 from services.self_evolution.performance_monitor import (
     PerformanceMetrics,
     PerformanceMonitor,
@@ -169,10 +171,12 @@ def reset_improvement_loop() -> None:
 
 
 def reset_self_evolution_singletons() -> None:
-    """Test helper: clears monitor + generator + loop singletons."""
+    """Test helper: clears monitor + generator + loop + meta/curriculum singletons."""
     reset_improvement_loop()
     reset_improvement_generator()
     reset_performance_monitor()
+    reset_meta_learner()
+    reset_curriculum_manager()
 
 
 __all__ = [
