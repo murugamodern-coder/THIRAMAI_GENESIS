@@ -136,7 +136,12 @@ class DecisionRouter:
         policy path raises and we fall back to legacy, the returned engine is
         ``"legacy"`` and the metric ``thiramai_decision_route_total{engine="policy_engine_failed"}``
         is incremented for visibility.
-        """
+
+        When ``context["explain"]`` is truthy, the returned ``decision_dict``
+        gets an ``explanation`` key carrying the natural-language explanation,
+        the top-5 feature attributions and the JSON-serialised causal graph.
+        Explanation failures degrade silently - the underlying decision is
+        always returned untouched on the happy path."""
 
         ctx = dict(context or {})
         # Allow context["user_id"] to override the explicit arg only if the arg is None.
@@ -145,15 +150,51 @@ class DecisionRouter:
         horizon = str(ctx.get("horizon") or ctx.get("time_horizon") or "immediate").strip().lower()
         if self.use_hierarchical and horizon in _STRATEGIC_HORIZONS:
             decision = self._route_to_hierarchical(ctx, horizon, effective_user_id)
-            # When the hierarchical path failed and we fell back to legacy, the
-            # returned dict carries engine="legacy" - propagate that so the
-            # tuple's engine label matches the truth.
             engine_label = str(decision.get("engine") or "hierarchical")
+            decision = self._maybe_attach_explanation(ctx, decision)
             return decision, engine_label
 
         if self._should_use_policy(effective_user_id):
-            return self._route_to_policy(ctx, available_actions, effective_user_id), "policy_engine"
-        return self._route_to_legacy(ctx, effective_user_id), "legacy"
+            decision = self._route_to_policy(ctx, available_actions, effective_user_id)
+            decision = self._maybe_attach_explanation(ctx, decision)
+            return decision, "policy_engine"
+        decision = self._route_to_legacy(ctx, effective_user_id)
+        decision = self._maybe_attach_explanation(ctx, decision)
+        return decision, "legacy"
+
+    def _maybe_attach_explanation(
+        self, context: dict[str, Any], decision: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Attach a causal explanation to ``decision`` when requested.
+
+        The explanation is added under the ``explanation`` key with a stable
+        shape: ``text`` (plain English), ``top_features`` (list of name +
+        importance pairs), and ``causal_graph`` (a JSON-serialisable dict).
+        Any failure inside the explainer is swallowed so the request still
+        returns a usable decision."""
+        if not context.get("explain"):
+            return decision
+        try:
+            from services.causal_explainer import CausalGraphBuilder, get_causal_explainer
+
+            explainer = get_causal_explainer()
+            # Plumb context onto the decision so the explainer can read it
+            # without callers having to mirror the field.
+            payload = dict(decision)
+            payload.setdefault("context", dict(context))
+            explanation = explainer.explain(payload)
+            decision["explanation"] = {
+                "text": explanation.text_explanation,
+                "top_features": [
+                    {"name": f.feature_name, "importance": float(f.importance)}
+                    for f in explanation.feature_importance[:5]
+                ],
+                "causal_graph": CausalGraphBuilder.to_dict(explanation.causal_graph),
+                "counterfactuals": list(explanation.counterfactuals),
+            }
+        except Exception as exc:
+            logger.warning("explain hook failed: %s", exc, exc_info=True)
+        return decision
 
     # -- variants ---------------------------------------------------------
 
@@ -374,6 +415,18 @@ def reset_decision_router() -> None:
         from services.hierarchical_policy import reset_hierarchical_policy
 
         reset_hierarchical_policy()
+    except Exception:  # pragma: no cover - import guarded for partial installs
+        pass
+    try:
+        from services.causal_explainer import reset_causal_explainer
+
+        reset_causal_explainer()
+    except Exception:  # pragma: no cover - import guarded for partial installs
+        pass
+    try:
+        from services.counterfactual_engine import reset_counterfactual_engine
+
+        reset_counterfactual_engine()
     except Exception:  # pragma: no cover - import guarded for partial installs
         pass
 
