@@ -75,8 +75,20 @@ def _float_env(*names: str, default: float) -> float:
     return default
 
 
+_STRATEGIC_HORIZONS = frozenset({"strategic", "tactical"})
+
+
 class DecisionRouter:
-    """Synchronous A/B router between PolicyEngine and the legacy brain."""
+    """Synchronous A/B router between PolicyEngine and the legacy brain.
+
+    A third route - the 3-layer hierarchical policy - is gated behind the
+    ``THIRAMAI_HIERARCHICAL_POLICY`` env flag. When the flag is on AND the
+    inbound request specifies ``horizon`` (or ``time_horizon``) of
+    ``"strategic"`` / ``"tactical"``, the request is sent to the hierarchical
+    planner instead of going through the existing PolicyEngine ↔ legacy A/B
+    split. ``horizon="immediate"`` (the default) is unchanged - it still goes
+    through the existing A/B flow, so this is a strictly additive route.
+    """
 
     def __init__(self, *, policy_engine: PolicyEngine | None = None) -> None:
         self.policy_engine: PolicyEngine = policy_engine or get_policy_engine()
@@ -87,10 +99,14 @@ class DecisionRouter:
             "THIRAMAI_POLICY_ENGINE_PCT", "POLICY_ENGINE_PCT", default=0.0
         )
         self.policy_pct = max(0.0, min(100.0, pct))
+        self.use_hierarchical = _bool_env(
+            "THIRAMAI_HIERARCHICAL_POLICY", "HIERARCHICAL_POLICY", default=False
+        )
         logger.info(
-            "DecisionRouter ready ab_enabled=%s policy_pct=%.1f",
+            "DecisionRouter ready ab_enabled=%s policy_pct=%.1f hierarchical=%s",
             self.ab_enabled,
             self.policy_pct,
+            self.use_hierarchical,
         )
 
     # -- routing decision -------------------------------------------------
@@ -125,11 +141,61 @@ class DecisionRouter:
         ctx = dict(context or {})
         # Allow context["user_id"] to override the explicit arg only if the arg is None.
         effective_user_id = user_id if user_id is not None else ctx.get("user_id")
+
+        horizon = str(ctx.get("horizon") or ctx.get("time_horizon") or "immediate").strip().lower()
+        if self.use_hierarchical and horizon in _STRATEGIC_HORIZONS:
+            decision = self._route_to_hierarchical(ctx, horizon, effective_user_id)
+            # When the hierarchical path failed and we fell back to legacy, the
+            # returned dict carries engine="legacy" - propagate that so the
+            # tuple's engine label matches the truth.
+            engine_label = str(decision.get("engine") or "hierarchical")
+            return decision, engine_label
+
         if self._should_use_policy(effective_user_id):
             return self._route_to_policy(ctx, available_actions, effective_user_id), "policy_engine"
         return self._route_to_legacy(ctx, effective_user_id), "legacy"
 
     # -- variants ---------------------------------------------------------
+
+    @track_decision_latency(engine="hierarchical")
+    def _route_to_hierarchical(
+        self,
+        context: dict[str, Any],
+        horizon: str,
+        user_id: int | None,
+    ) -> dict[str, Any]:
+        """Send the request to the 3-layer hierarchical planner.
+
+        On any unexpected failure we fall back to the legacy decision brain so
+        the caller still gets a usable shape, and emit
+        ``thiramai_decision_route_total{engine="hierarchical_failed"}`` for
+        visibility.
+        """
+        ctx = dict(context)
+        if user_id is not None:
+            ctx.setdefault("user_id", user_id)
+        try:
+            from services.hierarchical_policy import get_hierarchical_policy
+
+            decision = get_hierarchical_policy().decide(ctx, horizon=horizon)
+        except Exception as exc:
+            logger.warning(
+                "hierarchical.decide failed: %s - falling back to legacy", exc, exc_info=True
+            )
+            track_decision_route("hierarchical_failed")
+            return self._route_to_legacy(ctx, user_id)
+
+        track_decision_route(f"hierarchical_{horizon}")
+        action = decision.get("action")
+        if isinstance(action, str) and action:
+            track_decision_action("hierarchical", action)
+        confidence = decision.get("confidence")
+        if isinstance(confidence, (int, float)):
+            track_decision_confidence(float(confidence), engine="hierarchical")
+        decision.setdefault("engine", "hierarchical")
+        decision.setdefault("source", "hierarchical")
+        decision.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+        return decision
 
     @track_decision_latency(engine="policy_engine")
     def _route_to_policy(
@@ -294,11 +360,22 @@ def get_decision_router() -> DecisionRouter:
 
 
 def reset_decision_router() -> None:
-    """Test-only: drop the singleton so env-flag changes can take effect."""
+    """Test-only: drop the singleton so env-flag changes can take effect.
+
+    Also resets the hierarchical-policy singleton (when importable) so an
+    env-flag flip is picked up end-to-end without leaking ``active_plan`` /
+    ``active_goal`` state between tests.
+    """
 
     global _router
     with _router_lock:
         _router = None
+    try:
+        from services.hierarchical_policy import reset_hierarchical_policy
+
+        reset_hierarchical_policy()
+    except Exception:  # pragma: no cover - import guarded for partial installs
+        pass
 
 
 def route_decision(
