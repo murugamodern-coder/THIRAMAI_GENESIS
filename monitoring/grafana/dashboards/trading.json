@@ -1,0 +1,94 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "thiramai-trading",
+  "title": "Thiramai - Trading Performance",
+  "tags": ["thiramai", "trading"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "user_id", "type": "query", "label": "User",
+        "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+        "query": "label_values(thiramai_trade_pnl_inr, user_id)",
+        "current": {"text": "All", "value": "$__all"},
+        "includeAll": true, "multi": false
+      }
+    ]
+  },
+  "links": [
+    {"title": "Overview", "type": "link", "url": "/d/thiramai-overview"},
+    {"title": "Risk", "type": "link", "url": "/d/thiramai-risk"},
+    {"title": "Broker", "type": "link", "url": "/d/thiramai-broker"}
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Daily PnL (INR)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(thiramai_trade_daily_pnl_inr{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "currencyINR", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": -1000}, {"color": "green", "value": 0}]}}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Open Positions",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "sum(thiramai_trade_position_count{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Capital Utilisation",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "avg(thiramai_trade_capital_utilization_pct{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.6}, {"color": "red", "value": 0.85}]}}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Kill-switch Active",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "max(thiramai_trade_kill_switch_active{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "mappings": [{"type": "value", "options": {"0": {"text": "OK", "color": "green"}, "1": {"text": "HALTED", "color": "red"}}}]}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Total PnL (INR)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{"expr": "sum(thiramai_trade_pnl_inr{user_id=~\"$user_id\"})", "refId": "A", "legendFormat": "PnL"}],
+      "fieldConfig": {"defaults": {"unit": "currencyINR"}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Win Rate (7d) and Sharpe (30d)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [
+        {"expr": "avg(thiramai_trade_win_rate_7d{user_id=~\"$user_id\"})", "refId": "A", "legendFormat": "win_rate_7d"},
+        {"expr": "avg(thiramai_trade_sharpe_ratio_30d{user_id=~\"$user_id\"})", "refId": "B", "legendFormat": "sharpe_30d"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Max Drawdown (%)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "targets": [{"expr": "max(thiramai_trade_max_drawdown_pct{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.05}, {"color": "red", "value": 0.10}]}}, "overrides": []}
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Trade Execution Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(thiramai_trade_execution_latency_ms_bucket[5m])) by (le, broker))", "refId": "A", "legendFormat": "p50 {{broker}}"},
+        {"expr": "histogram_quantile(0.95, sum(rate(thiramai_trade_execution_latency_ms_bucket[5m])) by (le, broker))", "refId": "B", "legendFormat": "p95 {{broker}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []}
+    }
+  ]
+}

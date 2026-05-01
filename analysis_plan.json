@@ -1,0 +1,3894 @@
+{
+  "repo_root": "C:\\Users\\murug\\OneDrive\\Desktop\\DOCUMENT\\Projects\\THIRAMAI_GENESIS",
+  "services_module_count": 282,
+  "groups_with_duplicates": 43,
+  "modules_in_duplicate_groups": 169,
+  "safe_removable_modules": 4,
+  "estimated_post_consolidation_count": 278,
+  "groups": [
+    {
+      "prefix": "action",
+      "module_count": 4,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/action_execution_engine.py",
+          "dotted": "services.action_execution_engine",
+          "lines": 1138,
+          "classes": [
+            "ActionExecutionContext"
+          ],
+          "functions": [
+            "execute_action_plan",
+            "plan_safety_preview",
+            "preflight_plan_execution_safety",
+            "create_action_execution_run",
+            "get_action_execution_run",
+            "confirm_action_execution_run",
+            "cancel_action_execution_run",
+            "run_persisted_action_plan",
+            "action_plan_execute_worker"
+          ],
+          "importers": [
+            "api/routes/action_execution.py",
+            "services/brain_execute.py",
+            "services/brain_execute_adapter.py",
+            "services/continuous_brain_loop.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/action_executor.py",
+          "dotted": "services.action_executor",
+          "lines": 78,
+          "classes": [],
+          "functions": [
+            "execute_decision"
+          ],
+          "importers": [
+            "api/routes/ai_chat.py",
+            "services/approval_service.py",
+            "services/decision_trigger.py",
+            "tests/test_phase3_decision_engine.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/action_policy.py",
+          "dotted": "services.action_policy",
+          "lines": 155,
+          "classes": [
+            "PolicyResult",
+            "PolicyDecision"
+          ],
+          "functions": [
+            "evaluate_tool_action"
+          ],
+          "importers": [
+            "api/billing_policy.py",
+            "core/swarm/nodes.py",
+            "services/sale_execution.py",
+            "tests/test_action_policy.py",
+            "tests/test_experience_buffer.py",
+            "tests/test_ltm_hitl.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/action_plugins.py",
+          "dotted": "services.action_plugins",
+          "lines": 151,
+          "classes": [],
+          "functions": [
+            "plugin_send_email",
+            "plugin_create_file",
+            "plugin_http_api",
+            "plugin_notification",
+            "run_plugin"
+          ],
+          "importers": [
+            "services/action_execution_engine.py",
+            "services/execution_step_runner.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/action_execution_engine.py",
+        "services/action_executor.py",
+        "services/action_policy.py"
+      ]
+    },
+    {
+      "prefix": "agent",
+      "module_count": 3,
+      "target_hint": "services/agent_identity_continuity_engine.py",
+      "members": [
+        {
+          "path": "services/agent_identity_continuity_engine.py",
+          "dotted": "services.agent_identity_continuity_engine",
+          "lines": 268,
+          "classes": [],
+          "functions": [
+            "get_agent_profile",
+            "update_agent_profile",
+            "mission_alignment_score",
+            "style_modifiers",
+            "apply_style_to_plan",
+            "record_identity_memory",
+            "run_continuity_review"
+          ],
+          "importers": [
+            "services/brain_execute.py",
+            "services/continuous_intelligence_engine.py",
+            "services/decision_intelligence_engine.py",
+            "services/proactive_autonomy_engine.py",
+            "services/self_learning_engine.py",
+            "services/strategic_goal_planner.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/agent_stock_bridge.py",
+          "dotted": "services.agent_stock_bridge",
+          "lines": 379,
+          "classes": [],
+          "functions": [
+            "trading_capital_inr",
+            "equity_quantity_for_risk",
+            "smart_adjust_option_lots",
+            "smart_adjust_equity_quantity",
+            "option_lots_for_risk",
+            "apply_sentiment_overlay_to_bundle",
+            "run_equity_trade_bundle",
+            "is_options_trade_context",
+            "build_trade_step_preview"
+          ],
+          "importers": [
+            "services/orchestrator.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/agent_tasks_repo.py",
+          "dotted": "services.agent_tasks_repo",
+          "lines": 201,
+          "classes": [],
+          "functions": [
+            "persist_task_row",
+            "fetch_task_row",
+            "list_tasks_for_user"
+          ],
+          "importers": [
+            "api/routes/os_central_brain.py",
+            "services/orchestrator.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/agent_identity_continuity_engine.py"
+      ]
+    },
+    {
+      "prefix": "approval",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/approval_service.py",
+          "dotted": "services.approval_service",
+          "lines": 400,
+          "classes": [],
+          "functions": [
+            "insert_ai_decision",
+            "list_pending_ai_decisions",
+            "update_ai_decision_status",
+            "resolve_ai_decision"
+          ],
+          "importers": [
+            "api/routes/ai_chat.py",
+            "services/auto_action_engine.py",
+            "services/decision_trigger.py",
+            "tests/test_phase3_decision_engine.py",
+            "tests/test_phase4_automation.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/approval_store.py",
+          "dotted": "services.approval_store",
+          "lines": 175,
+          "classes": [
+            "RiskTier",
+            "ApprovalStatus"
+          ],
+          "functions": [
+            "create_pending",
+            "list_pending",
+            "get_approval",
+            "resolve",
+            "is_high_risk"
+          ],
+          "importers": [
+            "api/routes/analytics.py",
+            "api/routes/billing.py",
+            "services/execution_engine.py",
+            "services/life_os_service.py",
+            "services/pending_tasks.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/approval_service.py",
+        "services/approval_store.py"
+      ]
+    },
+    {
+      "prefix": "audit",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/audit_log.py",
+          "dotted": "services.audit_log",
+          "lines": 92,
+          "classes": [],
+          "functions": [
+            "record_system_audit",
+            "client_ip_from_request"
+          ],
+          "importers": [
+            "api/routes/agent_tools.py",
+            "api/routes/ai_chat.py",
+            "api/routes/auth.py",
+            "api/routes/billing.py",
+            "api/routes/org.py",
+            "services/approval_service.py",
+            "services/audit_service.py",
+            "services/billing_phase2_service.py",
+            "services/billing_service.py",
+            "services/decision_trigger.py",
+            "services/execution_engine.py",
+            "services/finance_service.py",
+            "services/inventory_integrity_audit.py",
+            "services/inventory_phase2_service.py",
+            "services/inventory_service.py",
+            "services/production_phase2_service.py",
+            "services/sale_execution.py",
+            "tests/test_phase3_decision_engine.py",
+            "tests/test_tenant_isolation.py"
+          ],
+          "importer_count": 19,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/audit_service.py",
+          "dotted": "services.audit_service",
+          "lines": 100,
+          "classes": [],
+          "functions": [
+            "log_policy_evaluation",
+            "log_life_os_mutation",
+            "log_business_depth_mutation"
+          ],
+          "importers": [
+            "api/billing_policy.py",
+            "api/routes/business_depth.py",
+            "api/routes/executive_os.py",
+            "api/routes/life_os.py",
+            "services/sale_execution.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/audit_log.py",
+        "services/audit_service.py"
+      ]
+    },
+    {
+      "prefix": "auto",
+      "module_count": 5,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/auto_accounting_service.py",
+          "dotted": "services.auto_accounting_service",
+          "lines": 632,
+          "classes": [],
+          "functions": [
+            "categorize_vendor_sync",
+            "gst_rate_from_hsn_sync",
+            "enrich_invoice_lines_with_gst_sync",
+            "scan_receipt_sync",
+            "create_receipt_preview_sync",
+            "confirm_receipt_expense_sync",
+            "parse_bank_statement_csv_sync",
+            "extract_bank_transactions_from_text_sync",
+            "parse_bank_statement_pdf_sync",
+            "classify_bank_line_sync"
+          ],
+          "importers": [
+            "api/routes/business_depth.py",
+            "api/routes/personal_command_center.py",
+            "services/billing_phase2_service.py",
+            "services/jarvis_extended_tools.py",
+            "tests/test_auto_accounting.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/auto_action_engine.py",
+          "dotted": "services.auto_action_engine",
+          "lines": 385,
+          "classes": [],
+          "functions": [
+            "run_autonomy_cycle_for_org",
+            "run_autonomy_cycle_for_all_orgs"
+          ],
+          "importers": [
+            "workers/autonomy_worker.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/auto_deploy_engine.py",
+          "dotted": "services.auto_deploy_engine",
+          "lines": 80,
+          "classes": [],
+          "functions": [
+            "can_auto_deploy",
+            "run_health_check",
+            "safe_restart_service"
+          ],
+          "importers": [
+            "app.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/auto_repair.py",
+          "dotted": "services.auto_repair",
+          "lines": 264,
+          "classes": [],
+          "functions": [
+            "organization_integrity_failed",
+            "run_alembic_upgrade_head",
+            "reset_organizations_id_sequence_safe",
+            "restart_uvicorn_best_effort",
+            "run_auto_repair",
+            "main"
+          ],
+          "importers": [
+            "services/dashboard_command_executor.py",
+            "services/verify_keys.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/auto_retry_engine.py",
+          "dotted": "services.auto_retry_engine",
+          "lines": 440,
+          "classes": [],
+          "functions": [
+            "auto_retry_execution"
+          ],
+          "importers": [
+            "services/execution_watchdog.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/auto_accounting_service.py"
+      ]
+    },
+    {
+      "prefix": "autonomous",
+      "module_count": 5,
+      "target_hint": "services/autonomy_safety_layer.py",
+      "members": [
+        {
+          "path": "services/autonomous_continuity_engine.py",
+          "dotted": "services.autonomous_continuity_engine",
+          "lines": 610,
+          "classes": [],
+          "functions": [
+            "get_or_create_settings",
+            "upsert_settings",
+            "list_goals",
+            "create_goal",
+            "update_goal",
+            "build_environment_context",
+            "score_goal_economics",
+            "run_continuity_tick",
+            "mark_goal_interrupted",
+            "resume_continuity_goal"
+          ],
+          "importers": [
+            "api/routes/continuity.py",
+            "services/scheduler.py",
+            "workers/async_tasks.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/autonomous_action_engine.py",
+          "dotted": "services.autonomous_action_engine",
+          "lines": 125,
+          "classes": [],
+          "functions": [
+            "run_autonomous_action_cycle"
+          ],
+          "importers": [
+            "services/continuous_brain_loop.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/autonomous_business_operator.py",
+          "dotted": "services.autonomous_business_operator",
+          "lines": 131,
+          "classes": [],
+          "functions": [
+            "is_enabled",
+            "mega_tick_interval_seconds",
+            "deal_evolve_every_n_ticks",
+            "strategy_evolution_every_n_ticks",
+            "get_business_operator_policy",
+            "run_business_operator_tick_batch"
+          ],
+          "importers": [
+            "services/full_autonomous_operator_mode.py",
+            "services/scheduler.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/autonomous_operations_engine.py",
+          "dotted": "services.autonomous_operations_engine",
+          "lines": 45,
+          "classes": [],
+          "functions": [
+            "run_daily_business_cycle",
+            "run_multi_org_daily_cycles"
+          ],
+          "importers": [
+            "services/system_bootstrap_engine.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/research/autonomous_researcher.py",
+          "dotted": "services.research.autonomous_researcher",
+          "lines": 463,
+          "classes": [],
+          "functions": [
+            "fetch_recent_founder_queries",
+            "derive_dynamic_topics",
+            "research_one_topic",
+            "assemble_morning_brief",
+            "store_brief_in_memory",
+            "run_nightly_research",
+            "main"
+          ],
+          "importers": [
+            "services/scheduler.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/autonomous_continuity_engine.py"
+      ]
+    },
+    {
+      "prefix": "autonomy",
+      "module_count": 4,
+      "target_hint": "services/autonomy_safety_layer.py",
+      "members": [
+        {
+          "path": "services/autonomy_contract_engine.py",
+          "dotted": "services.autonomy_contract_engine",
+          "lines": 177,
+          "classes": [],
+          "functions": [
+            "get_autonomy_state",
+            "set_autonomy_state",
+            "autonomy_heartbeat",
+            "maybe_demote_autonomy_mode"
+          ],
+          "importers": [
+            "api/routes/autonomy_control.py",
+            "api/routes/continuous_thinking.py",
+            "api/routes/system_overview.py",
+            "services/continuous_brain_loop.py",
+            "services/continuous_thinking_loop_engine.py",
+            "services/self_expansion_engine.py",
+            "services/system_bootstrap_engine.py"
+          ],
+          "importer_count": 7,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/autonomy_governor_engine.py",
+          "dotted": "services.autonomy_governor_engine",
+          "lines": 221,
+          "classes": [],
+          "functions": [
+            "compute_autonomy_decision",
+            "apply_governor_mode_to_plan"
+          ],
+          "importers": [
+            "services/brain_execute.py",
+            "services/execution_decision_engine.py",
+            "services/proactive_autonomy_engine.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/autonomy_safety_layer.py",
+          "dotted": "services.autonomy_safety_layer",
+          "lines": 403,
+          "classes": [],
+          "functions": [
+            "global_autonomy_halted",
+            "set_global_autonomy_halt",
+            "classify_action_step",
+            "approval_tier_from_score",
+            "apply_trust_damping",
+            "get_system_trust_score",
+            "suggest_autonomy_level_for_trust",
+            "check_risk_budget",
+            "sim_success_threshold",
+            "pre_execution_simulation_gate"
+          ],
+          "importers": [
+            "api/routes/autonomy_safety.py",
+            "core/orchestrator.py",
+            "services/action_execution_engine.py",
+            "services/autonomous_continuity_engine.py",
+            "services/brain_entry_guards.py",
+            "services/continuous_brain_loop.py",
+            "services/event_listener_engine.py",
+            "services/governance_engine.py",
+            "services/scheduler.py"
+          ],
+          "importer_count": 9,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/autonomy_sandbox_experiment.py",
+          "dotted": "services.autonomy_sandbox_experiment",
+          "lines": 165,
+          "classes": [],
+          "functions": [
+            "run_autonomy_sandbox_experiment"
+          ],
+          "importers": [
+            "api/routes/simulation.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/autonomy_contract_engine.py",
+        "services/autonomy_governor_engine.py",
+        "services/autonomy_safety_layer.py"
+      ]
+    },
+    {
+      "prefix": "billing",
+      "module_count": 3,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/billing_guard.py",
+          "dotted": "services.billing_guard",
+          "lines": 99,
+          "classes": [],
+          "functions": [
+            "is_billing_paused",
+            "billing_pause_message",
+            "set_factory_billing_paused",
+            "upsert_hold_in_session",
+            "assert_billing_not_paused"
+          ],
+          "importers": [
+            "api/billing_policy.py",
+            "api/routes/billing.py",
+            "api/routes/factory.py",
+            "core/orchestrator.py",
+            "services/billing_service.py",
+            "services/execution_engine.py",
+            "services/factory_status_service.py",
+            "services/maintenance_service.py",
+            "services/project_engine.py",
+            "services/sale_execution.py",
+            "tests/test_factory_os.py",
+            "tests/test_tenant_isolation.py"
+          ],
+          "importer_count": 12,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/billing_phase2_service.py",
+          "dotted": "services.billing_phase2_service",
+          "lines": 717,
+          "classes": [],
+          "functions": [
+            "create_structured_invoice_sync",
+            "list_bills_sync",
+            "list_invoices_sync",
+            "record_payment_sync",
+            "gst_report_sync",
+            "create_simple_cash_bill_sync",
+            "build_structured_invoice_html_sync",
+            "build_structured_invoice_pdf_bytes_sync",
+            "build_cash_bill_html_sync"
+          ],
+          "importers": [
+            "api/routes/billing.py",
+            "api/routes/business_module.py",
+            "services/auto_accounting_service.py",
+            "services/billing_service.py",
+            "services/jarvis_extended_tools.py",
+            "tests/test_phase2_billing_production.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/billing_service.py",
+          "dotted": "services.billing_service",
+          "lines": 411,
+          "classes": [],
+          "functions": [
+            "gst_breakdown",
+            "gst_compliance_check",
+            "build_sale_payload_from_production_log",
+            "draft_invoice_from_db_sale",
+            "execute_approved_invoice_payload",
+            "create_simple_erp_invoice_sync"
+          ],
+          "importers": [
+            "api/routes/billing.py",
+            "tests/test_sre_services.py",
+            "workers/jobs.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/billing_guard.py",
+        "services/billing_phase2_service.py",
+        "services/billing_service.py"
+      ]
+    },
+    {
+      "prefix": "brain",
+      "module_count": 4,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/brain_execute.py",
+          "dotted": "services.brain_execute",
+          "lines": 957,
+          "classes": [],
+          "functions": [
+            "brain_execute"
+          ],
+          "importers": [
+            "api/routes/action_execution.py",
+            "api/routes/autonomous_operations.py",
+            "api/routes/brain_execute.py",
+            "api/routes/continuous_thinking.py",
+            "api/routes/execute.py",
+            "api/routes/money_loop.py",
+            "api/routes/os_central_brain.py",
+            "api/routes/sovereign.py",
+            "api/routes/strategy_generator.py",
+            "api/routes/world_model.py",
+            "core/tool_executor.py",
+            "services/action_execution_engine.py",
+            "services/action_executor.py",
+            "services/auto_retry_engine.py",
+            "services/autonomous_continuity_engine.py",
+            "services/continuous_brain_loop.py",
+            "services/dashboard_command_executor.py",
+            "services/execution_decision_engine.py",
+            "services/scheduler.py",
+            "workers/async_tasks.py",
+            "workers/sovereign_scheduler.py"
+          ],
+          "importer_count": 21,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/brain_execute_adapter.py",
+          "dotted": "services.brain_execute_adapter",
+          "lines": 110,
+          "classes": [],
+          "functions": [
+            "brain_to_execute_response_dict",
+            "brain_to_action_run_payload",
+            "brain_to_agent_command_envelope"
+          ],
+          "importers": [
+            "api/routes/action_execution.py",
+            "api/routes/execute.py",
+            "api/routes/os_central_brain.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/brain_execute_deprecation.py",
+          "dotted": "services.brain_execute_deprecation",
+          "lines": 11,
+          "classes": [],
+          "functions": [
+            "warn_deprecated_execution_forwarded"
+          ],
+          "importers": [
+            "api/routes/action_execution.py",
+            "api/routes/execute.py",
+            "api/routes/os_central_brain.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/brain_entry_guards.py",
+          "dotted": "services.brain_entry_guards",
+          "lines": 36,
+          "classes": [],
+          "functions": [
+            "global_halt_active",
+            "blocked_response_for_central_execute"
+          ],
+          "importers": [
+            "services/central_execution_engine.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/brain_execute.py",
+        "services/brain_execute_adapter.py",
+        "services/brain_execute_deprecation.py"
+      ]
+    },
+    {
+      "prefix": "business",
+      "module_count": 5,
+      "target_hint": "services/business_service.py",
+      "members": [
+        {
+          "path": "services/business_depth_service.py",
+          "dotted": "services.business_depth_service",
+          "lines": 200,
+          "classes": [],
+          "functions": [
+            "set_department_lead",
+            "upsert_staff_profile",
+            "attendance_check_in",
+            "attendance_check_out",
+            "record_operational_expense"
+          ],
+          "importers": [
+            "api/routes/business_depth.py",
+            "services/auto_accounting_service.py",
+            "services/jarvis_extended_tools.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/business_snapshot_service.py",
+          "dotted": "services.business_snapshot_service",
+          "lines": 153,
+          "classes": [],
+          "functions": [
+            "daily_sales_target_inr",
+            "attendance_summary_today",
+            "build_business_snapshot"
+          ],
+          "importers": [
+            "api/routes/business_depth.py",
+            "services/command_center.py",
+            "services/modular_execution_services.py",
+            "services/notification_dispatcher.py",
+            "services/opportunity_engine.py",
+            "tests/test_economics_service.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/business_os_service.py",
+          "dotted": "services.business_os_service",
+          "lines": 551,
+          "classes": [],
+          "functions": [
+            "list_operational_expenses_sync",
+            "daily_pl_summary_sync",
+            "list_subsidy_cases_sync",
+            "create_subsidy_case_sync",
+            "update_subsidy_case_sync",
+            "list_business_tasks_sync",
+            "create_business_task_sync",
+            "update_business_task_sync",
+            "get_liquidity_sync",
+            "upsert_liquidity_sync"
+          ],
+          "importers": [
+            "api/routes/business_depth.py",
+            "services/jarvis_extended_tools.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/business_service.py",
+          "dotted": "services.business_service",
+          "lines": 63,
+          "classes": [],
+          "functions": [
+            "list_factory_scripts",
+            "build_saas_factory_preview"
+          ],
+          "importers": [
+            "core/orchestrator.py",
+            "tools/registry.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/observability/business_metrics.py",
+          "dotted": "services.observability.business_metrics",
+          "lines": 552,
+          "classes": [],
+          "functions": [
+            "track_api_request",
+            "track_trade_execution",
+            "track_broker_error",
+            "track_world_model_update",
+            "track_world_model_prediction",
+            "track_online_learner_state",
+            "track_bandit_state",
+            "track_kill_switch",
+            "track_daily_pnl",
+            "track_startup"
+          ],
+          "importers": [
+            "app.py",
+            "tests/test_observability_stack.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/business_depth_service.py",
+        "services/business_snapshot_service.py"
+      ]
+    },
+    {
+      "prefix": "continuous",
+      "module_count": 3,
+      "target_hint": "services/continuous_brain_loop.py",
+      "members": [
+        {
+          "path": "services/continuous_brain_loop.py",
+          "dotted": "services.continuous_brain_loop",
+          "lines": 828,
+          "classes": [],
+          "functions": [
+            "run_brain_cycle"
+          ],
+          "importers": [
+            "services/scheduler.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/continuous_intelligence_engine.py",
+          "dotted": "services.continuous_intelligence_engine",
+          "lines": 177,
+          "classes": [],
+          "functions": [
+            "run_continuous_thinking"
+          ],
+          "importers": [
+            "services/continuous_brain_loop.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/continuous_thinking_loop_engine.py",
+          "dotted": "services.continuous_thinking_loop_engine",
+          "lines": 105,
+          "classes": [],
+          "functions": [
+            "run_continuous_thinking_cycle"
+          ],
+          "importers": [
+            "services/autonomous_operations_engine.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": []
+    },
+    {
+      "prefix": "dashboard",
+      "module_count": 5,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/dashboard_command_executor.py",
+          "dotted": "services.dashboard_command_executor",
+          "lines": 1222,
+          "classes": [],
+          "functions": [
+            "finalize_dashboard_command_response",
+            "register_dashboard_command_handler",
+            "execute_natural_language_dashboard_command"
+          ],
+          "importers": [
+            "api/routes/dashboard.py",
+            "core/intent_engine.py",
+            "tests/test_dashboard_command.py",
+            "tests/test_dashboard_reliability.py",
+            "tests/test_intent_engine_executor.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/dashboard_live_context.py",
+          "dotted": "services.dashboard_live_context",
+          "lines": 126,
+          "classes": [],
+          "functions": [
+            "default_dashboard_org_id",
+            "effective_dashboard_org_id",
+            "safe_corporate_identity_for_live_dashboard",
+            "assert_corporate_identity_template_integrity"
+          ],
+          "importers": [
+            "api/routes/dashboard.py",
+            "services/sre_health_report.py",
+            "tests/test_dashboard_reliability.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/dashboard_ops_state.py",
+          "dotted": "services.dashboard_ops_state",
+          "lines": 70,
+          "classes": [],
+          "functions": [
+            "get_predictive_scaling_mode",
+            "set_predictive_scaling_mode",
+            "get_operational_infra_budget_inr_override",
+            "set_operational_infra_budget_inr_override",
+            "clear_operational_infra_budget_inr_override"
+          ],
+          "importers": [
+            "api/routes/dashboard.py",
+            "services/dashboard_command_executor.py",
+            "services/economics_service.py",
+            "services/experience_buffer.py",
+            "tests/test_economics_service.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/dashboard_command_registry.py",
+          "dotted": "services.dashboard_command_registry",
+          "lines": 27,
+          "classes": [],
+          "functions": [
+            "register_dashboard_command_handler",
+            "get_dashboard_command_handler"
+          ],
+          "importers": [
+            "services/dashboard_command_executor.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/dashboard_command_plugins.py",
+          "dotted": "services.dashboard_command_plugins",
+          "lines": 18,
+          "classes": [],
+          "functions": [],
+          "importers": [],
+          "importer_count": 0,
+          "consolidation": "SAFE"
+        }
+      ],
+      "safe_to_remove_now": [
+        "services/dashboard_command_plugins.py"
+      ],
+      "blocked_keep": [
+        "services/dashboard_command_executor.py",
+        "services/dashboard_live_context.py",
+        "services/dashboard_ops_state.py"
+      ]
+    },
+    {
+      "prefix": "decision",
+      "module_count": 6,
+      "target_hint": "services/policy_engine.py",
+      "members": [
+        {
+          "path": "services/decision_brain.py",
+          "dotted": "services.decision_brain",
+          "lines": 108,
+          "classes": [],
+          "functions": [
+            "run_decision_engine_sync",
+            "decision_from_dict"
+          ],
+          "importers": [
+            "brain.py",
+            "services/decision_brain_v2.py",
+            "services/decision_router.py",
+            "services/decision_trigger.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/observability/decision_metrics.py",
+          "dotted": "services.observability.decision_metrics",
+          "lines": 302,
+          "classes": [],
+          "functions": [
+            "track_decision_route",
+            "track_decision_action",
+            "track_decision_confidence",
+            "track_decision_reward",
+            "track_exploration_bonus",
+            "track_bandit_state",
+            "track_decision_latency",
+            "record_decision_outcome",
+            "labels",
+            "inc"
+          ],
+          "importers": [
+            "services/decision_router.py",
+            "services/policy_engine_lifecycle.py",
+            "tests/test_decision_router.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/decision_brain_v2.py",
+          "dotted": "services.decision_brain_v2",
+          "lines": 432,
+          "classes": [
+            "DecisionBrainV2"
+          ],
+          "functions": [
+            "get_decision_brain_v2",
+            "reset_decision_brain_v2",
+            "decide",
+            "record_outcome"
+          ],
+          "importers": [
+            "services/decision_router.py",
+            "tests/test_decision_brain_v2.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/decision_intelligence_engine.py",
+          "dotted": "services.decision_intelligence_engine",
+          "lines": 406,
+          "classes": [],
+          "functions": [
+            "build_decision_analysis",
+            "create_and_save_decision",
+            "get_decision_session",
+            "list_decision_sessions",
+            "select_decision_option",
+            "record_decision_outcome"
+          ],
+          "importers": [
+            "api/routes/decision_intelligence.py",
+            "services/continuous_brain_loop.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/decision_router.py",
+          "dotted": "services.decision_router",
+          "lines": 329,
+          "classes": [
+            "DecisionRouter"
+          ],
+          "functions": [
+            "get_decision_router",
+            "reset_decision_router",
+            "route_decision",
+            "route"
+          ],
+          "importers": [
+            "tests/test_decision_router.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/decision_trigger.py",
+          "dotted": "services.decision_trigger",
+          "lines": 489,
+          "classes": [],
+          "functions": [
+            "persist_and_maybe_execute",
+            "process_low_stock_automation",
+            "process_overdue_invoice_automation",
+            "process_production_signals_automation",
+            "process_organization_automation",
+            "run_automation_scan_for_all_orgs"
+          ],
+          "importers": [
+            "tests/test_phase4_automation.py",
+            "workers/alert_worker.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/decision_brain.py",
+        "services/observability/decision_metrics.py"
+      ]
+    },
+    {
+      "prefix": "do",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/do_worker_autoscale.py",
+          "dotted": "services.do_worker_autoscale",
+          "lines": 338,
+          "classes": [],
+          "functions": [
+            "autoscale_enabled",
+            "count_droplets_by_tag",
+            "create_worker_droplet",
+            "run_autoscale_once"
+          ],
+          "importers": [
+            "scripts/autoscale_digitalocean.py",
+            "services/dashboard_command_executor.py",
+            "services/infra_self_heal.py",
+            "tests/test_experience_buffer.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/do_autoscale.py",
+          "dotted": "services.do_autoscale",
+          "lines": 239,
+          "classes": [],
+          "functions": [
+            "evaluate_and_maybe_scale"
+          ],
+          "importers": [
+            "scripts/autoscale_poll.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/do_worker_autoscale.py"
+      ]
+    },
+    {
+      "prefix": "domain",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/domain_dominion_engine.py",
+          "dotted": "services.domain_dominion_engine",
+          "lines": 435,
+          "classes": [],
+          "functions": [
+            "get_or_create_profile",
+            "set_active_domain",
+            "merge_knowledge",
+            "get_action_templates",
+            "list_domain_connectors",
+            "record_domain_revenue_event",
+            "domain_pnl_summary",
+            "run_domain_opportunity_pipeline",
+            "run_weekly_domain_strategy_review"
+          ],
+          "importers": [
+            "api/routes/domain_dominion.py",
+            "services/domain_execution_intelligence.py",
+            "services/scheduler.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/domain_execution_intelligence.py",
+          "dotted": "services.domain_execution_intelligence",
+          "lines": 104,
+          "classes": [],
+          "functions": [
+            "detect_domain_from_command",
+            "load_domain_execution_context",
+            "apply_domain_retry_strategy"
+          ],
+          "importers": [
+            "services/auto_retry_engine.py",
+            "services/brain_execute.py",
+            "services/continuous_brain_loop.py",
+            "services/value_generation_engine.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/domain_dominion_engine.py",
+        "services/domain_execution_intelligence.py"
+      ]
+    },
+    {
+      "prefix": "execute",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/execute_mission_store.py",
+          "dotted": "services.execute_mission_store",
+          "lines": 258,
+          "classes": [
+            "MissionExecutionContext"
+          ],
+          "functions": [
+            "is_complex_command",
+            "create_mission_plan",
+            "mission_to_payload",
+            "run_mission_sequentially"
+          ],
+          "importers": [
+            "api/routes/execute.py",
+            "services/automation_rule_engine.py",
+            "services/goal_engine.py",
+            "services/money_loop_engine.py",
+            "services/opportunity_engine.py",
+            "workers/async_tasks.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/execute_conversation_store.py",
+          "dotted": "services.execute_conversation_store",
+          "lines": 151,
+          "classes": [],
+          "functions": [
+            "list_user_conversations",
+            "list_conversation_messages",
+            "get_recent_context_messages",
+            "persist_execute_exchange"
+          ],
+          "importers": [
+            "api/routes/execute.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/execute_mission_store.py"
+      ]
+    },
+    {
+      "prefix": "execution",
+      "module_count": 10,
+      "target_hint": "services/execution_engine.py",
+      "members": [
+        {
+          "path": "services/execution_closure_engine.py",
+          "dotted": "services.execution_closure_engine",
+          "lines": 599,
+          "classes": [],
+          "functions": [
+            "handle_execution_closure"
+          ],
+          "importers": [
+            "services/brain_execute.py",
+            "services/continuous_brain_loop.py",
+            "services/execution_watchdog.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/execution_memory_store.py",
+          "dotted": "services.execution_memory_store",
+          "lines": 288,
+          "classes": [],
+          "functions": [
+            "record_outcome",
+            "record_failure_pattern",
+            "recent_failure_hints",
+            "recent_hints",
+            "build_system_failure_playbook"
+          ],
+          "importers": [
+            "services/action_execution_engine.py",
+            "services/auto_retry_engine.py",
+            "services/execution_step_runner.py",
+            "services/meta_autonomy_engine.py",
+            "services/p2_intelligence.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/execution_capability_registry.py",
+          "dotted": "services.execution_capability_registry",
+          "lines": 57,
+          "classes": [],
+          "functions": [
+            "get_execution_capabilities"
+          ],
+          "importers": [
+            "services/brain_execute.py",
+            "services/meta_autonomy_engine.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/execution_decision_engine.py",
+          "dotted": "services.execution_decision_engine",
+          "lines": 565,
+          "classes": [],
+          "functions": [
+            "run_execution_decision_cycle",
+            "add"
+          ],
+          "importers": [
+            "services/continuous_brain_loop.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/execution_engine.py",
+          "dotted": "services.execution_engine",
+          "lines": 324,
+          "classes": [],
+          "functions": [
+            "queue_action_intent_for_hitl",
+            "execute_approved_intent_payload"
+          ],
+          "importers": [
+            "api/routes/billing.py",
+            "workers/jobs.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/execution_learning_integration.py",
+          "dotted": "services.execution_learning_integration",
+          "lines": 211,
+          "classes": [],
+          "functions": [
+            "extract_profit_loss_from_steps",
+            "extract_profit_loss_from_exec_result",
+            "apply_execution_closure_learning",
+            "apply_execution_retry_learning"
+          ],
+          "importers": [
+            "services/auto_retry_engine.py",
+            "services/execution_closure_engine.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/execution_self_healing.py",
+          "dotted": "services.execution_self_healing",
+          "lines": 102,
+          "classes": [
+            "ErrorClass"
+          ],
+          "functions": [
+            "classify_error",
+            "apply_self_heal_strategy"
+          ],
+          "importers": [
+            "services/execution_step_runner.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/execution_step_runner.py",
+          "dotted": "services.execution_step_runner",
+          "lines": 182,
+          "classes": [],
+          "functions": [
+            "run_step_with_perfection"
+          ],
+          "importers": [
+            "services/action_execution_engine.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/execution_verification.py",
+          "dotted": "services.execution_verification",
+          "lines": 128,
+          "classes": [],
+          "functions": [
+            "verify_step_outcome"
+          ],
+          "importers": [
+            "services/execution_step_runner.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/execution_watchdog.py",
+          "dotted": "services.execution_watchdog",
+          "lines": 165,
+          "classes": [],
+          "functions": [
+            "run_execution_watchdog_scan",
+            "run_retry_job_drain"
+          ],
+          "importers": [
+            "services/scheduler.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/execution_closure_engine.py",
+        "services/execution_memory_store.py"
+      ]
+    },
+    {
+      "prefix": "factory",
+      "module_count": 3,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/broker/factory.py",
+          "dotted": "services.broker.factory",
+          "lines": 39,
+          "classes": [],
+          "functions": [
+            "get_broker_adapter"
+          ],
+          "importers": [
+            "services/broker/__init__.py",
+            "services/broker/probe.py",
+            "services/orchestrator.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/factory_status_service.py",
+          "dotted": "services.factory_status_service",
+          "lines": 130,
+          "classes": [],
+          "functions": [
+            "build_factory_status_v2"
+          ],
+          "importers": [
+            "api/routes/factory.py",
+            "services/factory_context_service.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/factory_context_service.py",
+          "dotted": "services.factory_context_service",
+          "lines": 91,
+          "classes": [],
+          "functions": [
+            "format_factory_os_v2_markdown"
+          ],
+          "importers": [],
+          "importer_count": 0,
+          "consolidation": "SAFE"
+        }
+      ],
+      "safe_to_remove_now": [
+        "services/factory_context_service.py"
+      ],
+      "blocked_keep": [
+        "services/broker/factory.py"
+      ]
+    },
+    {
+      "prefix": "financial",
+      "module_count": 3,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/financial_service.py",
+          "dotted": "services.financial_service",
+          "lines": 168,
+          "classes": [],
+          "functions": [
+            "financial_performance_summary",
+            "financial_performance_summary_for_organization",
+            "daily_interest_accrual_dashboard",
+            "daily_interest_accrual_dashboard_for_organization"
+          ],
+          "importers": [
+            "api/routes/analytics.py",
+            "api/routes/inventory.py",
+            "core/system_checks.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/financial_analytics.py",
+          "dotted": "services.financial_analytics",
+          "lines": 101,
+          "classes": [],
+          "functions": [
+            "aggregate_empire_financial_summary_session",
+            "aggregate_empire_financial_summary"
+          ],
+          "importers": [
+            "api/routes/factory.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/financial_audit_log_service.py",
+          "dotted": "services.financial_audit_log_service",
+          "lines": 74,
+          "classes": [],
+          "functions": [
+            "append_financial_audit_log",
+            "append_financial_audit_log_sync"
+          ],
+          "importers": [
+            "api/routes/business_depth.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/financial_service.py"
+      ]
+    },
+    {
+      "prefix": "goal",
+      "module_count": 2,
+      "target_hint": "services/goal_engine.py",
+      "members": [
+        {
+          "path": "services/goal_engine.py",
+          "dotted": "services.goal_engine",
+          "lines": 118,
+          "classes": [],
+          "functions": [
+            "derive_goals_from_context",
+            "decompose_goal",
+            "advance_goal_cycle",
+            "goal_progress_snapshot"
+          ],
+          "importers": [
+            "api/routes/goal_engine.py",
+            "api/routes/system_overview.py",
+            "services/continuous_thinking_loop_engine.py",
+            "services/goal_prioritization_engine.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/goal_prioritization_engine.py",
+          "dotted": "services.goal_prioritization_engine",
+          "lines": 77,
+          "classes": [],
+          "functions": [
+            "prioritize_goals"
+          ],
+          "importers": [
+            "api/routes/goal_prioritization.py",
+            "services/continuous_brain_loop.py",
+            "services/continuous_thinking_loop_engine.py",
+            "services/self_expansion_engine.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/goal_engine.py",
+        "services/goal_prioritization_engine.py"
+      ]
+    },
+    {
+      "prefix": "health",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/health_service.py",
+          "dotted": "services.health_service",
+          "lines": 216,
+          "classes": [],
+          "functions": [
+            "run_deep_health_check"
+          ],
+          "importers": [
+            "app.py",
+            "tests/test_observability_stack.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/health_checker.py",
+          "dotted": "services.health_checker",
+          "lines": 158,
+          "classes": [
+            "OSHealthChecker"
+          ],
+          "functions": [
+            "check_os"
+          ],
+          "importers": [],
+          "importer_count": 0,
+          "consolidation": "SAFE"
+        }
+      ],
+      "safe_to_remove_now": [
+        "services/health_checker.py"
+      ],
+      "blocked_keep": []
+    },
+    {
+      "prefix": "integration",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/integration_engine.py",
+          "dotted": "services.integration_engine",
+          "lines": 373,
+          "classes": [],
+          "functions": [
+            "list_integrations",
+            "list_outgoing_message_logs",
+            "upsert_integration",
+            "send_email",
+            "send_whatsapp",
+            "send_sms",
+            "notify_user",
+            "test_integration"
+          ],
+          "importers": [
+            "api/routes/integrations.py",
+            "services/automation_rule_engine.py",
+            "services/domain_dominion_engine.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/integration_crypto.py",
+          "dotted": "services.integration_crypto",
+          "lines": 36,
+          "classes": [],
+          "functions": [
+            "integration_fernet",
+            "encrypt_secret",
+            "decrypt_secret"
+          ],
+          "importers": [
+            "services/google_calendar_integration_service.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/integration_engine.py"
+      ]
+    },
+    {
+      "prefix": "intent",
+      "module_count": 3,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/intent_classifier.py",
+          "dotted": "services.intent_classifier",
+          "lines": 134,
+          "classes": [],
+          "functions": [
+            "classify_intent"
+          ],
+          "importers": [
+            "api/routes/execute.py",
+            "services/brain_execute.py",
+            "services/central_execution_engine.py",
+            "services/execute_mission_store.py",
+            "tests/test_intent_classifier.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/intent_execution_engine.py",
+          "dotted": "services.intent_execution_engine",
+          "lines": 79,
+          "classes": [],
+          "functions": [
+            "run_intent_execution_cycle"
+          ],
+          "importers": [
+            "services/continuous_brain_loop.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/intent_generation_engine.py",
+          "dotted": "services.intent_generation_engine",
+          "lines": 198,
+          "classes": [],
+          "functions": [
+            "generate_intents",
+            "run_intent_generation_cycle"
+          ],
+          "importers": [
+            "services/continuous_brain_loop.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/intent_classifier.py"
+      ]
+    },
+    {
+      "prefix": "inventory",
+      "module_count": 5,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/inventory_ops.py",
+          "dotted": "services.inventory_ops",
+          "lines": 80,
+          "classes": [],
+          "functions": [
+            "apply_inventory_delta"
+          ],
+          "importers": [
+            "core/tool_executor.py",
+            "services/dashboard_command_executor.py",
+            "services/execution_engine.py",
+            "services/inventory_integrity_audit.py",
+            "services/inventory_phase2_service.py",
+            "services/inventory_service.py",
+            "services/sale_execution.py"
+          ],
+          "importer_count": 7,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/inventory_phase2_service.py",
+          "dotted": "services.inventory_phase2_service",
+          "lines": 949,
+          "classes": [],
+          "functions": [
+            "list_inventory_items_sync",
+            "create_inventory_item_sync",
+            "update_inventory_item_sync",
+            "record_stock_movement_sync",
+            "list_low_stock_alerts_sync",
+            "create_supplier_sync",
+            "list_suppliers_sync",
+            "create_purchase_order_sync",
+            "receive_purchase_order_line_sync",
+            "list_stock_movements_sync"
+          ],
+          "importers": [
+            "api/routes/business_module.py",
+            "services/context_engine.py",
+            "services/decision_trigger.py",
+            "services/inventory_service.py",
+            "services/jarvis_agent_service.py",
+            "services/jarvis_extended_tools.py",
+            "services/jarvis_proactive_action_engine.py",
+            "services/jarvis_proactive_service.py",
+            "tests/test_phase2_inventory.py",
+            "tests/test_phase4_automation.py",
+            "tests/test_phase5_saas.py",
+            "tests/test_tenant_isolation.py"
+          ],
+          "importer_count": 12,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/inventory_service.py",
+          "dotted": "services.inventory_service",
+          "lines": 134,
+          "classes": [],
+          "functions": [
+            "add_inventory_sync",
+            "deduct_inventory_sync"
+          ],
+          "importers": [
+            "api/routes/inventory.py",
+            "services/personal_engagement_service.py",
+            "tests/test_tenant_isolation.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/inventory_alerts.py",
+          "dotted": "services.inventory_alerts",
+          "lines": 19,
+          "classes": [],
+          "functions": [
+            "get_inventory_alerts"
+          ],
+          "importers": [
+            "services/command_center.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/inventory_integrity_audit.py",
+          "dotted": "services.inventory_integrity_audit",
+          "lines": 327,
+          "classes": [],
+          "functions": [
+            "run_full_inventory_integrity_audit",
+            "emit_audit_report_to_thought_stream",
+            "apply_inventory_integrity_corrections"
+          ],
+          "importers": [
+            "services/auto_repair.py",
+            "services/dashboard_command_executor.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/inventory_ops.py",
+        "services/inventory_phase2_service.py",
+        "services/inventory_service.py"
+      ]
+    },
+    {
+      "prefix": "jarvis",
+      "module_count": 19,
+      "target_hint": "services/jarvis_proactive_engine.py",
+      "members": [
+        {
+          "path": "services/jarvis_agent_event_engine.py",
+          "dotted": "services.jarvis_agent_event_engine",
+          "lines": 274,
+          "classes": [],
+          "functions": [
+            "clear_agent_cycle_rate_limit_for_user",
+            "enqueue_agent_event_sync",
+            "process_agent_event_sync",
+            "enqueue_and_flush_sync",
+            "drain_agent_event_queue_sync",
+            "record_inventory_quantity_event_sync",
+            "record_invoice_created_event_sync",
+            "record_meeting_created_event_sync"
+          ],
+          "importers": [
+            "api/routes/personal_command_center.py",
+            "services/billing_phase2_service.py",
+            "services/inventory_phase2_service.py",
+            "tests/test_jarvis_final_polish.py",
+            "workers/sovereign_scheduler.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_agent_service.py",
+          "dotted": "services.jarvis_agent_service",
+          "lines": 1052,
+          "classes": [],
+          "functions": [
+            "resolve_jarvis_organization_id",
+            "execute_tool_safe",
+            "execute_tool",
+            "undo_last_action",
+            "run_agent"
+          ],
+          "importers": [
+            "api/routes/ai_chat.py",
+            "tests/test_jarvis_agent_hardening.py",
+            "tests/test_jarvis_routing.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_autonomous_agent.py",
+          "dotted": "services.jarvis_autonomous_agent",
+          "lines": 802,
+          "classes": [
+            "JarvisMemoryEngineLite"
+          ],
+          "functions": [
+            "is_safe_autonomous_action",
+            "get_cached_proactive_insights_sync",
+            "simulate_reorder_outcome_sync",
+            "log_agent_action_sync",
+            "update_learning_stats_sync",
+            "dynamic_confidence_for_action_sync",
+            "maybe_upgrade_execution_mode_fact_sync",
+            "proactive_noise_cooldown_scale_sync",
+            "generate_plan_sync",
+            "execute_step_sync"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/jarvis_agent_event_engine.py",
+            "services/jarvis_goal_engine.py",
+            "services/jarvis_narrative.py",
+            "services/jarvis_weekly_strategy.py",
+            "tests/test_jarvis_autonomous_agent.py",
+            "workers/sovereign_scheduler.py"
+          ],
+          "importer_count": 7,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_goal_engine.py",
+          "dotted": "services.jarvis_goal_engine",
+          "lines": 346,
+          "classes": [],
+          "functions": [
+            "create_goal_sync",
+            "break_into_subtasks_sync",
+            "track_progress_sync",
+            "auto_continue_incomplete_goals_sync",
+            "get_active_goals_sync",
+            "mark_subtask_done_sync",
+            "resolve_goal_conflicts",
+            "create_goal",
+            "break_into_subtasks",
+            "track_progress"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/continuous_brain_loop.py",
+            "services/goal_engine.py",
+            "services/jarvis_autonomous_agent.py",
+            "services/jarvis_weekly_strategy.py",
+            "services/proactive_autonomy_engine.py",
+            "services/strategic_goal_planner.py",
+            "tests/test_jarvis_autonomous_agent.py",
+            "tests/test_jarvis_final_polish.py"
+          ],
+          "importer_count": 9,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_memory_engine.py",
+          "dotted": "services.jarvis_memory_engine",
+          "lines": 523,
+          "classes": [
+            "JarvisMemoryEngine"
+          ],
+          "functions": [
+            "get_default_engine",
+            "fetch_living_memory_brief_sync",
+            "store_episode",
+            "store_fact",
+            "get_session_context",
+            "recall",
+            "summarize_old_memories",
+            "format_memory_context_block",
+            "record_conversation_turn"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/jarvis_agent_service.py",
+            "services/jarvis_autonomous_agent.py",
+            "services/long_term_memory_engine.py",
+            "services/research/autonomous_researcher.py",
+            "tests/test_jarvis_memory_engine.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_narrative.py",
+          "dotted": "services.jarvis_narrative",
+          "lines": 155,
+          "classes": [],
+          "functions": [
+            "cluster_critical_insights_sync",
+            "build_captain_narrative_sync"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/jarvis_autonomous_agent.py",
+            "tests/test_jarvis_final_polish.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_proactive_action_engine.py",
+          "dotted": "services.jarvis_proactive_action_engine",
+          "lines": 174,
+          "classes": [],
+          "functions": [
+            "user_execution_mode",
+            "user_execution_mode_for_user",
+            "auto_po_draft_enabled",
+            "build_reorder_po_draft_payload_sync",
+            "try_execute_create_po_draft"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/jarvis_autonomous_agent.py",
+            "services/jarvis_proactive_engine.py",
+            "tests/test_jarvis_proactive_agentic.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_proactive_engine.py",
+          "dotted": "services.jarvis_proactive_engine",
+          "lines": 524,
+          "classes": [
+            "Insight",
+            "JarvisProactiveEngine"
+          ],
+          "functions": [
+            "execute_proactive_insight_action_sync",
+            "as_dict",
+            "to_agentic_output",
+            "run_morning_intelligence",
+            "run_realtime_checks",
+            "build_intelligent_insights_from_recent",
+            "run_morning_intelligence_all_users",
+            "run_realtime_checks_all_users"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/jarvis_autonomous_agent.py",
+            "tests/test_jarvis_proactive_agentic.py",
+            "tests/test_jarvis_proactive_engine.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_proactive_service.py",
+          "dotted": "services.jarvis_proactive_service",
+          "lines": 965,
+          "classes": [],
+          "functions": [
+            "generate_morning_intelligence_sync",
+            "list_recent_proactive_for_brief_sync",
+            "list_recent_proactive_full_sync",
+            "record_proactive_feedback_sync",
+            "run_realtime_intelligence_sync",
+            "run_realtime_job_all_users_sync",
+            "run_morning_job_all_users_sync",
+            "attach_market_brief_to_payload",
+            "upsert_research_scheme_alert_sync",
+            "upsert_equity_stop_trading_alert_sync"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/deep_research_engine.py",
+            "services/jarvis_agent_event_engine.py",
+            "services/jarvis_proactive_engine.py",
+            "services/jarvis_proactive_events.py",
+            "services/personal_command_center_service.py",
+            "services/research_schemes_service.py",
+            "services/stock_realtime_monitor.py",
+            "workers/jobs.py",
+            "workers/morning_intelligence_worker.py",
+            "workers/realtime_check_worker.py"
+          ],
+          "importer_count": 11,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_router.py",
+          "dotted": "services.jarvis_router",
+          "lines": 256,
+          "classes": [],
+          "functions": [
+            "classify_query",
+            "tool_names_for_category",
+            "select_model_for_category",
+            "filter_tool_specs",
+            "route_query",
+            "route_jarvis_query",
+            "merge_route_tool_specs"
+          ],
+          "importers": [
+            "services/jarvis_agent_service.py",
+            "tests/test_jarvis_agent_hardening.py",
+            "tests/test_jarvis_routing.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/jarvis_extended_tools.py",
+          "dotted": "services.jarvis_extended_tools",
+          "lines": 1586,
+          "classes": [],
+          "functions": [
+            "extended_tool_specs",
+            "execute_jarvis_extended_tool"
+          ],
+          "importers": [
+            "services/jarvis_agent_service.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/jarvis_memory_learn.py",
+          "dotted": "services.jarvis_memory_learn",
+          "lines": 147,
+          "classes": [],
+          "functions": [
+            "learn_from_turn_sync"
+          ],
+          "importers": [
+            "services/jarvis_agent_service.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/jarvis_memory_service.py",
+          "dotted": "services.jarvis_memory_service",
+          "lines": 110,
+          "classes": [],
+          "functions": [
+            "fetch_memory_entries_sync",
+            "fetch_memory_context_lines_sync",
+            "upsert_memory_sync",
+            "bump_memory_usage_sync"
+          ],
+          "importers": [
+            "services/jarvis_agent_service.py",
+            "services/jarvis_memory_learn.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/jarvis_proactive_events.py",
+          "dotted": "services.jarvis_proactive_events",
+          "lines": 45,
+          "classes": [],
+          "functions": [
+            "notify_low_stock_for_org",
+            "notify_meeting_window"
+          ],
+          "importers": [
+            "services/jarvis_agent_event_engine.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/jarvis_proactive_intelligence.py",
+          "dotted": "services.jarvis_proactive_intelligence",
+          "lines": 207,
+          "classes": [],
+          "functions": [
+            "compute_weighted_priority_score",
+            "count_recent_outcomes_sync",
+            "feedback_confidence_multiplier",
+            "feedback_priority_noise_multiplier",
+            "fetch_memory_snippets_sync",
+            "analyze_dependencies",
+            "apply_memory_to_scores"
+          ],
+          "importers": [
+            "services/jarvis_autonomous_agent.py",
+            "services/jarvis_proactive_engine.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/jarvis_summarize.py",
+          "dotted": "services.jarvis_summarize",
+          "lines": 45,
+          "classes": [],
+          "functions": [
+            "summarize_jarvis_emergency"
+          ],
+          "importers": [
+            "workers/jarvis_email.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/jarvis_undo_service.py",
+          "dotted": "services.jarvis_undo_service",
+          "lines": 82,
+          "classes": [],
+          "functions": [
+            "apply_undo_ops",
+            "meeting_undo_payload"
+          ],
+          "importers": [
+            "services/jarvis_agent_service.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/jarvis_weekly_strategy.py",
+          "dotted": "services.jarvis_weekly_strategy",
+          "lines": 90,
+          "classes": [],
+          "functions": [
+            "generate_weekly_strategy_sync"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/jarvis_narrative.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/jarvis_world_simulation.py",
+          "dotted": "services.jarvis_world_simulation",
+          "lines": 81,
+          "classes": [],
+          "functions": [
+            "simulate_future_state"
+          ],
+          "importers": [
+            "services/jarvis_narrative.py",
+            "tests/test_jarvis_final_polish.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/jarvis_agent_event_engine.py",
+        "services/jarvis_agent_service.py",
+        "services/jarvis_autonomous_agent.py",
+        "services/jarvis_goal_engine.py",
+        "services/jarvis_memory_engine.py",
+        "services/jarvis_narrative.py",
+        "services/jarvis_proactive_action_engine.py",
+        "services/jarvis_proactive_engine.py",
+        "services/jarvis_proactive_service.py",
+        "services/jarvis_router.py"
+      ]
+    },
+    {
+      "prefix": "learning",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/learning_engine.py",
+          "dotted": "services.learning_engine",
+          "lines": 261,
+          "classes": [],
+          "functions": [
+            "record_outcome",
+            "analyze_patterns",
+            "optimize_parameters",
+            "update_strategy_profiles",
+            "get_strategy_profiles"
+          ],
+          "importers": [
+            "api/routes/learning.py",
+            "api/routes/stock_assistant.py",
+            "services/automation_rule_engine.py",
+            "services/continuous_thinking_loop_engine.py",
+            "services/decision_intelligence_engine.py",
+            "services/domain_dominion_engine.py",
+            "services/evolution_gate_engine.py",
+            "services/execution_learning_integration.py",
+            "services/experimentation_engine.py",
+            "services/full_autonomous_operator_mode.py",
+            "services/goal_engine.py",
+            "services/invention_loop_engine.py",
+            "services/money_loop_engine.py",
+            "services/opportunity_engine.py",
+            "services/p2_intelligence.py",
+            "services/proactive_autonomy_engine.py",
+            "services/real_world_autonomous_layer.py",
+            "services/research_loop_engine.py",
+            "services/scheduler.py",
+            "services/strategy_generator_engine.py",
+            "workers/async_tasks.py"
+          ],
+          "importer_count": 21,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/ml/learning_pipeline.py",
+          "dotted": "services.ml.learning_pipeline",
+          "lines": 380,
+          "classes": [],
+          "functions": [
+            "extract_patterns",
+            "update_pattern_confidences",
+            "record_outcome_feedback",
+            "retrain_predictor",
+            "weekly_report",
+            "run_nightly"
+          ],
+          "importers": [
+            "services/scheduler.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/learning_engine.py"
+      ]
+    },
+    {
+      "prefix": "ltm",
+      "module_count": 3,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/ltm_chroma.py",
+          "dotted": "services.ltm_chroma",
+          "lines": 194,
+          "classes": [],
+          "functions": [
+            "ltm_enabled",
+            "chroma_path",
+            "record_tool_execution",
+            "search_similar_failures",
+            "format_mitigation_block"
+          ],
+          "importers": [
+            "services/experience_buffer.py",
+            "services/ltm_hooks.py",
+            "services/ltm_self_tune.py",
+            "tests/test_ltm_hitl.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/ltm_hooks.py",
+          "dotted": "services.ltm_hooks",
+          "lines": 40,
+          "classes": [],
+          "functions": [
+            "record_inventory_sell_execution"
+          ],
+          "importers": [
+            "api/routes/inventory.py",
+            "core/orchestrator.py",
+            "core/routine_brief.py",
+            "services/execution_engine.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/ltm_self_tune.py",
+          "dotted": "services.ltm_self_tune",
+          "lines": 117,
+          "classes": [],
+          "functions": [
+            "benchmark_ltm_query_ms",
+            "build_self_coder_memory_brief",
+            "maybe_flag_slow_ltm_after_query"
+          ],
+          "importers": [
+            "api/routes/sovereign.py",
+            "services/ltm_chroma.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/ltm_chroma.py",
+        "services/ltm_hooks.py"
+      ]
+    },
+    {
+      "prefix": "market",
+      "module_count": 3,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/market_research_service.py",
+          "dotted": "services.market_research_service",
+          "lines": 287,
+          "classes": [],
+          "functions": [
+            "format_solar_dpr_bundle_markdown",
+            "solar_project_progress_pct",
+            "fetch_solar_dpr_research_bundle",
+            "build_solar_dpr_dashboard_block"
+          ],
+          "importers": [
+            "api/routes/analytics.py",
+            "core/orchestrator.py",
+            "services/dashboard_command_executor.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/market_brief_service.py",
+          "dotted": "services.market_brief_service",
+          "lines": 86,
+          "classes": [],
+          "functions": [
+            "morning_market_brief_sync"
+          ],
+          "importers": [
+            "api/routes/stock_assistant.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/market_timing_engine.py",
+          "dotted": "services.market_timing_engine",
+          "lines": 375,
+          "classes": [],
+          "functions": [
+            "detect_trends_from_values",
+            "momentum_score_from_values",
+            "entry_exit_signals",
+            "market_timing_pack",
+            "timing_from_custom_series"
+          ],
+          "importers": [
+            "api/routes/market_timing.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/market_research_service.py"
+      ]
+    },
+    {
+      "prefix": "meta",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/meta_autonomy_engine.py",
+          "dotted": "services.meta_autonomy_engine",
+          "lines": 426,
+          "classes": [],
+          "functions": [
+            "consolidate_stable_knowledge",
+            "monitor_system_performance",
+            "detect_meta_autonomy_gaps",
+            "generate_self_improvement_tasks",
+            "self_correction_triggers"
+          ],
+          "importers": [
+            "services/autonomy_governor_engine.py",
+            "services/brain_execute.py",
+            "services/continuous_brain_loop.py",
+            "services/evolution_gate_engine.py",
+            "services/execution_decision_engine.py",
+            "services/p2_intelligence.py",
+            "services/proactive_autonomy_engine.py",
+            "services/strategic_goal_planner.py"
+          ],
+          "importer_count": 8,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/ml/meta_learner.py",
+          "dotted": "services.ml.meta_learner",
+          "lines": 767,
+          "classes": [],
+          "functions": [
+            "sklearn_available",
+            "analyze_feature_importance",
+            "analyze_model_performance_by_context",
+            "analyze_optimal_decision_time",
+            "auto_tune_hyperparameters",
+            "run_full_meta_cycle",
+            "get_recommended_setup",
+            "get_meta_score",
+            "get_status"
+          ],
+          "importers": [
+            "api/routes/personal_command_center.py",
+            "services/scheduler.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/meta_autonomy_engine.py"
+      ]
+    },
+    {
+      "prefix": "model",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/ml/model_registry.py",
+          "dotted": "services.ml.model_registry",
+          "lines": 283,
+          "classes": [
+            "ModelRecord",
+            "ModelRegistry"
+          ],
+          "functions": [
+            "models_dir",
+            "model_artifact_path",
+            "next_version",
+            "to_dict",
+            "register",
+            "activate",
+            "retire",
+            "get_latest",
+            "get_active",
+            "compare_versions"
+          ],
+          "importers": [
+            "api/routes/personal_command_center.py",
+            "services/ml/learning_pipeline.py",
+            "services/ml/model_ensemble.py",
+            "services/ml/online_learner.py",
+            "services/ml/outcome_predictor.py",
+            "services/ml/rl_trading_agent.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/ml/model_ensemble.py",
+          "dotted": "services.ml.model_ensemble",
+          "lines": 416,
+          "classes": [],
+          "functions": [
+            "train_ensemble",
+            "select_model_for_domain",
+            "predict"
+          ],
+          "importers": [
+            "core/domains/domain_registry.py",
+            "services/scheduler.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/ml/model_registry.py"
+      ]
+    },
+    {
+      "prefix": "multi",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/multi_org_control_engine.py",
+          "dotted": "services.multi_org_control_engine",
+          "lines": 74,
+          "classes": [],
+          "functions": [
+            "list_user_organizations",
+            "shared_intelligence_context",
+            "separate_execution_plan"
+          ],
+          "importers": [
+            "api/routes/multi_org_control.py",
+            "api/routes/system_overview.py",
+            "services/autonomous_operations_engine.py",
+            "services/scheduler.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/multi_agent_orchestrator.py",
+          "dotted": "services.multi_agent_orchestrator",
+          "lines": 302,
+          "classes": [],
+          "functions": [
+            "researcher_agent",
+            "executor_agent",
+            "strategist_agent",
+            "negotiator_agent",
+            "multi_agent_orchestrator"
+          ],
+          "importers": [
+            "services/brain_execute.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/multi_org_control_engine.py"
+      ]
+    },
+    {
+      "prefix": "options",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/broker/options_executor.py",
+          "dotted": "services.broker.options_executor",
+          "lines": 307,
+          "classes": [
+            "OptionType",
+            "OrderType",
+            "TransactionType",
+            "OptionsOrder",
+            "OptionsOrderResult"
+          ],
+          "functions": [
+            "build_fyers_symbol",
+            "build_kite_symbol",
+            "execute_options_order_paper",
+            "execute_options_order_fyers",
+            "execute_options_order_kite",
+            "execute_options_order"
+          ],
+          "importers": [
+            "api/routes/stock_assistant.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/options_chain_placeholder.py",
+          "dotted": "services.options_chain_placeholder",
+          "lines": 93,
+          "classes": [],
+          "functions": [
+            "fetch_nifty_option_chain_placeholder",
+            "fetch_banknifty_option_chain_placeholder"
+          ],
+          "importers": [
+            "services/agent_stock_bridge.py",
+            "services/orchestrator.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": []
+    },
+    {
+      "prefix": "paper",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/broker/paper_adapter.py",
+          "dotted": "services.broker.paper_adapter",
+          "lines": 66,
+          "classes": [
+            "PaperTradingAdapter"
+          ],
+          "functions": [
+            "get_live_quotes",
+            "place_order",
+            "get_positions",
+            "cancel_order"
+          ],
+          "importers": [
+            "services/broker/factory.py",
+            "services/broker/fyers_adapter.py",
+            "services/broker/probe.py",
+            "services/broker/zerodha_adapter.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/quant/paper_trader.py",
+          "dotted": "services.quant.paper_trader",
+          "lines": 295,
+          "classes": [
+            "PaperTrader"
+          ],
+          "functions": [
+            "get_live_price",
+            "place_paper_order",
+            "close_paper_order",
+            "get_open_positions",
+            "get_paper_pnl_summary",
+            "auto_run_strategy"
+          ],
+          "importers": [
+            "api/routes/personal_command_center.py",
+            "services/scheduler.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/broker/paper_adapter.py"
+      ]
+    },
+    {
+      "prefix": "personal",
+      "module_count": 9,
+      "target_hint": "services/personal_command_center_service.py",
+      "members": [
+        {
+          "path": "services/personal_command_center_service.py",
+          "dotted": "services.personal_command_center_service",
+          "lines": 1211,
+          "classes": [],
+          "functions": [
+            "fetch_open_meteo_current",
+            "build_morning_brief_sync",
+            "build_today_brief_sync",
+            "build_weekly_review_sync",
+            "list_expenses_sync",
+            "create_expense_sync",
+            "list_loans_sync",
+            "create_loan_sync",
+            "list_vitals_sync",
+            "create_vital_sync"
+          ],
+          "importers": [
+            "api/routes/personal_command_center.py",
+            "services/auto_accounting_service.py",
+            "services/cross_domain_analyzer.py",
+            "services/deep_research_engine.py",
+            "services/jarvis_agent_service.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/personal_crypto.py",
+          "dotted": "services.personal_crypto",
+          "lines": 77,
+          "classes": [],
+          "functions": [
+            "new_salt",
+            "derive_raw_key",
+            "verifier_hash",
+            "verify_raw_key",
+            "fernet_from_raw",
+            "encrypt_utf8",
+            "decrypt_utf8",
+            "fernet_from_vault_passphrase"
+          ],
+          "importers": [
+            "services/life_os_service.py",
+            "services/personal_command_center_service.py",
+            "tests/test_life_os.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/personal_meeting_intelligence.py",
+          "dotted": "services.personal_meeting_intelligence",
+          "lines": 312,
+          "classes": [],
+          "functions": [
+            "suggest_duration_and_agenda",
+            "find_overlapping_meeting_ids",
+            "ics_escape",
+            "build_meeting_ics",
+            "follow_up_mission_title",
+            "list_meeting_nudges_sync",
+            "notify_meeting_reminders_for_session",
+            "run_meeting_reminder_scan",
+            "meeting_reminders_enabled",
+            "meeting_reminder_interval_seconds"
+          ],
+          "importers": [
+            "api/routes/personal_command_center.py",
+            "services/jarvis_proactive_service.py",
+            "services/personal_os_aggregate.py",
+            "tests/test_personal_meeting_intelligence.py",
+            "workers/alert_system.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/personal_meetings_service.py",
+          "dotted": "services.personal_meetings_service",
+          "lines": 381,
+          "classes": [],
+          "functions": [
+            "normalize_attendees",
+            "serialize_meeting",
+            "meetings_morning_brief_payload",
+            "list_meetings",
+            "list_today",
+            "list_upcoming",
+            "get_meeting_or_none",
+            "create_meeting",
+            "update_meeting_fields"
+          ],
+          "importers": [
+            "api/routes/personal_command_center.py",
+            "services/google_calendar_integration_service.py",
+            "services/jarvis_agent_service.py",
+            "services/personal_command_center_service.py",
+            "services/personal_meeting_intelligence.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/personal_os_aggregate.py",
+          "dotted": "services.personal_os_aggregate",
+          "lines": 142,
+          "classes": [],
+          "functions": [
+            "build_personal_today_sync"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "core/background_agent.py",
+            "services/command_center.py",
+            "services/personal_command_center_service.py",
+            "tests/test_erp_personal_aggregate.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/personal_quick_intent_sync.py",
+          "dotted": "services.personal_quick_intent_sync",
+          "lines": 52,
+          "classes": [],
+          "functions": [
+            "parse_quick_phrase"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/modular_execution_services.py",
+            "tests/test_personal_quick_intent.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/personal_ambient_sync.py",
+          "dotted": "services.personal_ambient_sync",
+          "lines": 73,
+          "classes": [],
+          "functions": [
+            "build_ambient_sync"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "tests/test_personal_ambient.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/personal_engagement_service.py",
+          "dotted": "services.personal_engagement_service",
+          "lines": 341,
+          "classes": [],
+          "functions": [
+            "touch_streak_sync",
+            "increment_actions_today_sync",
+            "compute_daily_score",
+            "record_suggestion_feedback_sync",
+            "execute_personal_action_sync"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/command_center.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/personal_jarvis_sync.py",
+          "dotted": "services.personal_jarvis_sync",
+          "lines": 232,
+          "classes": [],
+          "functions": [
+            "compute_yesterday_followups_sync",
+            "persist_today_jarvis_snapshot_sync",
+            "count_weekly_completions_sync",
+            "build_weekly_personal_report_sync"
+          ],
+          "importers": [
+            "api/routes/personal.py",
+            "services/command_center.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/personal_command_center_service.py",
+        "services/personal_crypto.py",
+        "services/personal_meeting_intelligence.py",
+        "services/personal_meetings_service.py",
+        "services/personal_os_aggregate.py",
+        "services/personal_quick_intent_sync.py"
+      ]
+    },
+    {
+      "prefix": "policy",
+      "module_count": 3,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/policy_engine.py",
+          "dotted": "services.policy_engine",
+          "lines": 808,
+          "classes": [
+            "AutonomyPolicy",
+            "DecisionContext",
+            "DecisionOutput",
+            "LinUCBBandit",
+            "PolicyEngine"
+          ],
+          "functions": [
+            "load_autonomy_policy",
+            "policy_allows_auto_approve",
+            "get_policy_engine",
+            "reset_policy_engine",
+            "select_action",
+            "update",
+            "state_snapshot",
+            "decide",
+            "update_from_outcome"
+          ],
+          "importers": [
+            "examples/policy_engine_usage.py",
+            "services/auto_action_engine.py",
+            "services/decision_brain_v2.py",
+            "services/decision_router.py",
+            "services/health_service.py",
+            "services/observability/decision_metrics.py",
+            "services/policy_engine_lifecycle.py",
+            "services/policy_engine_persistence.py",
+            "tests/test_decision_brain_v2.py",
+            "tests/test_decision_router.py",
+            "tests/test_policy_engine.py"
+          ],
+          "importer_count": 11,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/policy_engine_persistence.py",
+          "dotted": "services.policy_engine_persistence",
+          "lines": 300,
+          "classes": [
+            "PolicyStatePersistence"
+          ],
+          "functions": [
+            "get_persistence",
+            "reset_persistence",
+            "init_policy_engine_with_persistence",
+            "save_state",
+            "load_state",
+            "auto_save_hook",
+            "wrapped_update"
+          ],
+          "importers": [
+            "services/health_service.py",
+            "services/policy_engine_lifecycle.py",
+            "tests/test_decision_router.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/policy_engine_lifecycle.py",
+          "dotted": "services.policy_engine_lifecycle",
+          "lines": 97,
+          "classes": [],
+          "functions": [
+            "register_policy_engine_lifecycle"
+          ],
+          "importers": [],
+          "importer_count": 0,
+          "consolidation": "SAFE"
+        }
+      ],
+      "safe_to_remove_now": [
+        "services/policy_engine_lifecycle.py"
+      ],
+      "blocked_keep": [
+        "services/policy_engine.py",
+        "services/policy_engine_persistence.py"
+      ]
+    },
+    {
+      "prefix": "product",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/product_plans.py",
+          "dotted": "services.product_plans",
+          "lines": 111,
+          "classes": [],
+          "functions": [
+            "effective_tier",
+            "plan_allows",
+            "organization_plan_sync",
+            "organization_plan_from_session",
+            "static_plans_catalog"
+          ],
+          "importers": [
+            "api/routes/ai_chat.py",
+            "api/routes/business_depth.py",
+            "api/routes/personal_command_center.py",
+            "api/routes/product_growth.py",
+            "services/jarvis_extended_tools.py",
+            "tests/test_product_onboarding_journey.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/product_onboarding_service.py",
+          "dotted": "services.product_onboarding_service",
+          "lines": 163,
+          "classes": [],
+          "functions": [
+            "get_product_profile",
+            "save_product_profile",
+            "seed_demo_data_sync",
+            "build_wow_insights_sync",
+            "get_bootstrap_sync"
+          ],
+          "importers": [
+            "api/routes/product_growth.py",
+            "tests/test_product_onboarding_journey.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/product_plans.py"
+      ]
+    },
+    {
+      "prefix": "research",
+      "module_count": 9,
+      "target_hint": "services/research_engine_service.py",
+      "members": [
+        {
+          "path": "services/research_common.py",
+          "dotted": "services.research_common",
+          "lines": 193,
+          "classes": [],
+          "functions": [
+            "tavily_search_sync",
+            "snippets_blob_from_tavily",
+            "groq_json_object_sync",
+            "gemini_generate_sync",
+            "parse_json_lenient",
+            "market_sentiment_score_sync",
+            "long_llm_sync"
+          ],
+          "importers": [
+            "api/routes/brain_execute.py",
+            "api/routes/os_central_brain.py",
+            "services/agent_stock_bridge.py",
+            "services/auto_accounting_service.py",
+            "services/deep_research_engine.py",
+            "services/dpr_generator_service.py",
+            "services/intent_classifier.py",
+            "services/orchestrator.py",
+            "services/research_competitor_service.py",
+            "services/research_engine_service.py",
+            "services/research_market_service.py",
+            "services/research_schemes_service.py",
+            "services/scheduler.py",
+            "services/scientific_validation_engine.py",
+            "tests/test_research_engine.py"
+          ],
+          "importer_count": 15,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/research_engine_service.py",
+          "dotted": "services.research_engine_service",
+          "lines": 187,
+          "classes": [],
+          "functions": [
+            "run_supplier_research_sync"
+          ],
+          "importers": [
+            "services/invention_loop_engine.py",
+            "services/modular_execution_services.py",
+            "services/negotiation_intelligence_engine.py",
+            "services/opportunity_engine.py",
+            "services/scientific_validation_engine.py",
+            "tests/test_research_engine_service.py"
+          ],
+          "importer_count": 6,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/research_engine_templates.py",
+          "dotted": "services.research_engine_templates",
+          "lines": 268,
+          "classes": [],
+          "functions": [
+            "structural_template_topic",
+            "detect_research_business_category",
+            "industrial_energy_skeleton",
+            "financial_stocks_skeleton",
+            "deep_financial_analysis_skeleton",
+            "real_estate_skeleton",
+            "category_label"
+          ],
+          "importers": [
+            "api/routes/executive_os.py",
+            "services/executive_os_service.py",
+            "services/research_autonomy.py",
+            "tests/test_research_autonomy.py",
+            "tests/test_research_engine_templates.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/research_loop_engine.py",
+          "dotted": "services.research_loop_engine",
+          "lines": 139,
+          "classes": [],
+          "functions": [
+            "generate_hypotheses",
+            "run_experiment",
+            "compare_experiment_results",
+            "promote_strategy_update"
+          ],
+          "importers": [
+            "api/routes/research_loop.py",
+            "services/invention_loop_engine.py",
+            "services/research_projects_engine.py",
+            "services/strategy_generator_engine.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/research_market_service.py",
+          "dotted": "services.research_market_service",
+          "lines": 112,
+          "classes": [],
+          "functions": [
+            "research_market_sync"
+          ],
+          "importers": [
+            "api/routes/executive_os.py",
+            "services/jarvis_extended_tools.py",
+            "tests/test_research_engine.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/research_schemes_service.py",
+          "dotted": "services.research_schemes_service",
+          "lines": 194,
+          "classes": [],
+          "functions": [
+            "find_schemes_sync",
+            "list_org_industries_for_user_sync"
+          ],
+          "importers": [
+            "api/routes/executive_os.py",
+            "services/deep_research_engine.py",
+            "services/jarvis_extended_tools.py",
+            "tests/test_research_engine.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/research_autonomy.py",
+          "dotted": "services.research_autonomy",
+          "lines": 117,
+          "classes": [
+            "AutonomousResearchPlan"
+          ],
+          "functions": [
+            "plan_autonomous_research"
+          ],
+          "importers": [
+            "api/routes/executive_os.py",
+            "tests/test_research_autonomy.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/research_competitor_service.py",
+          "dotted": "services.research_competitor_service",
+          "lines": 77,
+          "classes": [],
+          "functions": [
+            "analyze_competitors_sync"
+          ],
+          "importers": [
+            "api/routes/executive_os.py",
+            "services/jarvis_extended_tools.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/research_projects_engine.py",
+          "dotted": "services.research_projects_engine",
+          "lines": 314,
+          "classes": [],
+          "functions": [
+            "create_research_project",
+            "list_research_projects",
+            "get_research_project",
+            "run_research_project"
+          ],
+          "importers": [
+            "api/routes/research_projects.py",
+            "workers/async_tasks.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/research_common.py",
+        "services/research_engine_service.py",
+        "services/research_engine_templates.py",
+        "services/research_loop_engine.py",
+        "services/research_market_service.py",
+        "services/research_schemes_service.py"
+      ]
+    },
+    {
+      "prefix": "self",
+      "module_count": 5,
+      "target_hint": "services/self_evolution_trigger.py",
+      "members": [
+        {
+          "path": "services/self_coder_agent.py",
+          "dotted": "services.self_coder_agent",
+          "lines": 205,
+          "classes": [],
+          "functions": [
+            "self_coder_enabled",
+            "repo_root",
+            "collect_code_context",
+            "patch_targets_allowed",
+            "generate_patch_with_groq",
+            "write_candidate_patch",
+            "run_pipeline"
+          ],
+          "importers": [
+            "api/routes/kernel_microkernel.py",
+            "tests/test_kernel_microkernel.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/self_evolution_trigger.py",
+          "dotted": "services.self_evolution_trigger",
+          "lines": 400,
+          "classes": [],
+          "functions": [
+            "propose_improvement",
+            "get_recurring_errors",
+            "get_declining_metrics",
+            "check_and_trigger",
+            "recent_triggers"
+          ],
+          "importers": [
+            "services/scheduler.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/self_expansion_engine.py",
+          "dotted": "services.self_expansion_engine",
+          "lines": 51,
+          "classes": [],
+          "functions": [
+            "detect_capability_gaps",
+            "run_self_expansion"
+          ],
+          "importers": [
+            "api/routes/self_expansion.py",
+            "services/continuous_thinking_loop_engine.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/self_improvement_engine.py",
+          "dotted": "services.self_improvement_engine",
+          "lines": 98,
+          "classes": [],
+          "functions": [
+            "record_outcome",
+            "get_success_rate",
+            "get_improvement_recommendations"
+          ],
+          "importers": [
+            "api/routes/ai_ltm.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        },
+        {
+          "path": "services/self_learning_engine.py",
+          "dotted": "services.self_learning_engine",
+          "lines": 199,
+          "classes": [],
+          "functions": [
+            "run_self_learning_cycle"
+          ],
+          "importers": [
+            "services/continuous_brain_loop.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": []
+    },
+    {
+      "prefix": "stock",
+      "module_count": 7,
+      "target_hint": "services/stock_market_data_service.py",
+      "members": [
+        {
+          "path": "services/stock_indicator_service.py",
+          "dotted": "services.stock_indicator_service",
+          "lines": 124,
+          "classes": [],
+          "functions": [
+            "rsi_series",
+            "ema_last",
+            "macd_components",
+            "bollinger_position",
+            "analyze_indicators"
+          ],
+          "importers": [
+            "api/routes/stock_assistant.py",
+            "services/agent_stock_bridge.py",
+            "services/jarvis_extended_tools.py",
+            "services/jarvis_proactive_service.py",
+            "services/stock_realtime_monitor.py",
+            "services/stock_signal_service.py",
+            "tests/test_part_d_stock.py"
+          ],
+          "importer_count": 7,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/stock_market_data_service.py",
+          "dotted": "services.stock_market_data_service",
+          "lines": 278,
+          "classes": [],
+          "functions": [
+            "get_live_price",
+            "get_ohlc",
+            "get_volume",
+            "get_52_week"
+          ],
+          "importers": [
+            "api/routes/health.py",
+            "api/routes/stock_assistant.py",
+            "services/agent_stock_bridge.py",
+            "services/broker/paper_adapter.py",
+            "services/jarvis_extended_tools.py",
+            "services/jarvis_proactive_service.py",
+            "services/portfolio_service.py",
+            "services/stock_alert_service.py",
+            "services/stock_indicator_service.py",
+            "services/stock_realtime_monitor.py",
+            "services/stock_signal_service.py"
+          ],
+          "importer_count": 11,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/stock_market_jarvis.py",
+          "dotted": "services.stock_market_jarvis",
+          "lines": 189,
+          "classes": [],
+          "functions": [
+            "analyze_symbol_sync",
+            "get_index_snapshot_sync",
+            "morning_market_brief_sync"
+          ],
+          "importers": [
+            "services/agent_stock_bridge.py",
+            "services/jarvis_extended_tools.py",
+            "services/jarvis_proactive_service.py",
+            "services/market_brief_service.py",
+            "services/orchestrator.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/stock_market_service.py",
+          "dotted": "services.stock_market_service",
+          "lines": 339,
+          "classes": [],
+          "functions": [
+            "fetch_quote_alpha_vantage",
+            "fetch_quote_yfinance",
+            "fuzzy_resolve_indian_equity",
+            "maybe_resolve_equity_for_topic",
+            "list_equity_move_alerts_for_user_sync"
+          ],
+          "importers": [
+            "api/routes/life_os.py",
+            "services/ml/feature_store.py",
+            "services/research_autonomy.py",
+            "tests/test_stock_fuzzy.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/stock_realtime_monitor.py",
+          "dotted": "services.stock_realtime_monitor",
+          "lines": 367,
+          "classes": [
+            "StockRealtimeMonitor"
+          ],
+          "functions": [
+            "connect_to_market_data",
+            "poll_interval_sec",
+            "register_subscriber",
+            "push_synthetic_tick",
+            "unregister_subscriber",
+            "active_users",
+            "ensure_poll_task",
+            "add_price_alert",
+            "evaluate_alerts",
+            "check_risk_limits"
+          ],
+          "importers": [
+            "api/routes/stock_assistant.py",
+            "api/routes/stock_ws.py",
+            "tests/test_stock_realtime_monitor.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/stock_signal_service.py",
+          "dotted": "services.stock_signal_service",
+          "lines": 137,
+          "classes": [],
+          "functions": [
+            "generate_intraday_signal"
+          ],
+          "importers": [
+            "api/routes/stock_assistant.py",
+            "services/agent_stock_bridge.py",
+            "services/jarvis_extended_tools.py",
+            "services/jarvis_proactive_service.py",
+            "services/market_brief_service.py",
+            "services/modular_execution_services.py",
+            "services/opportunity_engine.py",
+            "tests/test_part_d_stock.py"
+          ],
+          "importer_count": 8,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/stock_alert_service.py",
+          "dotted": "services.stock_alert_service",
+          "lines": 144,
+          "classes": [],
+          "functions": [
+            "list_stock_alerts_sync",
+            "add_stock_price_alert_sync",
+            "delete_stock_price_alert_sync"
+          ],
+          "importers": [
+            "api/routes/stock_assistant.py",
+            "services/stock_realtime_monitor.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/stock_indicator_service.py",
+        "services/stock_market_data_service.py",
+        "services/stock_market_jarvis.py",
+        "services/stock_market_service.py",
+        "services/stock_realtime_monitor.py",
+        "services/stock_signal_service.py"
+      ]
+    },
+    {
+      "prefix": "strategy",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/strategy_generator_engine.py",
+          "dotted": "services.strategy_generator_engine",
+          "lines": 142,
+          "classes": [],
+          "functions": [
+            "generate_strategies",
+            "test_strategies",
+            "promote_best_strategy",
+            "generate_and_promote"
+          ],
+          "importers": [
+            "api/routes/strategy_generator.py",
+            "services/autonomous_operations_engine.py",
+            "services/continuous_thinking_loop_engine.py",
+            "services/full_autonomous_operator_mode.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/quant/strategy_registry.py",
+          "dotted": "services.quant.strategy_registry",
+          "lines": 60,
+          "classes": [
+            "StrategyInfo",
+            "StrategyRegistry"
+          ],
+          "functions": [
+            "register",
+            "get",
+            "list_active",
+            "get_best_for_regime"
+          ],
+          "importers": [
+            "api/routes/personal_command_center.py",
+            "services/quant/paper_trader.py"
+          ],
+          "importer_count": 2,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/strategy_generator_engine.py"
+      ]
+    },
+    {
+      "prefix": "task",
+      "module_count": 2,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/task_decomposition.py",
+          "dotted": "services.task_decomposition",
+          "lines": 520,
+          "classes": [],
+          "functions": [
+            "scan_context_hints",
+            "build_plan_steps_from_command",
+            "add"
+          ],
+          "importers": [
+            "services/action_execution_engine.py",
+            "services/autonomous_continuity_engine.py",
+            "services/brain_execute.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/task_aggregator.py",
+          "dotted": "services.task_aggregator",
+          "lines": 183,
+          "classes": [],
+          "functions": [
+            "append_executive_summary",
+            "latest_executive_summary",
+            "build_daily_executive_summary"
+          ],
+          "importers": [
+            "api/routes/sovereign.py"
+          ],
+          "importer_count": 1,
+          "consolidation": "RISKY"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/task_decomposition.py"
+      ]
+    },
+    {
+      "prefix": "website",
+      "module_count": 4,
+      "target_hint": null,
+      "members": [
+        {
+          "path": "services/website_builder_service.py",
+          "dotted": "services.website_builder_service",
+          "lines": 298,
+          "classes": [],
+          "functions": [
+            "slugify_org_name",
+            "assert_user_can_manage_org",
+            "user_can_access_org_sync",
+            "read_site_index_html_sync",
+            "inline_static_assets_for_iframe",
+            "read_site_iframe_preview_sync",
+            "build_website_sync"
+          ],
+          "importers": [
+            "api/routes/website_builder.py",
+            "services/jarvis_extended_tools.py",
+            "services/modular_execution_services.py",
+            "services/website_deploy_service.py",
+            "tests/test_part_e_website_builder.py"
+          ],
+          "importer_count": 5,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/website_db_service.py",
+          "dotted": "services.website_db_service",
+          "lines": 77,
+          "classes": [],
+          "functions": [
+            "upsert_generated_website_sync",
+            "get_generated_website_sync"
+          ],
+          "importers": [
+            "api/routes/code_agent.py",
+            "api/routes/website_builder.py",
+            "services/website_builder_service.py",
+            "tests/test_part_e_website_builder.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/website_deploy_service.py",
+          "dotted": "services.website_deploy_service",
+          "lines": 161,
+          "classes": [],
+          "functions": [
+            "deploy_site_sync"
+          ],
+          "importers": [
+            "api/routes/website_builder.py",
+            "services/website_builder_service.py",
+            "tests/test_part_e_website_builder.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/website_template_service.py",
+          "dotted": "services.website_template_service",
+          "lines": 239,
+          "classes": [],
+          "functions": [
+            "get_template_bundle"
+          ],
+          "importers": [
+            "services/modular_execution_services.py",
+            "services/website_builder_service.py",
+            "tests/test_part_e_website_builder.py"
+          ],
+          "importer_count": 3,
+          "consolidation": "BLOCKED"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/website_builder_service.py",
+        "services/website_db_service.py",
+        "services/website_deploy_service.py",
+        "services/website_template_service.py"
+      ]
+    },
+    {
+      "prefix": "world",
+      "module_count": 2,
+      "target_hint": "services/world_model_engine.py",
+      "members": [
+        {
+          "path": "services/world_model_engine.py",
+          "dotted": "services.world_model_engine",
+          "lines": 105,
+          "classes": [],
+          "functions": [
+            "build_world_model",
+            "persist_world_model",
+            "get_world_model"
+          ],
+          "importers": [
+            "api/routes/system_overview.py",
+            "api/routes/world_model.py",
+            "services/continuous_thinking_loop_engine.py",
+            "services/event_listener_engine.py",
+            "services/full_autonomous_operator_mode.py",
+            "services/goal_engine.py",
+            "services/invention_loop_engine.py",
+            "services/money_loop_engine.py",
+            "services/multi_org_control_engine.py",
+            "services/proactive_autonomy_engine.py",
+            "services/simulation_engine.py",
+            "services/strategy_generator_engine.py"
+          ],
+          "importer_count": 12,
+          "consolidation": "BLOCKED"
+        },
+        {
+          "path": "services/world_scanner.py",
+          "dotted": "services.world_scanner",
+          "lines": 275,
+          "classes": [],
+          "functions": [
+            "append_world_scan_record",
+            "run_world_scan_for_org",
+            "recent_world_events"
+          ],
+          "importers": [
+            "api/routes/sovereign.py",
+            "services/empire_governance.py",
+            "services/realtime_research_engine.py",
+            "services/task_aggregator.py"
+          ],
+          "importer_count": 4,
+          "consolidation": "BLOCKED"
+        }
+      ],
+      "safe_to_remove_now": [],
+      "blocked_keep": [
+        "services/world_model_engine.py",
+        "services/world_scanner.py"
+      ]
+    }
+  ]
+}

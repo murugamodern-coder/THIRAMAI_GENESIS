@@ -1,0 +1,108 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "thiramai-overview",
+  "title": "Thiramai - Overview",
+  "tags": ["thiramai", "overview"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "env",
+        "type": "custom",
+        "label": "Environment",
+        "query": "production,staging,development",
+        "current": {"text": "production", "value": "production"},
+        "options": [
+          {"text": "production", "value": "production"},
+          {"text": "staging", "value": "staging"},
+          {"text": "development", "value": "development"}
+        ]
+      }
+    ]
+  },
+  "links": [
+    {"title": "Decisions", "type": "link", "url": "/d/thiramai-decisions", "targetBlank": false},
+    {"title": "Trading", "type": "link", "url": "/d/thiramai-trading", "targetBlank": false},
+    {"title": "Alerts", "type": "link", "url": "/d/thiramai-alerts", "targetBlank": false}
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Process Uptime",
+      "description": "Seconds since the API process started. Resets to 0 on each restart.",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "thiramai_process_uptime_seconds", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 60}]}}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Memory (MiB)",
+      "description": "Resident set size of the API process in MiB (psutil sampler).",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "thiramai_memory_usage_mb", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "decmbytes", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1024}, {"color": "red", "value": 2048}]}}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "CPU (%)",
+      "description": "Process CPU percent (psutil sampler).",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "thiramai_cpu_usage_pct", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 60}, {"color": "red", "value": 85}]}}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Active Users (24h)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "thiramai_business_active_users", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Request Latency p50/p95/p99 (ms)",
+      "description": "API request latency percentiles by endpoint.",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(thiramai_api_request_latency_ms_bucket[5m])) by (le))", "refId": "A", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, sum(rate(thiramai_api_request_latency_ms_bucket[5m])) by (le))", "refId": "B", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, sum(rate(thiramai_api_request_latency_ms_bucket[5m])) by (le))", "refId": "C", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Error Rate (per minute)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "sum by (status_code) (rate(thiramai_api_error_total[5m]) * 60)", "refId": "A", "legendFormat": "{{status_code}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "stat", "title": "DB Pool Size",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 12},
+      "targets": [{"expr": "thiramai_db_connection_pool_size", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Redis Errors (per minute)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 12},
+      "targets": [{"expr": "sum by (operation) (rate(thiramai_redis_connection_errors_total[5m]) * 60)", "refId": "A", "legendFormat": "{{operation}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "Worker Queue Depth",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 12},
+      "targets": [{"expr": "thiramai_worker_queue_depth", "refId": "A", "legendFormat": "{{queue_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    }
+  ]
+}

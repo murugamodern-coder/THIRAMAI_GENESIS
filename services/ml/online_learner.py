@@ -576,7 +576,7 @@ def online_cluster_features(
     return {
         "ok": True,
         "samples": new_payload["samples_seen"],
-        "centers": [c.tolist() for c in (model.cluster_centers_ or [])],
+        "centers": [c.tolist() for c in (model.cluster_centers_ if model.cluster_centers_ is not None else [])],
         "inertia": float(getattr(model, "inertia_", 0.0) or 0.0),
         "n_clusters": int(model.n_clusters),
         "version": version,

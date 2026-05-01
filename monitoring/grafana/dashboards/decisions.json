@@ -1,0 +1,96 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "thiramai-decisions",
+  "title": "Thiramai - Decision Intelligence",
+  "tags": ["thiramai", "decisions", "ab-test"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "engine",
+        "type": "custom",
+        "label": "Engine",
+        "query": "All,policy_engine,legacy",
+        "current": {"text": "All", "value": "All"},
+        "options": [
+          {"text": "All", "value": "All"},
+          {"text": "policy_engine", "value": "policy_engine"},
+          {"text": "legacy", "value": "legacy"}
+        ]
+      }
+    ]
+  },
+  "links": [
+    {"title": "Overview", "type": "link", "url": "/d/thiramai-overview"},
+    {"title": "Bandit", "type": "link", "url": "/d/thiramai-bandit"}
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Decisions / min (PolicyEngine)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(rate(thiramai_decision_route_total_v2{engine=\"policy_engine\"}[5m]) * 60)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Decisions / min (Legacy)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "sum(rate(thiramai_decision_route_total_v2{engine=\"legacy\"}[5m]) * 60)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "p95 Latency (PolicyEngine, ms)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(thiramai_decision_latency_seconds_bucket{engine=\"policy_engine\"}[5m])) by (le)) * 1000", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}]}}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "p95 Latency (Legacy, ms)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(thiramai_decision_latency_seconds_bucket{engine=\"legacy\"}[5m])) by (le)) * 1000", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}]}}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Decision Latency (p50/p95/p99 by engine)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(thiramai_decision_latency_seconds_bucket[5m])) by (le, engine))", "refId": "A", "legendFormat": "p50 {{engine}}"},
+        {"expr": "histogram_quantile(0.95, sum(rate(thiramai_decision_latency_seconds_bucket[5m])) by (le, engine))", "refId": "B", "legendFormat": "p95 {{engine}}"},
+        {"expr": "histogram_quantile(0.99, sum(rate(thiramai_decision_latency_seconds_bucket[5m])) by (le, engine))", "refId": "C", "legendFormat": "p99 {{engine}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Confidence Gauge (per engine)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "thiramai_decision_confidence_v2", "refId": "A", "legendFormat": "{{engine}}"}],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "max": 1}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Reward Distribution (per engine)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "targets": [{"expr": "histogram_quantile(0.5, sum(rate(thiramai_decision_reward_v2_bucket[10m])) by (le, engine))", "refId": "A", "legendFormat": "median {{engine}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Decision Errors (per engine)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "targets": [{"expr": "sum by (engine, error_type) (rate(thiramai_decision_error_total[5m]) * 60)", "refId": "A", "legendFormat": "{{engine}} / {{error_type}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    }
+  ]
+}

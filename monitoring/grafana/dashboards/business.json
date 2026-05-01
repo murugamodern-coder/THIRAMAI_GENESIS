@@ -1,0 +1,77 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "thiramai-business",
+  "title": "Thiramai - Business KPIs",
+  "tags": ["thiramai", "business"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-7d", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "organization_id", "type": "query", "label": "Org",
+        "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+        "query": "label_values(thiramai_business_revenue_mtd_inr, organization_id)",
+        "current": {"text": "All", "value": "$__all"},
+        "includeAll": true, "multi": false
+      }
+    ]
+  },
+  "links": [{"title": "Overview", "type": "link", "url": "/d/thiramai-overview"}],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Revenue MTD (INR)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(thiramai_business_revenue_mtd_inr{organization_id=~\"$organization_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "currencyINR"}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Active Users (24h)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "thiramai_business_active_users", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Decisions Today",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "sum(increase(thiramai_business_decisions_today_total{organization_id=~\"$organization_id\"}[24h]))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Low-Stock SKUs",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "sum(thiramai_business_inventory_low_stock_count{organization_id=~\"$organization_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 15}]}}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Revenue Trend",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{"expr": "thiramai_business_revenue_mtd_inr{organization_id=~\"$organization_id\"}", "refId": "A", "legendFormat": "org {{organization_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "currencyINR"}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Decisions per Day",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "rate(thiramai_business_decisions_today_total{organization_id=~\"$organization_id\"}[1h]) * 86400", "refId": "A", "legendFormat": "org {{organization_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Inventory Health (SKUs below reorder)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [{"expr": "thiramai_business_inventory_low_stock_count{organization_id=~\"$organization_id\"}", "refId": "A", "legendFormat": "org {{organization_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    }
+  ]
+}

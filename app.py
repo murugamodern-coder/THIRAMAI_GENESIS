@@ -409,6 +409,42 @@ def _init_error_tracking() -> None:
 
 
 @app.on_event("startup")
+async def _startup_observability() -> None:
+    """Initialise business metrics + optional OpenTelemetry tracing.
+
+    Both layers are import-safe and fail open:
+
+    * :func:`services.observability.business_metrics.init_business_metrics`
+      registers ~50 metrics with the default registry that
+      ``prometheus_fastapi_instrumentator`` already exposes via the
+      pre-existing ``/metrics`` endpoint (mounted near the top of this
+      module). It is idempotent.
+    * :func:`core.tracing.init_tracing` is a no-op unless
+      ``THIRAMAI_TRACING_ENABLED`` is truthy AND the OpenTelemetry SDK
+      is installed (it is intentionally not in ``requirements-base.txt``).
+    """
+    try:
+        from services.observability.business_metrics import (
+            init_business_metrics,
+            track_startup,
+        )
+
+        init_business_metrics()
+        track_startup()
+        logging.getLogger("thiramai").info("business metrics ready (existing /metrics endpoint)")
+    except Exception:
+        logging.getLogger("thiramai").exception("business_metrics init failed (continuing)")
+
+    try:
+        from core.tracing import init_tracing
+
+        status = init_tracing(app)
+        logging.getLogger("thiramai").info("tracing init status=%s", status)
+    except Exception:
+        logging.getLogger("thiramai").exception("tracing init failed (continuing)")
+
+
+@app.on_event("startup")
 async def _startup_background_agent() -> None:
     if _background_agent_enabled():
         start_background_agent()
@@ -654,6 +690,31 @@ def _log_command_center_index_sanity() -> None:
 def health_command_center_index() -> dict[str, Any]:
     """Operator probe: does on-disk ``index.html`` use content-hashed ``cc-app-*.js``?"""
     return _command_center_index_diagnostics()
+
+
+@app.get("/health/deep", tags=["System"], summary="Deep health check (DB / Redis / engines)")
+def health_deep() -> JSONResponse:
+    """Comprehensive health probe used by Grafana / Pingdom / k8s readiness.
+
+    Each sub-checker (database, redis, policy_engine, bandit_persistence,
+    broker, world_model, disk) returns its own status and never raises.
+    The overall HTTP status is:
+
+    * 200 → ``healthy``
+    * 200 → ``degraded`` (readable, scrapeable, callers should still trust 200)
+    * 503 → ``unhealthy`` (a critical dependency is hard-down)
+    """
+    from services.health_service import run_deep_health_check
+
+    payload = run_deep_health_check()
+    status_code = 503 if payload.get("status") == "unhealthy" else 200
+    return JSONResponse(payload, status_code=status_code)
+
+
+@app.get("/health/live", tags=["System"], summary="Liveness probe (always 200 if process is up)")
+def health_live() -> dict[str, Any]:
+    """Cheap liveness probe — used by k8s livenessProbe / load balancers."""
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/command-center", tags=["System"], summary="Redirect to Command Center React SPA")

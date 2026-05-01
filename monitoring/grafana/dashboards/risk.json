@@ -1,0 +1,80 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "thiramai-risk",
+  "title": "Thiramai - Risk Monitoring",
+  "tags": ["thiramai", "risk"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "user_id", "type": "query", "label": "User",
+        "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+        "query": "label_values(thiramai_risk_var_inr, user_id)",
+        "current": {"text": "All", "value": "$__all"},
+        "includeAll": true, "multi": false
+      }
+    ]
+  },
+  "links": [
+    {"title": "Trading", "type": "link", "url": "/d/thiramai-trading"},
+    {"title": "Alerts", "type": "link", "url": "/d/thiramai-alerts"}
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "VaR (INR)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(thiramai_risk_var_inr{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "currencyINR"}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Sector Concentration",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "max(thiramai_risk_sector_concentration{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.4}, {"color": "red", "value": 0.6}]}}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Drawdown",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "max(thiramai_trade_max_drawdown_pct{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.05}, {"color": "red", "value": 0.10}]}}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Capital Utilisation",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "avg(thiramai_trade_capital_utilization_pct{user_id=~\"$user_id\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "VaR over Time",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{"expr": "thiramai_risk_var_inr{user_id=~\"$user_id\"}", "refId": "A", "legendFormat": "user {{user_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "currencyINR"}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Sector Concentration Trend",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "thiramai_risk_sector_concentration{user_id=~\"$user_id\"}", "refId": "A", "legendFormat": "user {{user_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Drawdown Trend",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [{"expr": "thiramai_trade_max_drawdown_pct{user_id=~\"$user_id\"}", "refId": "A", "legendFormat": "user {{user_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []}
+    }
+  ]
+}

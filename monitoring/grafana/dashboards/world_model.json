@@ -1,0 +1,84 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "thiramai-world-model",
+  "title": "Thiramai - Bayesian World Model",
+  "tags": ["thiramai", "world-model"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "outcome", "type": "query", "label": "Outcome",
+        "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+        "query": "label_values(thiramai_world_model_prediction_confidence_bucket, outcome)",
+        "current": {"text": "All", "value": "$__all"},
+        "includeAll": true, "multi": true
+      }
+    ]
+  },
+  "links": [
+    {"title": "Online Learner", "type": "link", "url": "/d/thiramai-online-learner"},
+    {"title": "Overview", "type": "link", "url": "/d/thiramai-overview"}
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Variables Tracked",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "thiramai_world_model_variable_count", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Evidence Ticks (24h)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "increase(thiramai_world_model_evidence_total[24h])", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "p95 Update Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(thiramai_world_model_update_latency_ms_bucket[5m])) by (le))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 250}]}}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Updates per Minute",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "sum(rate(thiramai_world_model_evidence_total[5m]) * 60)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "World Model Update Latency Percentiles",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(thiramai_world_model_update_latency_ms_bucket[5m])) by (le))", "refId": "A", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, sum(rate(thiramai_world_model_update_latency_ms_bucket[5m])) by (le))", "refId": "B", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, sum(rate(thiramai_world_model_update_latency_ms_bucket[5m])) by (le))", "refId": "C", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Prediction Confidence (median per outcome)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "histogram_quantile(0.5, sum(rate(thiramai_world_model_prediction_confidence_bucket{outcome=~\"$outcome\"}[10m])) by (le, outcome))", "refId": "A", "legendFormat": "{{outcome}}"}],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "max": 1}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Cumulative Evidence",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [{"expr": "thiramai_world_model_evidence_total", "refId": "A", "legendFormat": "total evidence"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    }
+  ]
+}

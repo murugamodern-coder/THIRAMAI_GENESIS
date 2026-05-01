@@ -1,0 +1,81 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "thiramai-bandit",
+  "title": "Thiramai - Policy Engine Bandit",
+  "tags": ["thiramai", "bandit", "policy-engine"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "action", "type": "query", "label": "Action",
+        "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+        "query": "label_values(thiramai_bandit_action_count_v2, action)",
+        "current": {"text": "All", "value": "$__all"},
+        "includeAll": true, "multi": true
+      }
+    ]
+  },
+  "links": [
+    {"title": "Decisions", "type": "link", "url": "/d/thiramai-decisions"},
+    {"title": "Overview", "type": "link", "url": "/d/thiramai-overview"}
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Exploration Bonus",
+      "description": "LinUCB α confidence bonus emitted for the latest decision.",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "thiramai_bandit_exploration_rate", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Cumulative Regret",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "thiramai_bandit_regret", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 200}]}}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Distinct Actions",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "count(thiramai_bandit_action_count_v2)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Total Selections",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "sum(thiramai_bandit_action_count_v2)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "barchart", "title": "Action Selection Distribution",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{"expr": "thiramai_bandit_action_count_v2{action=~\"$action\"}", "refId": "A", "legendFormat": "{{action}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "θ Norm per Action (LinUCB weight magnitude)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "thiramai_bandit_theta_norm{action=~\"$action\"}", "refId": "A", "legendFormat": "{{action}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Exploration vs Time",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [{"expr": "thiramai_bandit_exploration_rate", "refId": "A", "legendFormat": "exploration"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    }
+  ]
+}

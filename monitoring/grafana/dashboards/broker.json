@@ -1,0 +1,81 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "thiramai-broker",
+  "title": "Thiramai - Broker Integration",
+  "tags": ["thiramai", "broker"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "broker", "type": "query", "label": "Broker",
+        "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+        "query": "label_values(thiramai_trade_broker_errors_total, broker)",
+        "current": {"text": "All", "value": "$__all"},
+        "includeAll": true, "multi": false
+      }
+    ]
+  },
+  "links": [{"title": "Trading", "type": "link", "url": "/d/thiramai-trading"}],
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Broker Errors (1h)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(increase(thiramai_trade_broker_errors_total{broker=~\"$broker\"}[1h]))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "p95 Order Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(thiramai_trade_execution_latency_ms_bucket{broker=~\"$broker\"}[5m])) by (le))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Orders / min",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "sum(rate(thiramai_trade_execution_latency_ms_count{broker=~\"$broker\"}[5m]) * 60)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Error Rate (%)",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "100 * sum(rate(thiramai_trade_broker_errors_total{broker=~\"$broker\"}[5m])) / clamp_min(sum(rate(thiramai_trade_execution_latency_ms_count{broker=~\"$broker\"}[5m])), 1)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Order Latency p50/p95/p99 by side",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(thiramai_trade_execution_latency_ms_bucket{broker=~\"$broker\"}[5m])) by (le, side))", "refId": "A", "legendFormat": "p50 {{side}}"},
+        {"expr": "histogram_quantile(0.95, sum(rate(thiramai_trade_execution_latency_ms_bucket{broker=~\"$broker\"}[5m])) by (le, side))", "refId": "B", "legendFormat": "p95 {{side}}"},
+        {"expr": "histogram_quantile(0.99, sum(rate(thiramai_trade_execution_latency_ms_bucket{broker=~\"$broker\"}[5m])) by (le, side))", "refId": "C", "legendFormat": "p99 {{side}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Errors by Type",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "sum by (error_type) (rate(thiramai_trade_broker_errors_total{broker=~\"$broker\"}[5m]) * 60)", "refId": "A", "legendFormat": "{{error_type}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Orders Throughput",
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS_UID"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [{"expr": "sum by (side) (rate(thiramai_trade_execution_latency_ms_count{broker=~\"$broker\"}[5m]) * 60)", "refId": "A", "legendFormat": "{{side}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    }
+  ]
+}
