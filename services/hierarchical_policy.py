@@ -629,7 +629,15 @@ _VALID_HORIZONS = ("immediate", "tactical", "strategic")
 
 
 class HierarchicalPolicy:
-    """Strategic + tactical + operational decision orchestrator."""
+    """Strategic + tactical + operational decision orchestrator.
+
+    When the request opts in via ``context["check_cross_domain"] = True`` (and
+    a :class:`services.unified_reasoner.UnifiedReasoner` is available) the
+    layer-specific decision is enriched with cross-domain implications and
+    affected-domain hints. The enrichment runs against a *local copy* of the
+    context dict so the caller's input isn't mutated, and is surfaced via the
+    ``cross_domain`` key on the returned decision payload.
+    """
 
     def __init__(
         self,
@@ -638,21 +646,27 @@ class HierarchicalPolicy:
         strategic: StrategicPlanner | None = None,
         tactical: TacticalPlanner | None = None,
         goals_provider: GoalsProvider | None = None,
+        cross_domain_reasoner: Any | None = None,
     ) -> None:
         self.strategic = strategic or StrategicPlanner(simulation_budget=1000)
         self.tactical = tactical or TacticalPlanner()
         self.operational: PolicyEngine = operational or get_policy_engine()
         self._goals_provider: GoalsProvider = goals_provider or default_goals_provider
+        # Held lazily so importing this module never imports the heavyweight
+        # unified_reasoner unless someone actually opts in to cross-domain
+        # enrichment. Tests can inject a stub up-front.
+        self._cross_domain_reasoner = cross_domain_reasoner
 
         self._lock = threading.Lock()
         self.active_goal: StrategicGoal | None = None
         self.active_plan: TacticalPlan | None = None
 
         logger.info(
-            "HierarchicalPolicy ready operational=%s strategic_budget=%d tactical_iter=%d",
+            "HierarchicalPolicy ready operational=%s strategic_budget=%d tactical_iter=%d cross_domain=%s",
             type(self.operational).__name__,
             self.strategic.simulation_budget,
             self.tactical.max_iterations,
+            "preset" if self._cross_domain_reasoner is not None else "lazy",
         )
 
     # -- public --------------------------------------------------------
@@ -662,11 +676,57 @@ class HierarchicalPolicy:
         if h not in _VALID_HORIZONS:
             raise ValueError(f"horizon must be one of {_VALID_HORIZONS}, got {horizon!r}")
         ctx = dict(context or {})
+
+        cross_domain_payload: dict[str, Any] | None = None
+        if ctx.get("check_cross_domain"):
+            cross_domain_payload = self._cross_domain_enrich(ctx)
+            if cross_domain_payload is not None:
+                # Annotate the local copy so downstream layers can see the
+                # implications without forcing the caller to wire them.
+                ctx["cross_domain_implications"] = cross_domain_payload.get("implications", [])
+                ctx["affected_domains"] = cross_domain_payload.get("domains_affected", [])
+
         if h == "strategic":
-            return self._strategic_decision(ctx)
-        if h == "tactical":
-            return self._tactical_decision(ctx)
-        return self._operational_decision(ctx)
+            decision = self._strategic_decision(ctx)
+        elif h == "tactical":
+            decision = self._tactical_decision(ctx)
+        else:
+            decision = self._operational_decision(ctx)
+
+        if cross_domain_payload is not None:
+            decision["cross_domain"] = cross_domain_payload
+        return decision
+
+    def _cross_domain_enrich(self, context: dict[str, Any]) -> dict[str, Any] | None:
+        """Run a cross-domain query through the unified reasoner.
+
+        Returns ``None`` when the reasoner can't be loaded so callers degrade
+        gracefully (the request still gets a normal layered decision)."""
+        try:
+            reasoner = self._cross_domain_reasoner
+            if reasoner is None:
+                from services.unified_reasoner import get_unified_reasoner
+
+                reasoner = get_unified_reasoner()
+                self._cross_domain_reasoner = reasoner
+            query = str(
+                context.get("query") or context.get("intent") or context.get("description") or ""
+            ).strip()
+            if not query:
+                return None
+            domains = context.get("cross_domain_domains")
+            report = reasoner.reason(query, domains=domains) if domains else reasoner.reason(query)
+            return {
+                "query": query,
+                "implications": list(report.get("implications", [])),
+                "domains_affected": list(report.get("domains_affected", [])),
+                "relevant_concepts": list(report.get("relevant_concepts", [])),
+                "primary_action": report.get("primary_action"),
+                "secondary_effects": list(report.get("secondary_effects", [])),
+            }
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("hierarchical.cross_domain_enrich failed: %s", exc, exc_info=True)
+            return None
 
     def reset_active(self) -> None:
         """Drop the active goal / plan; useful for tests and operator commands."""
