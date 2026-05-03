@@ -1,0 +1,2 @@
+import{k as e}from"./cc-vendor-CyTesiP1.js";import{C as a}from"./cc-app-Cm2ISnx0.js";import"./cc-vendor-router-De2AVtcB.js";import"./cc-vendor-state-WWOKp67T.js";function n(){return e.jsx(a,{title:"Payroll",icon:"??",description:"Complete payroll management with compliance",expectedDate:"Q3 2026",features:["Salary processing","PF/ESI calculations","Payslip generation","TDS management"]})}export{n as default};
+//# sourceMappingURL=cc-PayrollPage-BeE1Bh7s.js.map

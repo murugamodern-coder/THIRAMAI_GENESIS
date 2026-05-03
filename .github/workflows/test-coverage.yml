@@ -1,0 +1,94 @@
+# Focused workflow: unit tests + coverage + critical-path gates + Codecov / artifacts.
+name: Test Coverage
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+concurrency:
+  group: coverage-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      THIRAMAI_SAFE_ERRORS: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-base.txt
+            requirements-production.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            --import-mode=importlib \
+            --tb=short \
+            --cov=core \
+            --cov=services \
+            --cov=api \
+            --cov=workers \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=html \
+            --cov-report=xml \
+            --cov-report=json \
+            --cov-branch \
+            -q
+
+      - name: Check critical path coverage
+        run: python scripts/check_critical_coverage.py
+
+      - name: Record coverage trend
+        run: python scripts/track_coverage_trends.py
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-thiramai
+          fail_ci_if_error: false
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-html
+          path: htmlcov/
+
+      - name: Upload coverage JSON + trends
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-data
+          path: |
+            coverage.json
+            coverage.xml
+            coverage-trends.json
+
+      - name: PR coverage comment
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINIMUM_GREEN: 85
+          MINIMUM_ORANGE: 75

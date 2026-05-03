@@ -1,0 +1,197 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "title": "Overview", "type": "link", "url": "/d/thiramai-overview", "targetBlank": false },
+    { "title": "Legacy SLO board", "type": "link", "url": "/d/thiramai-slo", "targetBlank": false }
+  ],
+  "liveNow": false,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["slo", "reliability", "thiramai"],
+  "templating": { "list": [] },
+  "time": { "from": "now-30d", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "SLO Overview",
+  "uid": "thiramai-slo-overview",
+  "version": 1,
+  "weekStart": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API availability (30d SLI)",
+      "description": "Rolling 30d ratio of non-5xx requests. Target 99.9%.",
+      "datasource": { "type": "prometheus", "uid": "PROMETHEUS_DS_UID" },
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "slo:api_requests:success_rate:30d * 100", "legendFormat": "Availability %" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 99 },
+              { "color": "green", "value": 99.9 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto" }
+    },
+    {
+      "id": 2,
+      "type": "gauge",
+      "title": "Error budget remaining (30d)",
+      "description": "1 = full budget, 0 = exhausted, negative = over budget.",
+      "datasource": { "type": "prometheus", "uid": "PROMETHEUS_DS_UID" },
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "slo:api_availability:error_budget_remaining * 100", "legendFormat": "API" },
+        { "refId": "B", "expr": "slo:trading:error_budget_remaining * 100", "legendFormat": "Trading" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": -25,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 25 },
+              { "color": "green", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "showThresholdLabels": true, "showThresholdMarkers": true }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "API p95 latency (5m)",
+      "datasource": { "type": "prometheus", "uid": "PROMETHEUS_DS_UID" },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "slo:api_latency:p95:5m", "legendFormat": "p95" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1.0 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto" }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Burn rate — API availability",
+      "description": "Versus 99.9% objective. Reference lines: 6x slow, 14.4x fast multi-window.",
+      "datasource": { "type": "prometheus", "uid": "PROMETHEUS_DS_UID" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        { "refId": "A", "expr": "slo:api_availability:burn_rate:5m", "legendFormat": "5m" },
+        { "refId": "B", "expr": "slo:api_availability:burn_rate:1h", "legendFormat": "1h" },
+        { "refId": "C", "expr": "slo:api_availability:burn_rate:6h", "legendFormat": "6h" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 10, "showPoints": "never" },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Burn rate — trading execution (proxy SLI)",
+      "datasource": { "type": "prometheus", "uid": "PROMETHEUS_DS_UID" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        { "refId": "A", "expr": "slo:trading:burn_rate:1h", "legendFormat": "1h" },
+        { "refId": "B", "expr": "slo:trading:burn_rate:6h", "legendFormat": "6h" }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 10, "showPoints": "never" }, "unit": "none" },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "DB pool utilization",
+      "datasource": { "type": "prometheus", "uid": "PROMETHEUS_DS_UID" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 13 },
+      "targets": [
+        { "refId": "A", "expr": "slo:db_pool:utilization", "legendFormat": "utilization" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0,
+          "custom": { "fillOpacity": 15, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.8 },
+              { "color": "red", "value": 0.95 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Decision latency p99 (5m)",
+      "datasource": { "type": "prometheus", "uid": "PROMETHEUS_DS_UID" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 13 },
+      "targets": [
+        { "refId": "A", "expr": "slo:decision_latency:p99:5m", "legendFormat": "p99" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "fillOpacity": 10, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.2 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
+    }
+  ]
+}

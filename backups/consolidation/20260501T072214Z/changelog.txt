@@ -1,0 +1,8 @@
+phase1 deleted: services/action_executor.py  classification=SAFE  lines=78
+phase1 deleted: services/approval_store.py  classification=SAFE  lines=175
+phase1 deleted: services/dashboard_command_plugins.py  classification=SAFE  lines=18
+phase1 deleted: services/factory_context_service.py  classification=SAFE  lines=91
+phase1 deleted: services/health_checker.py  classification=SAFE  lines=158
+phase1 deleted: services/integration_crypto.py  classification=SAFE  lines=36
+protected: services/policy_engine_lifecycle.py
+phase1 deleted: services/task_aggregator.py  classification=SAFE  lines=183

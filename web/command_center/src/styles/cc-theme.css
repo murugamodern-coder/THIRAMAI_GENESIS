@@ -477,8 +477,31 @@ body {
   border-radius: var(--cc-radius-control);
   font-family: inherit;
   font-size: 13px;
-  background: #fff;
+  /* Theme-aware: previously hardcoded #fff which made typed text invisible
+     in dark mode (body inherits color: var(--cc-text) = near-white). */
+  background: var(--cc-bg);
+  color: var(--cc-text);
+  caret-color: var(--cc-text);
   transition: border-color var(--cc-dur) var(--cc-ease), box-shadow var(--cc-dur) var(--cc-ease);
+}
+
+.cc-input::placeholder,
+.cc-textarea::placeholder {
+  color: var(--cc-text-muted);
+  opacity: 1;
+}
+
+/* Chrome / Edge autofill paints its own background and text colour and ignores
+   `background`/`color` rules. Use the documented inset-shadow + -webkit-text-fill-color
+   workaround so autofilled credentials remain readable in both themes. */
+.cc-input:-webkit-autofill,
+.cc-input:-webkit-autofill:hover,
+.cc-input:-webkit-autofill:focus,
+.cc-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--cc-text);
+  box-shadow: 0 0 0 1000px var(--cc-bg) inset;
+  caret-color: var(--cc-text);
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 .cc-textarea {

@@ -1,0 +1,81 @@
+# Prevent Windows line-ending issues when working across platforms.
+# Linux containers reject CRLF on shell shebangs (`/bin/bash^M: bad interpreter`)
+# and several tools (alembic, ruff, etc.) misbehave on mixed endings.
+
+# Default: auto-detect text vs binary, normalize text to LF in the index
+* text=auto eol=lf
+
+# Shell scripts MUST use LF (executed inside Linux containers)
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Python / web source — keep LF for cross-platform diffs and CI consistency
+*.py text eol=lf
+*.pyi text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+
+# Config / data files
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.sql text eol=lf
+
+# Docker / infra
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+
+# Env files (LF only — Postgres / shell tools tokenise on \n)
+.env text eol=lf
+.env.* text eol=lf
+
+# Windows-only scripts keep CRLF
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary files — never normalize
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.tgz binary
+*.bz2 binary
+*.xz binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.parquet binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary

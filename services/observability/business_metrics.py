@@ -299,7 +299,35 @@ worker_queue_depth = _gauge(
 )
 db_connection_pool_size = _gauge(
     "thiramai_db_connection_pool_size",
-    "Active DB connection pool size.",
+    "Connections currently checked out from the SQLAlchemy pool (legacy panel; same as checked_out).",
+)
+db_pool_configured = _gauge(
+    "thiramai_db_pool_configured",
+    "Configured SQLAlchemy pool_size (persistent slots).",
+)
+db_pool_max_overflow_configured = _gauge(
+    "thiramai_db_pool_max_overflow_configured",
+    "Configured max_overflow for the SQLAlchemy pool.",
+)
+db_pool_checked_out = _gauge(
+    "thiramai_db_pool_checked_out",
+    "Connections currently checked out from the pool.",
+)
+db_pool_overflow = _gauge(
+    "thiramai_db_pool_overflow",
+    "Overflow connections currently in use (QueuePool).",
+)
+db_pool_checkins_total = _counter(
+    "thiramai_db_pool_checkins_total",
+    "Total pool check-ins (connection returns).",
+)
+db_pool_checkouts_total = _counter(
+    "thiramai_db_pool_checkouts_total",
+    "Total pool check-outs (connection acquisitions).",
+)
+db_pool_timeouts_total = _counter(
+    "thiramai_db_pool_timeouts_total",
+    "Total pool checkout timeouts (QueuePool timeout).",
 )
 redis_connection_errors_total = _counter(
     "thiramai_redis_connection_errors_total",
@@ -433,9 +461,32 @@ except Exception:  # pragma: no cover
     _PSUTIL_AVAILABLE = False
 
 
+def update_pool_metrics() -> None:
+    """Refresh pool gauges from the live engine (no-op if no engine / prometheus missing)."""
+    try:
+        from core.database import get_engine
+        from core.settings import get_settings
+
+        eng = get_engine()
+        if eng is None:
+            return
+        pool = eng.pool
+        s = get_settings()
+        checked = int(pool.checkedout()) if hasattr(pool, "checkedout") else 0
+        overflow = int(pool.overflow()) if hasattr(pool, "overflow") else 0
+        db_pool_configured.set(float(s.POOL_SIZE))
+        db_pool_max_overflow_configured.set(float(s.MAX_OVERFLOW))
+        db_pool_checked_out.set(float(checked))
+        db_pool_overflow.set(float(overflow))
+        db_connection_pool_size.set(float(checked))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("update_pool_metrics failed: %s", exc)
+
+
 def _sample_process() -> None:
     """One-shot sampler that updates uptime / mem / cpu gauges. Safe to call often."""
     process_uptime_seconds.set(float(time.time() - _START_TIME))
+    update_pool_metrics()
     if not _PSUTIL_AVAILABLE or psutil is None:
         return
     try:
@@ -508,6 +559,14 @@ __all__ = [
     "business_revenue_mtd_inr",
     "cpu_usage_pct",
     "db_connection_pool_size",
+    "db_pool_checkins_total",
+    "db_pool_checkouts_total",
+    "db_pool_checked_out",
+    "db_pool_configured",
+    "db_pool_max_overflow_configured",
+    "db_pool_overflow",
+    "db_pool_timeouts_total",
+    "update_pool_metrics",
     "decision_confidence",
     "decision_error_total",
     "decision_latency_seconds",

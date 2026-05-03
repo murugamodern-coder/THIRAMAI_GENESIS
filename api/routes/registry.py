@@ -26,11 +26,13 @@ def attach_domain_routers(app: FastAPI) -> None:
     _prod_danger_off = production_blocks_dangerous_routes()
 
     from api.routes.health import router as health_router
+    from api.routes.monitoring import router as monitoring_router
     from api.routes.jarvis_bridge import router as jarvis_bridge_router
     from api.routes.execute import router as execute_router
     from api.routes.brain_execute import router as brain_execute_router
 
     app.include_router(health_router)
+    app.include_router(monitoring_router)
     if not _prod_danger_off:
         app.include_router(jarvis_bridge_router)
     app.include_router(execute_router)

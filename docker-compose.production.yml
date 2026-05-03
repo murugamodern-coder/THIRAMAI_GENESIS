@@ -7,8 +7,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-thiramai}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-thiramai}
+      # Initial password for the thiramai_app role used by /docker-entrypoint-initdb.d/10-thiramai-app-role.sh.
+      # On existing volumes this has no effect - migration 0079 owns the role.
+      # Default kept in sync with .env.production, scripts/init-db.sh, and migration 0079.
+      THIRAMAI_APP_DB_PASSWORD: ${THIRAMAI_APP_DB_PASSWORD:-thiramai_2026}
     volumes:
       - thiramai_pgdata:/var/lib/postgresql/data
+      # Runs ONLY on a fresh data volume — pre-creates the thiramai_app role so the web
+      # service can connect immediately. Existing deployments rely on migration 0079.
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/10-thiramai-app-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thiramai} -d ${POSTGRES_DB:-thiramai}"]
       interval: 5s
@@ -54,22 +61,32 @@ services:
       - "127.0.0.1:${WEB_PORT:-8000}:8000"
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      ENV: production
-      THIRAMAI_ENV: production
+      ENV: ${ENV:-production}
+      THIRAMAI_ENV: ${THIRAMAI_ENV:-production}
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES:-60}
+      # AI API keys (pass through from --env-file .env.production)
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       THIRAMAI_CORS_ORIGINS: ${THIRAMAI_CORS_ORIGINS:?set THIRAMAI_CORS_ORIGINS}
       THIRAMAI_SAFE_ERRORS: ${THIRAMAI_SAFE_ERRORS:-1}
       THIRAMAI_LOG_JSON: ${THIRAMAI_LOG_JSON:-1}
       THIRAMAI_ENFORCE_SECURE_COOKIES: "1"
       THIRAMAI_DISABLE_AUTO_SCHEMA_CREATE: "1"
       THIRAMAI_DISABLE_CREATE_ALL: "1"
-      EXPECTED_ALEMBIC_REVISION: 0073_self_evolution_phase2
+      # Readiness / Alembic: passed from --env-file .env.production (not loaded implicitly into containers)
+      THIRAMAI_SKIP_ALEMBIC_CHECK: ${THIRAMAI_SKIP_ALEMBIC_CHECK:-0}
+      THIRAMAI_EXPECTED_DB_REVISION: ${THIRAMAI_EXPECTED_DB_REVISION:-}
+      THIRAMAI_HEALTH_IGNORE_ALEMBIC_MISMATCH: ${THIRAMAI_HEALTH_IGNORE_ALEMBIC_MISMATCH:-0}
+      THIRAMAI_HEALTH_REQUIRE_AI: ${THIRAMAI_HEALTH_REQUIRE_AI:-0}
+      THIRAMAI_HEALTH_STRICT_MODE: ${THIRAMAI_HEALTH_STRICT_MODE:-0}
+      THIRAMAI_HEALTH_REQUIRE_GOAL_SQLITE: ${THIRAMAI_HEALTH_REQUIRE_GOAL_SQLITE:-0}
+      THIRAMAI_JOB_SQLITE: ${THIRAMAI_JOB_SQLITE:-1}
+      THIRAMAI_AI_QUALITY_TRACKING: ${THIRAMAI_AI_QUALITY_TRACKING:-1}
       THIRAMAI_RL_TRUST_X_FORWARDED_FOR: ${THIRAMAI_RL_TRUST_X_FORWARDED_FOR:-1}
       THIRAMAI_TRUSTED_PROXY_IPS: ${THIRAMAI_TRUSTED_PROXY_IPS:-}
       THIRAMAI_PROXY_TRUSTED_HOSTS: ${THIRAMAI_PROXY_TRUSTED_HOSTS:-*}
@@ -78,6 +95,14 @@ services:
       THIRAMAI_AUTH_DISABLED: ${THIRAMAI_AUTH_DISABLED:-0}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
       THIRAMAI_COMMAND_CENTER_BUILD_ID: ${THIRAMAI_COMMAND_CENTER_BUILD_ID:-}
+      THIRAMAI_DECISION_AB_TEST: ${THIRAMAI_DECISION_AB_TEST:-false}
+      DECISION_AB_TEST: ${DECISION_AB_TEST:-false}
+      THIRAMAI_POLICY_ENGINE_PCT: ${THIRAMAI_POLICY_ENGINE_PCT:-100}
+      POLICY_ENGINE_PCT: ${POLICY_ENGINE_PCT:-100}
+      POLICY_ENGINE_PERCENTAGE: ${POLICY_ENGINE_PERCENTAGE:-100}
+      THIRAMAI_HEALTH_REQUIRE_POLICY_ENGINE: ${THIRAMAI_HEALTH_REQUIRE_POLICY_ENGINE:-1}
+      THIRAMAI_DISABLE_LEGACY_FALLBACK: ${THIRAMAI_DISABLE_LEGACY_FALLBACK:-0}
+      DISABLE_LEGACY_FALLBACK: ${DISABLE_LEGACY_FALLBACK:-0}
     depends_on:
       db:
         condition: service_healthy
@@ -98,7 +123,8 @@ services:
     stop_grace_period: 60s
     command: ["python", "-m", "workers.run_worker"]
     environment:
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      # Workers run system-wide jobs and need RLS bypass — connect as admin role.
+      DATABASE_URL: ${ADMIN_DATABASE_URL:-${DATABASE_URL:?set DATABASE_URL}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       THIRAMAI_JOB_QUEUE: db
       THIRAMAI_WORKER_POLL_SEC: ${THIRAMAI_WORKER_POLL_SEC:-2}
@@ -130,7 +156,8 @@ services:
     stop_grace_period: 60s
     command: ["python", "-m", "workers.alert_system"]
     environment:
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      # Workers run system-wide jobs and need RLS bypass — connect as admin role.
+      DATABASE_URL: ${ADMIN_DATABASE_URL:-${DATABASE_URL:?set DATABASE_URL}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       THIRAMAI_ENABLE_ALERT_SCHEDULER: "1"
       THIRAMAI_ALERT_INTERVAL_MINUTES: ${THIRAMAI_ALERT_INTERVAL_MINUTES:-15}

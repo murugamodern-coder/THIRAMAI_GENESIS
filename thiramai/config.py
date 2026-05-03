@@ -65,8 +65,14 @@ THIRAMAI_REVIEW_DOUBLE_CHECK = (
 THIRAMAI_APPROVAL_TIMEOUT_SEC = max(30.0, float(os.getenv("THIRAMAI_APPROVAL_TIMEOUT_SEC", "3600") or "3600"))
 # Hard cap on steps per autonomous cycle (0 = unlimited).
 THIRAMAI_MAX_TASKS_PER_CYCLE = max(0, int(os.getenv("THIRAMAI_MAX_TASKS_PER_CYCLE", "0") or "0"))
-# Persist goal API jobs to SQLite (restart-safe).
-THIRAMAI_JOB_SQLITE = os.getenv("THIRAMAI_JOB_SQLITE", "1").strip().lower() in {"1", "true", "yes", "on"}
+# Persist goal API jobs to SQLite (restart-safe). THIRAMAI_JOB_SQLITE_ENABLED wins when set (0/1).
+_job_sqlite_alias = (os.getenv("THIRAMAI_JOB_SQLITE_ENABLED") or "").strip().lower()
+if _job_sqlite_alias in ("0", "false", "no", "off"):
+    THIRAMAI_JOB_SQLITE = False
+elif _job_sqlite_alias in ("1", "true", "yes", "on"):
+    THIRAMAI_JOB_SQLITE = True
+else:
+    THIRAMAI_JOB_SQLITE = os.getenv("THIRAMAI_JOB_SQLITE", "1").strip().lower() in {"1", "true", "yes", "on"}
 # On server start: mark running/queued jobs as interrupted (vs re-queue).
 THIRAMAI_JOB_RECOVER_INTERRUPTED = (
     os.getenv("THIRAMAI_JOB_RECOVER_INTERRUPTED", "1").strip().lower() in {"1", "true", "yes", "on"}

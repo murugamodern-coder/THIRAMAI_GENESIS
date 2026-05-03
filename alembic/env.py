@@ -38,9 +38,25 @@ target_metadata = Base.metadata
 
 
 def _sync_url() -> str:
+    """Resolve the Alembic connection URL.
+
+    Prefers ``ADMIN_DATABASE_URL`` / ``ALEMBIC_DATABASE_URL`` (the privileged
+    role used for migrations: role creation, RLS policy changes, GRANT). Falls
+    back to ``DATABASE_URL`` (the runtime app role) so existing single-role
+    deployments keep working unchanged.
+    """
+    admin_url = (
+        os.getenv("ADMIN_DATABASE_URL")
+        or os.getenv("ALEMBIC_DATABASE_URL")
+        or ""
+    ).strip()
+    if admin_url:
+        return normalize_database_url(admin_url)
     url = get_database_url()
     if not url:
-        raise RuntimeError("DATABASE_URL is not set — required for Alembic.")
+        raise RuntimeError(
+            "Neither ADMIN_DATABASE_URL nor DATABASE_URL is set — required for Alembic."
+        )
     return normalize_database_url(url)
 
 

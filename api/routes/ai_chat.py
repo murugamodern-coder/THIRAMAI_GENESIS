@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from api.dependencies import CurrentUser, get_current_user, require_permission
 from brain import MAX_USER_MESSAGE_CHARS, QueryLengthExceeded, run_brain, run_decision_engine
 from core.ai_output_contract import apply_ai_safety_envelope, extract_url_citations
-from core.decision_schema import AIDecision, decision_is_safe
+from core.decision_schema import ALLOWED_ACTIONS, AIDecision, decision_is_safe
 from core.decision_rbac import can_execute_decision
 from core.rbac import Permission
 from services import action_executor
@@ -22,6 +22,7 @@ from services import approval_service as ai_decision_store
 from services import audit_log as system_audit
 from core.retail_sale_auth import role_may_execute_retail_sale
 from core.sale_intent_heuristic import parsed_sell_intent_from_message
+from services.decision_brain_v2 import get_decision_brain_v2
 from services.usage_log_service import (
     ACTION_AI_DECISION_APPROVED,
     ACTION_AI_DECISION_EXECUTED,
@@ -33,6 +34,103 @@ from services.usage_log_service import (
 )
 
 router = APIRouter(tags=["AI & Council"])
+
+# PolicyEngine / business_default intents emit actions outside AIDecision's executor allowlist.
+# Map bandit arms to safe executor verbs; unmapped → legacy Groq path.
+_POLICY_ARM_TO_AIDECISION_ACTION: dict[str, str] = {
+    "analyze": "noop",
+    "monitor": "noop",
+    "alert": "send_alert",
+    "no_action": "noop",
+}
+
+
+def _bundle_from_decision_brain_v2(v2: dict) -> dict | None:
+    """Convert DecisionBrainV2 unified payload into run_decision_engine_sync-shaped bundle, or None to fall back."""
+    if not isinstance(v2, dict):
+        return None
+    src = str(v2.get("source") or "")
+    raw_action = (v2.get("action") or "").strip().lower()
+    if not raw_action:
+        return None
+
+    if src == "policy_engine":
+        mapped = _POLICY_ARM_TO_AIDECISION_ACTION.get(raw_action)
+        if not mapped or mapped not in ALLOWED_ACTIONS:
+            return None
+        executor_action = mapped
+    elif src == "safe_fallback":
+        mapped = _POLICY_ARM_TO_AIDECISION_ACTION.get(raw_action)
+        if not mapped or mapped not in ALLOWED_ACTIONS:
+            mapped = "noop" if "noop" in ALLOWED_ACTIONS else None
+        if not mapped:
+            return None
+        executor_action = mapped
+    elif src == "legacy_brain":
+        if raw_action not in ALLOWED_ACTIONS:
+            return None
+        executor_action = raw_action
+    else:
+        return None
+
+    conf_f = float(v2.get("confidence") or 0.0)
+    priority: Literal["low", "medium", "high"]
+    if conf_f >= 0.8:
+        priority = "high"
+    elif conf_f >= 0.55:
+        priority = "medium"
+    else:
+        priority = "low"
+
+    reasoning = v2.get("reasoning")
+    rationale = (
+        " ".join(reasoning).strip()
+        if isinstance(reasoning, list)
+        else str(reasoning or "").strip()
+    )
+    if not rationale:
+        rationale = f"{src} action={raw_action}"
+
+    meta = v2.get("metadata")
+    data: dict = {
+        "policy_arm": raw_action,
+        "decision_brain_source": src,
+        "learning_log_id": v2.get("learning_log_id"),
+        "expected_reward": v2.get("expected_reward"),
+    }
+    if isinstance(meta, dict):
+        data["policy_metadata"] = meta
+    fr = v2.get("fallback_reason")
+    if fr:
+        data["fallback_reason"] = str(fr)[:2000]
+
+    dec_dict = {
+        "action": executor_action,
+        "entity": str(v2.get("action_type") or src),
+        "data": data,
+        "priority": priority,
+        "confidence": conf_f,
+        "requires_approval": True,
+        "rationale": rationale[:4000],
+    }
+
+    ctx_snap: dict = {}
+    if isinstance(meta, dict):
+        ctx_snap = dict(meta)
+    ctx_snap["decision_brain_v2"] = {
+        "source": src,
+        "policy_arm": raw_action,
+        "executor_action": executor_action,
+    }
+
+    return {
+        "ok": True,
+        "decision": dec_dict,
+        "context_snapshot": ctx_snap,
+        "error": None,
+        "validation_error": None,
+        "raw_model": "",
+    }
 
 
 class ChatQueryBody(BaseModel):
@@ -201,18 +299,49 @@ async def chat_decision(
     cid = getattr(request.state, "correlation_id", None)
     correlation_id = cid if isinstance(cid, str) else None
 
+    bundle: dict | None = None
     try:
-        bundle = await asyncio.to_thread(
-            lambda: run_decision_engine(
-                body.message.strip(),
-                _user.organization_id,
-                actor_role_name=_user.role_name,
-                user_id=_user.id,
-                correlation_id=correlation_id,
-            ),
+        brain = get_decision_brain_v2()
+        v2_out = await brain.decide(
+            intent="general_decision",
+            context={
+                "message": body.message.strip(),
+                "user_message": body.message.strip(),
+                "organization_id": _user.organization_id,
+                "actor_role_name": _user.role_name,
+                "correlation_id": correlation_id,
+            },
+            user_id=int(_user.id),
+            domain="business",
+            organization_id=int(_user.organization_id),
         )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"decision engine error: {exc}") from exc
+        bundle = _bundle_from_decision_brain_v2(v2_out)
+    except Exception:
+        bundle = None
+
+    if bundle is None:
+        if (os.getenv("THIRAMAI_DISABLE_LEGACY_FALLBACK") or os.getenv("DISABLE_LEGACY_FALLBACK") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="decision unavailable: V2 bundle missing and legacy fallback disabled",
+            )
+        try:
+            bundle = await asyncio.to_thread(
+                lambda: run_decision_engine(
+                    body.message.strip(),
+                    _user.organization_id,
+                    actor_role_name=_user.role_name,
+                    user_id=_user.id,
+                    correlation_id=correlation_id,
+                ),
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"decision engine error: {exc}") from exc
 
     if bundle.get("error") and not bundle.get("decision"):
         raise HTTPException(status_code=503, detail=bundle.get("error") or "decision engine unavailable")

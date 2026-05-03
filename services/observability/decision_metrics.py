@@ -133,10 +133,65 @@ bandit_action_count = _gauge(
     ("action",),
 )
 
+policy_engine_circuit_state = _gauge(
+    "thiramai_policy_engine_circuit_state",
+    "PolicyEngine circuit: 0=closed, 1=open, 2=half-open, -1=unknown.",
+)
+
+safe_fallback_decisions_total = _counter(
+    "thiramai_safe_fallback_decisions_total",
+    "In-process safe_fallback decisions (degraded mode).",
+    (),
+)
+
+policy_engine_wrapped_success_total = _counter(
+    "thiramai_policy_engine_wrapped_success_total",
+    "Successful PolicyEngine.decide calls after circuit breaker.",
+    (),
+)
+
+ai_quality_anomaly_total = _counter(
+    "thiramai_ai_quality_anomalies_total",
+    "In-process AI quality tracker anomaly flags.",
+    (),
+)
+
 
 # ---------------------------------------------------------------------------
 # Public tracking API
 # ---------------------------------------------------------------------------
+
+
+policy_engine_failure_total = _counter(
+    "thiramai_policy_engine_failures_total",
+    "PolicyEngine.decide raised before optional legacy fallback.",
+    (),
+)
+
+
+def track_policy_engine_failure() -> None:
+    policy_engine_failure_total.inc()
+
+
+def track_policy_circuit_state(state: str) -> None:
+    key = (state or "").strip().lower()
+    mapping = {"closed": 0.0, "open": 1.0, "half_open": 2.0}
+    try:
+        policy_engine_circuit_state.set(float(mapping.get(key, -1.0)))
+    except (TypeError, ValueError):
+        return
+
+
+def track_safe_fallback() -> None:
+    safe_fallback_decisions_total.inc()
+
+
+def track_policy_engine_wrapped_success() -> None:
+    policy_engine_wrapped_success_total.inc()
+
+
+def track_ai_quality_anomaly() -> None:
+    ai_quality_anomaly_total.inc()
 
 
 def track_decision_route(engine: str) -> None:
@@ -285,13 +340,19 @@ def record_decision_outcome(
 
 __all__ = [
     "action_counter",
+    "ai_quality_anomaly_total",
     "bandit_action_count",
     "confidence_gauge",
     "decision_latency_histogram",
     "decision_route_counter",
     "exploration_gauge",
+    "policy_engine_circuit_state",
+    "policy_engine_failure_total",
+    "policy_engine_wrapped_success_total",
     "record_decision_outcome",
     "reward_histogram",
+    "safe_fallback_decisions_total",
+    "track_ai_quality_anomaly",
     "track_bandit_state",
     "track_decision_action",
     "track_decision_confidence",
@@ -299,4 +360,8 @@ __all__ = [
     "track_decision_reward",
     "track_decision_route",
     "track_exploration_bonus",
+    "track_policy_circuit_state",
+    "track_policy_engine_failure",
+    "track_policy_engine_wrapped_success",
+    "track_safe_fallback",
 ]

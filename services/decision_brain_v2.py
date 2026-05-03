@@ -23,8 +23,19 @@ Environment variables
 ``THIRAMAI_DECISION_AB_TEST`` / ``DECISION_AB_TEST`` — ``true`` (default) to
 enable A/B routing; ``false`` forces 100% PolicyEngine.
 
-``THIRAMAI_POLICY_ENGINE_PCT`` / ``POLICY_ENGINE_PCT`` — percentage of traffic
-routed to PolicyEngine when A/B is enabled. Default ``50``.
+``THIRAMAI_POLICY_ENGINE_PCT`` / ``POLICY_ENGINE_PCT`` / ``POLICY_ENGINE_PERCENTAGE`` —
+percentage of traffic routed to PolicyEngine when A/B is enabled. Default ``50``.
+
+``THIRAMAI_DISABLE_LEGACY_FALLBACK`` / ``DISABLE_LEGACY_FALLBACK`` — when true,
+``PolicyEngine.decide`` failures re-raise instead of calling the Groq legacy path.
+
+``THIRAMAI_POLICY_SAFE_FALLBACK`` — when true (default), PolicyEngine / circuit failures
+emit an in-process ``safe_fallback`` V2 payload (``no_action``) before Groq legacy.
+When false, failures go straight to legacy (if fallback allowed).
+
+Circuit breaker env: ``THIRAMAI_POLICY_CB_FAILURE_THRESHOLD``,
+``THIRAMAI_POLICY_CB_SUCCESS_THRESHOLD``, ``THIRAMAI_POLICY_CB_TIMEOUT_SECONDS``
+(aliases ``CIRCUIT_BREAKER_*`` also read).
 """
 
 from __future__ import annotations
@@ -41,11 +52,36 @@ from core.database import get_session_factory
 from core.db.models import LearningLog
 from services.decision_brain import run_decision_engine_sync
 from services.policy_engine import DecisionContext, PolicyEngine, get_policy_engine
+from services.policy_engine_wrapper import (
+    build_safe_fallback_v2_payload,
+    circuit_runtime_rejected,
+    guarded_policy_decide,
+)
 
 _LOG = logging.getLogger(__name__)
 
 
 _PRIORITY_TO_CONFIDENCE = {"high": 0.8, "medium": 0.55, "low": 0.3}
+
+
+def _record_ai_quality_from_v2(v2: dict[str, Any]) -> None:
+    if not _bool_env("THIRAMAI_AI_QUALITY_TRACKING", default=True):
+        return
+    try:
+        from services.ai_quality_tracker import get_quality_tracker
+
+        get_quality_tracker().record_decision(
+            action=str(v2.get("action") or ""),
+            confidence=float(v2.get("confidence") or 0.0),
+            source=str(v2.get("source") or "unknown"),
+            metadata={
+                "user_id": v2.get("user_id"),
+                "organization_id": v2.get("organization_id"),
+                "intent": v2.get("intent"),
+            },
+        )
+    except Exception:
+        pass
 
 
 def _bool_env(*names: str, default: bool) -> bool:
@@ -76,7 +112,10 @@ class DecisionBrainV2:
             "THIRAMAI_DECISION_AB_TEST", "DECISION_AB_TEST", default=True
         )
         pct = _float_env(
-            "THIRAMAI_POLICY_ENGINE_PCT", "POLICY_ENGINE_PCT", default=50.0
+            "THIRAMAI_POLICY_ENGINE_PCT",
+            "POLICY_ENGINE_PCT",
+            "POLICY_ENGINE_PERCENTAGE",
+            default=50.0,
         )
         self.policy_engine_percentage = max(0.0, min(100.0, pct))
         _LOG.info(
@@ -173,6 +212,10 @@ class DecisionBrainV2:
             )
             return
 
+        if source == "safe_fallback":
+            _LOG.debug("record_outcome: skip bandit update for safe_fallback")
+            return
+
         _LOG.debug("record_outcome: ignoring decision with source=%r", source)
 
     # -- variants -------------------------------------------------------
@@ -185,8 +228,7 @@ class DecisionBrainV2:
         domain: str,
         organization_id: int | None,
     ) -> dict[str, Any]:
-        try:
-            decision_context = DecisionContext(
+        decision_context = DecisionContext(
                 intent=intent,
                 domain=domain,
                 user_id=user_id,
@@ -196,14 +238,79 @@ class DecisionBrainV2:
                 constraints=dict(context.get("constraints") or {}),
                 metadata=dict(context),
             )
-            output = await asyncio.to_thread(self.policy_engine.decide, decision_context)
+        strict = _bool_env(
+            "THIRAMAI_DISABLE_LEGACY_FALLBACK",
+            "DISABLE_LEGACY_FALLBACK",
+            default=False,
+        )
+        safe_fb = _bool_env("THIRAMAI_POLICY_SAFE_FALLBACK", default=True)
+
+        try:
+            output = await asyncio.to_thread(guarded_policy_decide, self.policy_engine, decision_context)
         except Exception as exc:
-            _LOG.warning("PolicyEngine.decide failed: %s — falling back to legacy", exc)
+            try:
+                from services.observability.decision_metrics import track_policy_engine_failure
+
+                track_policy_engine_failure()
+            except Exception:
+                pass
+            _LOG.error(
+                "PolicyEngine.decide failed user_id=%s org_id=%s: %s",
+                user_id,
+                organization_id,
+                exc,
+                exc_info=True,
+            )
+            if strict:
+                raise
+            if safe_fb:
+                try:
+                    from services.observability.decision_metrics import (
+                        track_decision_confidence,
+                        track_decision_route,
+                        track_safe_fallback,
+                    )
+
+                    track_safe_fallback()
+                    track_decision_route("safe_fallback")
+                    track_decision_confidence(0.3, engine="safe_fallback")
+                except Exception:
+                    pass
+                _LOG.warning(
+                    "PolicyEngine unavailable — safe_fallback (reason=%s circuit=%s)",
+                    exc,
+                    circuit_runtime_rejected(exc),
+                )
+                fb = build_safe_fallback_v2_payload(
+                    reason=str(exc),
+                    intent=intent,
+                    domain=domain,
+                    user_id=user_id,
+                    organization_id=organization_id,
+                    decision_context=decision_context,
+                    policy_engine=self.policy_engine,
+                )
+                _record_ai_quality_from_v2(fb)
+                return fb
+            _LOG.warning("PolicyEngine.decide failed — falling back to legacy: %s", exc)
             return await self._decide_with_legacy(
                 intent, context, user_id, domain, organization_id
             )
 
-        return {
+        try:
+            from services.observability.decision_metrics import (
+                track_decision_confidence,
+                track_decision_route,
+                track_policy_engine_wrapped_success,
+            )
+
+            track_policy_engine_wrapped_success()
+            track_decision_route("policy_engine")
+            track_decision_confidence(float(output.confidence), engine="policy_engine")
+        except Exception:
+            pass
+
+        out = {
             "action": output.action,
             "action_type": output.action_type,
             "confidence": output.confidence,
@@ -223,6 +330,8 @@ class DecisionBrainV2:
             "constraints": decision_context.constraints,
             "metadata": decision_context.metadata,
         }
+        _record_ai_quality_from_v2(out)
+        return out
 
     async def _decide_with_legacy(
         self,
@@ -280,7 +389,18 @@ class DecisionBrainV2:
             timestamp=timestamp,
         )
 
-        return {
+        try:
+            from services.observability.decision_metrics import (
+                track_decision_confidence,
+                track_decision_route,
+            )
+
+            track_decision_route("legacy")
+            track_decision_confidence(float(confidence), engine="legacy")
+        except Exception:
+            pass
+
+        out = {
             "action": action,
             "action_type": action_type,
             "confidence": confidence,
@@ -304,6 +424,8 @@ class DecisionBrainV2:
                 "safety_error": (raw or {}).get("safety_error"),
             },
         }
+        _record_ai_quality_from_v2(out)
+        return out
 
 
 # ---------------------------------------------------------------------------

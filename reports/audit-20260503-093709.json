@@ -1,0 +1,273 @@
+﻿{
+    "timestamp":  "2026-05-03T09:37:09.0010676+05:30",
+    "total":  44,
+    "passed":  39,
+    "failed":  5,
+    "alembic_head":  "0078_add_ai_decisions_table",
+    "results":  [
+                    {
+                        "Section":  "config",
+                        "Name":  ".env.production present",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "config",
+                        "Name":  "docker-compose.production.yml present",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "config",
+                        "Name":  "Dockerfile present",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "config",
+                        "Name":  "Alembic head pinned in core/migration_head.py",
+                        "Pass":  true,
+                        "Detail":  "head=0078_add_ai_decisions_table"
+                    },
+                    {
+                        "Section":  "config",
+                        "Name":  "Alembic check enabled (SKIP=0)",
+                        "Pass":  true,
+                        "Detail":  "SKIP_ALEMBIC_CHECK=0"
+                    },
+                    {
+                        "Section":  "config",
+                        "Name":  "Alembic mismatch ignore set (1)",
+                        "Pass":  true,
+                        "Detail":  "IGNORE_ALEMBIC_MISMATCH=1"
+                    },
+                    {
+                        "Section":  "containers",
+                        "Name":  "db state/health",
+                        "Pass":  true,
+                        "Detail":  "state=running health=healthy"
+                    },
+                    {
+                        "Section":  "containers",
+                        "Name":  "redis state/health",
+                        "Pass":  true,
+                        "Detail":  "state=running health=healthy"
+                    },
+                    {
+                        "Section":  "containers",
+                        "Name":  "web state/health",
+                        "Pass":  true,
+                        "Detail":  "state=running health=healthy"
+                    },
+                    {
+                        "Section":  "containers",
+                        "Name":  "worker-jobs state/health",
+                        "Pass":  true,
+                        "Detail":  "state=running health=healthy"
+                    },
+                    {
+                        "Section":  "containers",
+                        "Name":  "worker-alerts state/health",
+                        "Pass":  true,
+                        "Detail":  "state=running health=healthy"
+                    },
+                    {
+                        "Section":  "health",
+                        "Name":  "/health/live alive",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "health",
+                        "Name":  "/health/ready 200 ready/degraded",
+                        "Pass":  true,
+                        "Detail":  "status=ready"
+                    },
+                    {
+                        "Section":  "health",
+                        "Name":  "AI keys configured (GROQ + TAVILY)",
+                        "Pass":  true,
+                        "Detail":  "groq=True tavily=True"
+                    },
+                    {
+                        "Section":  "health",
+                        "Name":  "Alembic check active (not skipped)",
+                        "Pass":  true,
+                        "Detail":  "detail=at expected head"
+                    },
+                    {
+                        "Section":  "health",
+                        "Name":  "PolicyEngine healthy/degraded",
+                        "Pass":  true,
+                        "Detail":  "status=healthy"
+                    },
+                    {
+                        "Section":  "decision",
+                        "Name":  "Login -\u003e JWT",
+                        "Pass":  true,
+                        "Detail":  "token len=221"
+                    },
+                    {
+                        "Section":  "decision",
+                        "Name":  "/chat/decision returns 200",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "decision",
+                        "Name":  "decision_brain_source set",
+                        "Pass":  true,
+                        "Detail":  "source=policy_engine"
+                    },
+                    {
+                        "Section":  "decision",
+                        "Name":  "Persisted decision_id present",
+                        "Pass":  true,
+                        "Detail":  "decision_id=7"
+                    },
+                    {
+                        "Section":  "db",
+                        "Name":  "alembic_version readable",
+                        "Pass":  true,
+                        "Detail":  "rev=0078_add_ai_decisions_table"
+                    },
+                    {
+                        "Section":  "db",
+                        "Name":  "DB at expected revision",
+                        "Pass":  true,
+                        "Detail":  "db=0078_add_ai_decisions_table expected=0078_add_ai_decisions_table"
+                    },
+                    {
+                        "Section":  "db",
+                        "Name":  "row_security default = on",
+                        "Pass":  true,
+                        "Detail":  "row_security=on"
+                    },
+                    {
+                        "Section":  "db",
+                        "Name":  "core/database.py uses valid row_security value (not \u0027force\u0027)",
+                        "Pass":  false,
+                        "Detail":  "If true, this is a P0 - \u0027force\u0027 is rejected by PostgreSQL"
+                    },
+                    {
+                        "Section":  "db",
+                        "Name":  "Web NOT connecting as the bypass role \u0027thiramai\u0027",
+                        "Pass":  false,
+                        "Detail":  "DATABASE_URL role=postgresql+psycopg2://thiramai:***@db:5432/thiramai"
+                    },
+                    {
+                        "Section":  "auth",
+                        "Name":  "JWT \u0027tv\u0027 enforced on decode",
+                        "Pass":  false,
+                        "Detail":  "Heuristic: looks for \u0027tv\u0027 inside decode_access_token"
+                    },
+                    {
+                        "Section":  "auth",
+                        "Name":  "Login lockout / progressive backoff present",
+                        "Pass":  false,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "auth",
+                        "Name":  "Integration Fernet has no dev-unsafe fallback",
+                        "Pass":  false,
+                        "Detail":  "If false: refuse startup when key is empty in prod"
+                    },
+                    {
+                        "Section":  "tests",
+                        "Name":  "Backend test files \u003e= 50",
+                        "Pass":  true,
+                        "Detail":  "count=119"
+                    },
+                    {
+                        "Section":  "tests",
+                        "Name":  "Has at least one integration test",
+                        "Pass":  true,
+                        "Detail":  "count=1"
+                    },
+                    {
+                        "Section":  "tests",
+                        "Name":  "coverage.json present",
+                        "Pass":  true,
+                        "Detail":  "Run pytest --cov to generate"
+                    },
+                    {
+                        "Section":  "docs",
+                        "Name":  "README.md exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "docs",
+                        "Name":  "docs/deployment/QUICK_START.md exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "docs",
+                        "Name":  "docs/deployment/HEALTH_CHECKS.md exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "docs",
+                        "Name":  "docs/deployment/PRODUCTION_MODE.md exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "docs",
+                        "Name":  "docs/deployment/TROUBLESHOOTING.md exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "docs",
+                        "Name":  "docs/setup/AI_KEYS.md exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "docs",
+                        "Name":  "docs/runbooks/README.md exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "docs",
+                        "Name":  "docs/operations/secrets-management.md exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "ci",
+                        "Name":  ".github/workflows/ci.yml exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "ci",
+                        "Name":  ".github/workflows/test-coverage.yml exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "ci",
+                        "Name":  ".github/workflows/rotate-secrets.yml exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "ci",
+                        "Name":  ".github/workflows/dependency-audit.yml exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    },
+                    {
+                        "Section":  "ci",
+                        "Name":  ".github/workflows/deploy.yml exists",
+                        "Pass":  true,
+                        "Detail":  ""
+                    }
+                ]
+}

@@ -1,0 +1,184 @@
+# Prometheus recording rules for Thiramai SLOs (multi-window SLI / burn / budget helpers).
+# Requires scrape of app /metrics (Instrumentator + business_metrics).
+#
+# Objectives encoded:
+#   api_availability:  99.9%  → acceptable bad ratio = 0.001
+#   trading_success:   99.5%  → acceptable bad ratio = 0.005
+
+groups:
+  - name: slo_api_availability
+    interval: 30s
+    rules:
+      - record: slo:api_requests:success_rate:5m
+        expr: |
+          sum(rate(thiramai_requests_total{status!~"5.."}[5m]))
+          / clamp_min(sum(rate(thiramai_requests_total[5m])), 1e-12)
+
+      - record: slo:api_requests:success_rate:30m
+        expr: |
+          sum(rate(thiramai_requests_total{status!~"5.."}[30m]))
+          / clamp_min(sum(rate(thiramai_requests_total[30m])), 1e-12)
+
+      - record: slo:api_requests:success_rate:1h
+        expr: |
+          sum(rate(thiramai_requests_total{status!~"5.."}[1h]))
+          / clamp_min(sum(rate(thiramai_requests_total[1h])), 1e-12)
+
+      - record: slo:api_requests:success_rate:6h
+        expr: |
+          sum(rate(thiramai_requests_total{status!~"5.."}[6h]))
+          / clamp_min(sum(rate(thiramai_requests_total[6h])), 1e-12)
+
+      - record: slo:api_requests:success_rate:30d
+        expr: |
+          sum(rate(thiramai_requests_total{status!~"5.."}[30d]))
+          / clamp_min(sum(rate(thiramai_requests_total[30d])), 1e-12)
+
+      # Budget remaining: 1 - (actual_bad / allowed_bad), allowed_bad = 1 - 0.999
+      - record: slo:api_availability:error_budget_remaining
+        expr: |
+          1
+          -
+          (
+            (1 - slo:api_requests:success_rate:30d)
+            / 0.001
+          )
+
+      - record: slo:api_availability:burn_rate:1h
+        expr: |
+          (1 - slo:api_requests:success_rate:1h)
+          / 0.001
+
+      - record: slo:api_availability:burn_rate:6h
+        expr: |
+          (1 - slo:api_requests:success_rate:6h)
+          / 0.001
+
+      - record: slo:api_availability:burn_rate:5m
+        expr: |
+          (1 - slo:api_requests:success_rate:5m)
+          / 0.001
+
+      # Short-window burn (multi-burn-rate alerting, Google SRE)
+      - record: slo:api_availability:burn_rate:30m
+        expr: |
+          (1 - slo:api_requests:success_rate:30m)
+          / 0.001
+
+  - name: slo_api_latency
+    interval: 30s
+    rules:
+      - record: slo:api_latency:p95:5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(thiramai_request_duration_seconds_bucket[5m]))
+          )
+
+      - record: slo:api_latency:p99:5m
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (rate(thiramai_request_duration_seconds_bucket[5m]))
+          )
+
+  - name: slo_trading_execution
+    interval: 1m
+    rules:
+      # When no executions in window, treat SLI as 1 (no burn).
+      - record: slo:trading:success_rate:1h
+        expr: |
+          (
+            sum(rate(thiramai_trade_execution_latency_ms_count[1h])) <= 0
+          )
+          * 1
+          +
+          (
+            sum(rate(thiramai_trade_execution_latency_ms_count[1h])) > 0
+          )
+          * (
+            clamp_min(
+              sum(rate(thiramai_trade_execution_latency_ms_count[1h]))
+              - sum(rate(thiramai_trade_broker_errors_total[1h])),
+              0
+            )
+            / sum(rate(thiramai_trade_execution_latency_ms_count[1h]))
+          )
+
+      - record: slo:trading:success_rate:6h
+        expr: |
+          (
+            sum(rate(thiramai_trade_execution_latency_ms_count[6h])) <= 0
+          )
+          * 1
+          +
+          (
+            sum(rate(thiramai_trade_execution_latency_ms_count[6h])) > 0
+          )
+          * (
+            clamp_min(
+              sum(rate(thiramai_trade_execution_latency_ms_count[6h]))
+              - sum(rate(thiramai_trade_broker_errors_total[6h])),
+              0
+            )
+            / sum(rate(thiramai_trade_execution_latency_ms_count[6h]))
+          )
+
+      - record: slo:trading:success_rate:30d
+        expr: |
+          (
+            sum(rate(thiramai_trade_execution_latency_ms_count[30d])) <= 0
+          )
+          * 1
+          +
+          (
+            sum(rate(thiramai_trade_execution_latency_ms_count[30d])) > 0
+          )
+          * (
+            clamp_min(
+              sum(rate(thiramai_trade_execution_latency_ms_count[30d]))
+              - sum(rate(thiramai_trade_broker_errors_total[30d])),
+              0
+            )
+            / sum(rate(thiramai_trade_execution_latency_ms_count[30d]))
+          )
+
+      - record: slo:trading:error_budget_remaining
+        expr: |
+          1
+          -
+          (
+            (1 - slo:trading:success_rate:30d)
+            / 0.005
+          )
+
+      - record: slo:trading:burn_rate:1h
+        expr: |
+          (1 - slo:trading:success_rate:1h)
+          / 0.005
+
+      - record: slo:trading:burn_rate:6h
+        expr: |
+          (1 - slo:trading:success_rate:6h)
+          / 0.005
+
+  - name: slo_decision_latency
+    interval: 30s
+    rules:
+      - record: slo:decision_latency:p99:5m
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (rate(thiramai_decision_latency_seconds_bucket[5m]))
+          )
+
+  - name: slo_db_pool
+    interval: 30s
+    rules:
+      - record: slo:db_pool:utilization
+        expr: |
+          thiramai_db_pool_checked_out
+          / clamp_min(
+            thiramai_db_pool_configured + thiramai_db_pool_max_overflow_configured,
+            1e-9
+          )

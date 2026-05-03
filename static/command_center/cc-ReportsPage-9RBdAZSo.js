@@ -1,0 +1,2 @@
+import{k as e}from"./cc-vendor-CyTesiP1.js";import{C as t}from"./cc-app-Cm2ISnx0.js";import"./cc-vendor-router-De2AVtcB.js";import"./cc-vendor-state-WWOKp67T.js";function p(){return e.jsx(t,{title:"Reports",icon:"??",description:"Comprehensive business reporting suite",expectedDate:"Q2 2026",features:["P&L statements","Cash flow reports","Inventory reports","Custom report builder"]})}export{p as default};
+//# sourceMappingURL=cc-ReportsPage-9RBdAZSo.js.map

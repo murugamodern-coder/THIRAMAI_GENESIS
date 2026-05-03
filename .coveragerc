@@ -1,0 +1,55 @@
+# Coverage.py configuration for THIRAMAI Genesis
+# https://coverage.readthedocs.io/en/latest/config.html
+
+[run]
+source =
+    core
+    services
+    api
+    workers
+branch = True
+# thread-only: greenlet multi‑tracer needs the C tracer; PyTracer (some Windows runs) errors on greenlet.
+concurrency = thread
+dynamic_context = test_function
+relative_files = True
+
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */.venv/*
+    */migrations/*
+    */alembic/*
+    setup.py
+    conftest.py
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+skip_empty = True
+
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
+    raise AssertionError
+    raise NotImplementedError
+    def __repr__
+    if __name__ == .__main__.:
+    @abc.abstractmethod
+    @abstractmethod
+    pass
+    ^\s*\.\.\.\s*$
+
+[html]
+directory = htmlcov
+show_contexts = True
+
+[xml]
+output = coverage.xml
+
+[json]
+output = coverage.json
+show_contexts = True

@@ -1,0 +1,121 @@
+# Service Level Objectives (SLOs) — Thiramai Genesis
+# Human-readable specification (Prometheus rules live under monitoring/prometheus/).
+# Metrics prefix: thiramai_* (prometheus_fastapi_instrumentator + business_metrics).
+
+slos:
+  - name: api_availability
+    description: "API requests succeed (non-5xx responses)."
+    objective: "99.9%"
+    window: 30d
+    measurement:
+      type: availability
+      success_metric: |
+        sum(rate(thiramai_requests_total{status!~"5.."}[5m]))
+      total_metric: |
+        sum(rate(thiramai_requests_total[5m]))
+    alerting:
+      - name: api_availability_fast_burn
+        burn_rate: 14.4
+        window: 1h
+        severity: critical
+        notification: pagerduty
+      - name: api_availability_slow_burn
+        burn_rate: 6
+        window: 6h
+        severity: warning
+        notification: slack
+
+  - name: api_latency_p95
+    description: "95% of API requests complete within 500 ms."
+    objective: "500ms"
+    percentile: 95
+    window: 30d
+    measurement:
+      type: latency
+      metric: |
+        histogram_quantile(0.95,
+          sum by (le) (rate(thiramai_request_duration_seconds_bucket[5m]))
+        )
+    alerting:
+      - name: api_latency_critical
+        threshold: "1000ms"
+        window: 5m
+        severity: critical
+        notification: pagerduty
+      - name: api_latency_warning
+        threshold: "750ms"
+        window: 15m
+        severity: warning
+        notification: slack
+
+  - name: trading_execution_success
+    description: >
+      Proxy SLI: successful trade attempts vs broker errors, using histogram observation
+      counts (thiramai_trade_execution_latency_ms_count) vs thiramai_trade_broker_errors_total.
+      Prefer a dedicated thiramai_trade_execution_total{result} counter long-term.
+    objective: "99.5%"
+    window: 30d
+    measurement:
+      type: availability
+      success_metric: |
+        sum(rate(thiramai_trade_execution_latency_ms_count[1h]))
+        - sum(rate(thiramai_trade_broker_errors_total[1h]))
+      total_metric: |
+        sum(rate(thiramai_trade_execution_latency_ms_count[1h]))
+    alerting:
+      - name: trading_execution_fast_burn
+        burn_rate: 14.4
+        window: 1h
+        severity: critical
+        notification: pagerduty
+      - name: trading_execution_slow_burn
+        burn_rate: 6
+        window: 6h
+        severity: warning
+        notification: slack
+
+  - name: decision_latency_p99
+    description: "99% of decision engine paths complete within 200 ms (all engines)."
+    objective: "200ms"
+    percentile: 99
+    window: 30d
+    measurement:
+      type: latency
+      metric: |
+        histogram_quantile(0.99,
+          sum by (le) (rate(thiramai_decision_latency_seconds_bucket[5m]))
+        )
+    alerting:
+      - name: decision_latency_breach
+        threshold: "500ms"
+        window: 10m
+        severity: warning
+        notification: slack
+
+  - name: db_pool_capacity
+    description: >
+      Connection pool utilization (checked-out / configured capacity).
+      Gauges: thiramai_db_pool_checked_out, thiramai_db_pool_configured,
+      thiramai_db_pool_max_overflow_configured.
+    objective: "Utilization stays below 95% of capacity."
+    window: 30d
+    measurement:
+      type: threshold
+      metric: |
+        thiramai_db_pool_checked_out
+        /
+        (
+          thiramai_db_pool_configured
+          + thiramai_db_pool_max_overflow_configured
+        )
+    alerting:
+      - name: db_pool_exhaustion_warning
+        threshold: 0.8
+        window: 5m
+        severity: warning
+        notification: slack
+      - name: db_pool_exhaustion_critical
+        threshold: 0.95
+        window: 2m
+        severity: critical
+        notification: pagerduty

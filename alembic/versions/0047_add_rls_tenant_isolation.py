@@ -75,10 +75,18 @@ TENANT_TABLES: dict[str, str] = {
 }
 
 
-def _enable_policies(table: str, tenant_col: str) -> None:
+def _session_role_ident() -> str:
+    """SQL identifier for the role running migrations (matches POSTGRES_USER)."""
     from sqlalchemy import text
 
-    present = op.get_bind().execute(
+    return op.get_bind().execute(text("SELECT quote_ident(session_user::text)")).scalar_one()
+
+
+def _enable_policies(table: str, tenant_col: str, bypass_role: str) -> None:
+    from sqlalchemy import text
+
+    connection = op.get_bind()
+    present = connection.execute(
         text("SELECT to_regclass(:qname) IS NOT NULL"),
         {"qname": table},
     ).scalar_one()
@@ -99,7 +107,7 @@ def _enable_policies(table: str, tenant_col: str) -> None:
     op.execute(
         f"""
         CREATE POLICY superuser_bypass ON "{table}"
-        TO postgres
+        TO {bypass_role}
         USING (true);
         """
     )
@@ -120,8 +128,9 @@ def _disable_policies(table: str) -> None:
 
 
 def upgrade() -> None:
+    bypass_role = _session_role_ident()
     for table, tenant_col in TENANT_TABLES.items():
-        _enable_policies(table, tenant_col)
+        _enable_policies(table, tenant_col, bypass_role)
 
 
 def downgrade() -> None:

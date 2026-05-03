@@ -6,6 +6,8 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 
+from typing import Any
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram
@@ -43,6 +45,42 @@ ACTIVE_ORGS = Gauge(
     "thiramai_active_organizations",
     "Number of active organizations",
 )
+
+
+def check_database_pool() -> dict[str, Any]:
+    """SQLAlchemy pool utilization snapshot (QueuePool; best-effort for other pool types)."""
+    from core.settings import get_settings
+
+    try:
+        engine = get_engine()
+        if engine is None:
+            return {"status": "unknown", "detail": "no_database_engine"}
+
+        settings = get_settings()
+        pool = engine.pool
+        checked_out = int(pool.checkedout()) if hasattr(pool, "checkedout") else 0
+        overflow_ct = int(pool.overflow()) if hasattr(pool, "overflow") else 0
+        total_capacity = max(1, int(settings.POOL_SIZE) + int(settings.MAX_OVERFLOW))
+        utilization = checked_out / float(total_capacity)
+        out: dict[str, Any] = {
+            "status": "healthy",
+            "pool_size": int(settings.POOL_SIZE),
+            "max_overflow": int(settings.MAX_OVERFLOW),
+            "total_capacity": total_capacity,
+            "checked_out": checked_out,
+            "overflow": overflow_ct,
+            "utilization": round(utilization, 4),
+            "utilization_pct": f"{utilization * 100:.1f}%",
+        }
+        if utilization > 0.8:
+            out["status"] = "degraded"
+            out["warning"] = "connection_pool_utilization_above_80pct"
+        if checked_out >= total_capacity:
+            out["status"] = "unhealthy"
+            out["error"] = "connection_pool_at_capacity"
+        return out
+    except Exception as exc:
+        return {"status": "unhealthy", "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _execution_runtime_metrics(window_hours: int = 24) -> dict:
@@ -153,9 +191,61 @@ def _truthy(name: str) -> bool:
     return (os.getenv(name) or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def check_policy_engine() -> dict[str, Any]:
+    """
+    PolicyEngine registry probe plus circuit breaker snapshot (does not call ``decide()``).
+    """
+    from services.policy_engine_wrapper import get_policy_circuit_breaker
+
+    circuit = get_policy_circuit_breaker().snapshot()
+    try:
+        from services.observability.decision_metrics import track_policy_circuit_state
+
+        track_policy_circuit_state(str(circuit.get("state") or ""))
+    except Exception:
+        pass
+
+    try:
+        from services.policy_engine import DecisionContext, get_policy_engine
+
+        eng = get_policy_engine()
+        if not callable(getattr(eng, "decide", None)):
+            return {
+                "status": "unhealthy",
+                "error": "PolicyEngine missing decide",
+                "circuit_breaker": circuit,
+            }
+        ctx = DecisionContext(intent="general_decision", domain="business", organization_id=1)
+        actions = eng._get_available_actions(ctx)  # noqa: SLF001
+        if not actions:
+            return {
+                "status": "unhealthy",
+                "error": "no_available_actions",
+                "circuit_breaker": circuit,
+            }
+        st = "healthy"
+        cst = str(circuit.get("state") or "")
+        if cst in ("open", "half_open"):
+            st = "degraded"
+        return {
+            "status": st,
+            "detail": "registry_ok",
+            "action_count": len(actions),
+            "circuit_breaker": circuit,
+        }
+    except Exception as exc:
+        return {
+            "status": "unhealthy",
+            "error": f"{type(exc).__name__}: {exc}",
+            "circuit_breaker": circuit,
+        }
+
+
 def _alembic_status() -> dict:
     if (os.getenv("THIRAMAI_SKIP_ALEMBIC_CHECK") or "").strip() == "1":
         return {"ok": True, "detail": "skipped (THIRAMAI_SKIP_ALEMBIC_CHECK=1)", "revision": None}
+    from core.settings import get_settings
+
     engine = get_engine()
     if engine is None:
         return {"ok": False, "detail": "DATABASE_URL not configured", "revision": None}
@@ -165,6 +255,8 @@ def _alembic_status() -> dict:
             "detail": "non-postgresql dialect — alembic baseline skipped",
             "revision": None,
         }
+    settings = get_settings()
+    expected = (settings.THIRAMAI_EXPECTED_DB_REVISION or "").strip() or EXPECTED_ALEMBIC_REVISION
     try:
         with engine.connect() as conn:
             if not conn.execute(text("SELECT to_regclass('public.alembic_version')")).scalar():
@@ -174,14 +266,19 @@ def _alembic_status() -> dict:
                     "revision": None,
                 }
             rev = conn.execute(text("SELECT version_num FROM alembic_version ORDER BY version_num DESC LIMIT 1")).scalar()
-        if rev != EXPECTED_ALEMBIC_REVISION:
-            return {
-                "ok": False,
-                "detail": f"revision {rev!r} != expected {EXPECTED_ALEMBIC_REVISION!r}",
-                "revision": rev,
-            }
-        return {"ok": True, "detail": "at expected head", "revision": rev}
-    except Exception as exc:
+        if rev != expected:
+            detail = f"revision {rev!r} != expected {expected!r}"
+            if _truthy(settings.THIRAMAI_HEALTH_IGNORE_ALEMBIC_MISMATCH):
+                return {
+                    "ok": True,
+                    "detail": f"mismatch ignored ({detail})",
+                    "revision": rev,
+                    "expected": expected,
+                    "ignored_mismatch": True,
+                }
+            return {"ok": False, "detail": detail, "revision": rev, "expected": expected}
+        return {"ok": True, "detail": "at expected head", "revision": rev, "expected": expected}
+    except Exception as exc:  # noqa: BLE001
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}", "revision": None}
 
 
@@ -227,47 +324,74 @@ def health_stocks() -> dict:
 @router.get("/health/ready", summary="Readiness — DB, optional Redis, Alembic, optional worker heartbeats")
 def health_ready() -> JSONResponse:
     """
-    Returns **200** when dependencies configured in env are satisfied.
+    Returns **200** with ``status: ready`` (or ``degraded`` when strict warnings are enabled) when
+    dependencies configured in env are satisfied; **503** when a **critical** check fails.
 
-    - **PostgreSQL**: ``SELECT 1``
-    - **Alembic**: when dialect is PostgreSQL, ``alembic_version`` must match ``EXPECTED_ALEMBIC_REVISION``
-    - **Redis**: if ``REDIS_URL`` set, must PING
-    - **Workers**: if ``THIRAMAI_HEALTH_EXPECT_WORKERS`` lists roles (e.g. ``job_worker,alert_worker``), each must have a fresh Redis heartbeat key
+    **Critical (typical):** PostgreSQL ``SELECT 1``, pool not exhausted, Redis when ``REDIS_URL`` set,
+    Alembic head (unless ``THIRAMAI_HEALTH_IGNORE_ALEMBIC_MISMATCH=1``), optional worker heartbeats
+    when ``THIRAMAI_HEALTH_EXPECT_WORKERS`` is set, optional AI keys when ``THIRAMAI_HEALTH_REQUIRE_AI=1``,
+    goal-job SQLite when ``THIRAMAI_HEALTH_REQUIRE_GOAL_SQLITE=1``, execution backlog thresholds,
+    PolicyEngine when ``THIRAMAI_HEALTH_REQUIRE_POLICY_ENGINE`` is not disabled (defaults to required).
+
+    **Non-critical / warnings:** missing AI keys when not required; Alembic mismatch when ignored;
+    goal SQLite unhealthy when not required. With ``THIRAMAI_HEALTH_STRICT_MODE=1``, warnings yield
+    ``status: degraded`` (still HTTP 200).
     """
+    from core.settings import get_settings
+
+    settings = get_settings()
     checks: dict = {}
-    ok_all = True
+    warnings: list[str] = []
+    critical = False
+
+    def require_policy_engine() -> bool:
+        v = (settings.THIRAMAI_HEALTH_REQUIRE_POLICY_ENGINE or "1").strip().lower()
+        return v not in ("0", "false", "no", "off")
+
+    require_ai = _truthy(settings.THIRAMAI_HEALTH_REQUIRE_AI or "0")
+    strict_health = _truthy(settings.THIRAMAI_HEALTH_STRICT_MODE)
+    require_goal_sqlite = _truthy(settings.THIRAMAI_HEALTH_REQUIRE_GOAL_SQLITE)
 
     engine = get_engine()
     if engine is None:
         checks["database"] = {"ok": False, "detail": "DATABASE_URL not set"}
-        ok_all = False
+        critical = True
     else:
         try:
             with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             checks["database"] = {"ok": True, "detail": "SELECT 1 ok"}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             checks["database"] = {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
-            ok_all = False
+            critical = True
+
+    if engine is not None:
+        checks["database_pool"] = check_database_pool()
+        if checks["database_pool"].get("status") == "unhealthy":
+            critical = True
 
     if (os.getenv("REDIS_URL") or "").strip():
         r_ok, r_msg = redis_ping_ok()
         checks["redis"] = {"ok": r_ok, "detail": r_msg}
-        ok_all = ok_all and r_ok
+        if not r_ok:
+            critical = True
     else:
         checks["redis"] = {"ok": True, "detail": "skipped (REDIS_URL unset)"}
 
     if engine is not None and engine.dialect.name == "postgresql":
         alembic = _alembic_status()
         checks["alembic"] = alembic
-        ok_all = ok_all and alembic.get("ok", False)
+        if not alembic.get("ok", False):
+            critical = True
+        if alembic.get("ignored_mismatch"):
+            warnings.append(str(alembic.get("detail") or "alembic revision mismatch ignored"))
     else:
         checks["alembic"] = {"ok": True, "detail": "skipped (non-PostgreSQL or no engine)"}
 
     wd = workers_ready_detail()
     checks["workers"] = wd
-    if wd.get("configured"):
-        ok_all = ok_all and bool(wd.get("ok"))
+    if wd.get("configured") and not wd.get("ok"):
+        critical = True
 
     groq_ok = bool((os.getenv("GROQ_API_KEY") or "").strip())
     tav_ok = bool((os.getenv("TAVILY_API_KEY") or "").strip())
@@ -278,11 +402,14 @@ def health_ready() -> JSONResponse:
         "detail": (
             "GROQ_API_KEY and TAVILY_API_KEY present (brain/chat available)"
             if groq_ok and tav_ok
-            else "Missing GROQ_API_KEY or TAVILY_API_KEY — /chat returns 503 until set"
+            else "Missing GROQ_API_KEY or TAVILY_API_KEY — /chat may 503 until set"
         ),
+        "required_for_ready": require_ai,
     }
-    if _truthy("THIRAMAI_HEALTH_REQUIRE_AI"):
-        ok_all = ok_all and groq_ok and tav_ok
+    if require_ai and not (groq_ok and tav_ok):
+        critical = True
+    elif not (groq_ok and tav_ok):
+        warnings.append("AI: GROQ_API_KEY and/or TAVILY_API_KEY not set (optional unless THIRAMAI_HEALTH_REQUIRE_AI=1)")
 
     checks["schema_mode"] = {
         "create_all_auto_allowed": allow_create_all_auto(),
@@ -299,11 +426,17 @@ def health_ready() -> JSONResponse:
 
         gs = goal_jobs.readiness_snapshot()
         checks["thiramai_goal_store"] = gs
-        if gs.get("job_sqlite_enabled"):
-            ok_all = ok_all and bool(gs.get("sqlite", {}).get("ok"))
-    except Exception as exc:
+        sqlite_ok = bool(gs.get("sqlite", {}).get("ok"))
+        if gs.get("job_sqlite_enabled") and require_goal_sqlite and not sqlite_ok:
+            critical = True
+        elif gs.get("job_sqlite_enabled") and not sqlite_ok:
+            warnings.append(
+                "thiramai_goal_store: SQLite job store not healthy "
+                "(set THIRAMAI_JOB_SQLITE=0 / THIRAMAI_JOB_SQLITE_ENABLED=0 or THIRAMAI_HEALTH_REQUIRE_GOAL_SQLITE=0)"
+            )
+    except Exception as exc:  # noqa: BLE001
         checks["thiramai_goal_store"] = {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
-        ok_all = False
+        critical = True
 
     cb_snaps = export_breaker_snapshots()
     checks["circuit_breakers"] = {
@@ -314,15 +447,38 @@ def health_ready() -> JSONResponse:
     if checks["execution_runtime"].get("ok"):
         rt = checks["execution_runtime"]
         if float(rt.get("failure_rate") or 0.0) >= 0.30 or int(rt.get("stuck_running_count") or 0) > 0:
-            ok_all = False
+            critical = True
 
-    body = {
-        "status": "ready" if ok_all else "not_ready",
+    pe = check_policy_engine()
+    checks["policy_engine"] = {
+        "ok": pe.get("status") != "unhealthy",
+        "status": pe.get("status"),
+        "detail": pe.get("detail") or pe.get("error", ""),
+        "action_count": pe.get("action_count"),
+        "circuit_breaker": pe.get("circuit_breaker"),
+        "required_for_ready": require_policy_engine(),
+    }
+    if require_policy_engine() and not checks["policy_engine"]["ok"]:
+        critical = True
+
+    if critical:
+        overall = "not_ready"
+        code = 503
+    elif warnings and strict_health:
+        overall = "degraded"
+        code = 200
+    else:
+        overall = "ready"
+        code = 200
+
+    body: dict = {
+        "status": overall,
         "checks": checks,
+        "warnings": warnings,
         "expected_workers_env": expected_worker_roles_from_env(),
         "metrics": http_metrics_snapshot(),
     }
-    return JSONResponse(status_code=200 if ok_all else 503, content=body)
+    return JSONResponse(status_code=code, content=body)
 
 
 @router.get("/health/system", summary="Execution health and backlog")

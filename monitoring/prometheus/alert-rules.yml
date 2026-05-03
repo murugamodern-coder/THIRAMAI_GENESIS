@@ -1,0 +1,196 @@
+# Prometheus alerting rules derived from monitoring/slos/slo-definitions.yml
+# Multi-window burn for API availability follows Google SRE Workbook (fast/slow).
+
+groups:
+  - name: slo_api_availability_alerts
+    rules:
+      - alert: APIAvailabilityFastBurn
+        expr: |
+          (
+            slo:api_availability:burn_rate:5m > 14.4
+          )
+          and
+          (
+            slo:api_availability:burn_rate:1h > 14.4
+          )
+        for: 2m
+        labels:
+          severity: critical
+          slo: api_availability
+          component: api
+        annotations:
+          summary: "API availability error budget burning fast (multi-window)"
+          description: |
+            5m and 1h burn rates are both above 14.4x versus a 99.9% monthly target.
+            Use recording rules slo:api_availability:burn_rate:5m and slo:api_availability:burn_rate:1h in Grafana;
+            slice thiramai_requests_total by status and check recent deploys.
+          runbook: docs/runbooks/api-availability.md
+
+      - alert: APIAvailabilitySlowBurn
+        expr: slo:api_availability:burn_rate:6h > 6
+        for: 15m
+        labels:
+          severity: warning
+          slo: api_availability
+          component: api
+        annotations:
+          summary: "API availability error budget slow burn elevated"
+          description: |
+            6h burn rate above 6x acceptable consumption. Review error trends before budget is exhausted.
+            Sample value: {{ printf "%.2f" $value }}.
+          runbook: docs/runbooks/api-availability.md
+
+  - name: slo_api_latency_alerts
+    rules:
+      - alert: APILatencyCritical
+        expr: slo:api_latency:p95:5m > 1.0
+        for: 5m
+        labels:
+          severity: critical
+          slo: api_latency_p95
+          component: api
+        annotations:
+          summary: "API p95 latency above 1s (2x 500ms SLO)"
+          description: |
+            slo:api_latency:p95:5m = {{ humanizeDuration $value }} (target 500 ms).
+
+      - alert: APILatencyWarning
+        expr: slo:api_latency:p95:5m > 0.75
+        for: 15m
+        labels:
+          severity: warning
+          slo: api_latency_p95
+          component: api
+        annotations:
+          summary: "API p95 latency above 750 ms"
+          description: |
+            slo:api_latency:p95:5m = {{ humanizeDuration $value }} (target 500 ms).
+
+  - name: slo_trading_execution_alerts
+    rules:
+      - alert: TradingExecutionFastBurn
+        expr: slo:trading:burn_rate:1h > 14.4
+        for: 5m
+        labels:
+          severity: critical
+          slo: trading_execution_success
+          component: trading
+        annotations:
+          summary: "Trading execution error budget burning fast"
+          description: |
+            Proxy SLI burn (trade executions vs broker errors) exceeds 14.4x. See slo:trading:success_rate:1h.
+
+      - alert: TradingExecutionSlowBurn
+        expr: slo:trading:burn_rate:6h > 6
+        for: 30m
+        labels:
+          severity: warning
+          slo: trading_execution_success
+          component: trading
+        annotations:
+          summary: "Trading execution slow burn elevated"
+          description: |
+            6h trading burn rate above 6x. Validate broker connectivity and execution path.
+
+  - name: slo_decision_latency_alerts
+    rules:
+      - alert: DecisionLatencyHigh
+        expr: slo:decision_latency:p99:5m > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          slo: decision_latency_p99
+          component: brain
+        annotations:
+          summary: "Decision engine p99 latency high"
+          description: |
+            slo:decision_latency:p99:5m = {{ humanizeDuration $value }} (SLO 200 ms; alert at 500 ms).
+
+  - name: slo_db_pool_alerts
+    rules:
+      - alert: DatabasePoolExhaustionWarning
+        expr: slo:db_pool:utilization > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          slo: db_pool_capacity
+          component: database
+        annotations:
+          summary: "Database pool utilization above 80%"
+          description: |
+            slo:db_pool:utilization = {{ printf "%.1f" $value }} (ratio of checked-out to pool+overflow).
+          runbook: docs/runbooks/db-pool-exhaustion.md
+
+      - alert: DatabasePoolExhaustionCritical
+        expr: slo:db_pool:utilization >= 0.95
+        for: 2m
+        labels:
+          severity: critical
+          slo: db_pool_capacity
+          component: database
+        annotations:
+          summary: "Database pool utilization critical (>=95%)"
+          description: |
+            Investigate connection leaks, slow queries, or raise POOL_SIZE / MAX_OVERFLOW after validation.
+            Utilization: {{ printf "%.1f" $value }}.
+          runbook: docs/runbooks/db-pool-exhaustion.md
+
+  - name: policy_engine_alerts
+    rules:
+      - alert: PolicyEngineDecideFailing
+        expr: rate(thiramai_policy_engine_failures_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: policy_engine
+        annotations:
+          summary: "PolicyEngine.decide errors (possible legacy fallback)"
+          description: |
+            Rate {{ printf "%.3f" $value }} errors/sec over 5m.
+            Check web logs for PolicyEngine.decide; verify THIRAMAI_DECISION_AB_TEST=false and DB health.
+          runbook: docs/runbooks/policy-engine-failure.md
+
+      - alert: PolicyEngineNoTraffic
+        expr: rate(thiramai_decision_route_total{engine="policy_engine"}[15m]) == 0
+        for: 15m
+        labels:
+          severity: warning
+          component: policy_engine
+        annotations:
+          summary: "No PolicyEngine-routed decisions in 15m"
+          description: "thiramai_decision_route_total{engine='policy_engine'} is flat — confirm traffic or misconfiguration."
+          runbook: docs/runbooks/policy-engine-failure.md
+
+      - alert: PolicyEngineCircuitOpen
+        expr: thiramai_policy_engine_circuit_state == 1
+        for: 2m
+        labels:
+          severity: warning
+          component: policy_engine
+        annotations:
+          summary: "PolicyEngine circuit breaker OPEN"
+          description: |
+            Degraded mode: requests short-circuit to safe_fallback or legacy until recovery window elapses.
+          runbook: docs/runbooks/policy-engine-failure.md
+
+      - alert: SafeFallbackElevated
+        expr: rate(thiramai_safe_fallback_decisions_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: policy_engine
+        annotations:
+          summary: "Elevated safe_fallback decision rate"
+          description: "PolicyEngine failures or circuit trips — inspect logs and thiramai_policy_engine_failures_total."
+          runbook: docs/runbooks/policy-engine-failure.md
+
+      - alert: AIQualityAnomaliesElevated
+        expr: rate(thiramai_ai_quality_anomalies_total[15m]) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+          component: ai_quality
+        annotations:
+          summary: "AI quality tracker flagging anomalies"
+          description: "Review GET /monitoring/ai-quality and decision sources; establish or reset baseline as needed."
+          runbook: docs/deployment/PRODUCTION_CHECKLIST.md

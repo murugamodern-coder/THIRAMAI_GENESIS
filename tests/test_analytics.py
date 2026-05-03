@@ -144,7 +144,14 @@ def _clear_overrides():
     app.dependency_overrides.clear()
 
 
-def test_dashboard_summary_admin_ok(_clear_overrides):
+@patch("api.routes.dashboard.compute_dashboard_summary_sync")
+def test_dashboard_summary_admin_ok(mock_compute, _clear_overrides):
+    mock_compute.return_value = {
+        "ok": True,
+        "revenue_inr": {"today": "0.00", "this_week": "0.00", "this_month": "0.00"},
+        "gst_collected_inr": {"today": {}, "this_month": {}},
+        "top_selling_products": [],
+    }
     async def _admin():
         return CurrentUser(
             id=1,

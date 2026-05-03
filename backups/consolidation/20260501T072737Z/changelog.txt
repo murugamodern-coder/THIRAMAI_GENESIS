@@ -1,0 +1,4 @@
+phase1 deleted: services/dashboard_command_plugins.py  classification=SAFE  lines=18
+phase1 deleted: services/factory_context_service.py  classification=SAFE  lines=91
+phase1 deleted: services/health_checker.py  classification=SAFE  lines=158
+protected: services/policy_engine_lifecycle.py

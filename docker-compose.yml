@@ -68,6 +68,12 @@ services:
       THIRAMAI_LOG_JSON: ${THIRAMAI_LOG_JSON:-0}
       THIRAMAI_JOB_QUEUE: db
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      # PolicyEngine 100% (disable A/B); override in .env for staged rollout
+      THIRAMAI_DECISION_AB_TEST: ${THIRAMAI_DECISION_AB_TEST:-false}
+      DECISION_AB_TEST: ${DECISION_AB_TEST:-false}
+      THIRAMAI_POLICY_ENGINE_PCT: ${THIRAMAI_POLICY_ENGINE_PCT:-100}
+      POLICY_ENGINE_PCT: ${POLICY_ENGINE_PCT:-100}
+      POLICY_ENGINE_PERCENTAGE: ${POLICY_ENGINE_PERCENTAGE:-100}
     depends_on:
       db:
         condition: service_healthy

@@ -144,6 +144,7 @@ def test_legacy_variant_returns_unified_payload(
 def test_fallback_to_legacy_when_policy_engine_raises(
     fresh_brain: DecisionBrainV2, monkeypatch: pytest.MonkeyPatch
 ):
+    monkeypatch.setenv("THIRAMAI_POLICY_SAFE_FALLBACK", "false")
     def boom(*_a: Any, **_kw: Any) -> DecisionOutput:
         raise RuntimeError("simulated bandit failure")
 

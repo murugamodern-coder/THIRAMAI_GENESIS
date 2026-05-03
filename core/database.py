@@ -2,13 +2,14 @@
 THIRAMAI V2.1 data plane: PostgreSQL engine, sessions, and vault readiness probes.
 
 Set ``DATABASE_URL`` in the repository-root ``.env`` (see root ``config.py`` and ``.env.example``).
-``get_engine()`` lazily builds one shared engine with ``pool_pre_ping=True`` so pooled
-connections are validated before use (avoids "lost connection" / timeout errors after long
-idle or laptop sleep). Call ``reset_engine_cache()`` after changing env vars in-process.
+``get_engine()`` lazily builds one shared engine with configurable pool sizing (see
+:class:`core.settings.ThiramaiSettings`) and ``pool_pre_ping``. Call ``reset_engine_cache()``
+after changing env vars in-process.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from contextvars import ContextVar
 from contextlib import contextmanager
@@ -19,6 +20,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy import event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql.elements import TextClause
+
+_log = logging.getLogger(__name__)
 
 _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker[Session]] = None
@@ -42,18 +45,34 @@ def _rls_bypass_enabled() -> bool:
 def _apply_session_rls_context(session: Session) -> None:
     """
     Set PostgreSQL session-local guards:
+
     - ``row_security=off`` for privileged workers/migrations when THIRAMAI_RLS_BYPASS=1
-    - ``app.current_org_id`` for tenant-scoped sessions (explicit org arg or contextvar)
+    - ``row_security=on`` (the only valid boolean for the ``row_security`` GUC)
+      for tenant sessions; table-level ``FORCE ROW LEVEL SECURITY`` from migration 0047
+      gives the "always-on for table owners" semantics that earlier code mistakenly
+      tried to express via the unsupported ``= force`` value.
+    - ``app.current_org_id`` for tenant-scoped sessions (explicit org arg or contextvar).
+
+    Failures are logged at WARNING and re-raised so RLS misconfiguration cannot
+    silently downgrade tenant isolation.
     """
     if _rls_bypass_enabled():
         session.execute(text("SET LOCAL row_security = off"))
         return
-    # Ensure tenant sessions do not accidentally run with RLS bypass semantics.
-    session.execute(text("SET LOCAL row_security = force"))
+    # PostgreSQL accepts only ``on``/``off`` for the ``row_security`` GUC.
+    # Tenant tables already have ``FORCE ROW LEVEL SECURITY`` set by migration 0047,
+    # which is what enforces RLS for table owners; ``SET LOCAL row_security = on``
+    # ensures the session does not opt out.
+    session.execute(text("SET LOCAL row_security = on"))
     org_id = session.info.get("organization_id")
     if org_id is None:
         org_id = get_current_org_id()
     if org_id is None:
+        # Pre-auth / system sessions: no tenant context yet. The permissive-on-unset
+        # ``tenant_isolation`` policy installed by migration 0079 lets these read
+        # auth tables; once a request decodes its JWT, ``set_current_org_id`` is
+        # called and this function will write ``app.current_org_id`` for the next
+        # session opened during the request.
         return
     session.execute(
         text("SELECT set_config('app.current_org_id', :org_id, true)"),
@@ -62,6 +81,14 @@ def _apply_session_rls_context(session: Session) -> None:
 
 
 def get_database_url() -> Optional[str]:
+    try:
+        from core.settings import get_settings
+
+        u = (get_settings().get_secret_or_env("DATABASE_URL") or "").strip()
+        if u:
+            return u
+    except Exception as exc:
+        _log.debug("get_database_url via settings failed: %s", exc)
     u = (os.getenv("DATABASE_URL") or "").strip()
     return u or None
 
@@ -72,6 +99,82 @@ def normalize_database_url(url: str) -> str:
     if url.startswith("postgresql://") and "+" not in url.split("://", 1)[0]:
         url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
+
+
+def _is_sqlite_url(normalized: str) -> bool:
+    return normalized.split("://", 1)[0].lower().startswith("sqlite")
+
+
+def _pg_connect_args(settings: Any) -> dict[str, Any]:
+    return {
+        "connect_timeout": int(settings.DB_CONNECT_TIMEOUT_SECONDS),
+        "options": f"-c statement_timeout={int(settings.DB_STATEMENT_TIMEOUT_MS)}",
+    }
+
+
+def _attach_engine_monitoring(engine: Engine) -> None:
+    """Idempotent: pool event counters + slow statement logging (uses checkout threshold name)."""
+    if getattr(engine, "_thiramai_pool_monitoring", False):
+        return
+    engine._thiramai_pool_monitoring = True
+
+    pool = engine.pool
+
+    @event.listens_for(pool, "checkout")
+    def _on_pool_checkout(_dbapi_conn: Any, _record: Any, _proxy: Any) -> None:
+        try:
+            from services.observability import business_metrics as bm
+
+            bm.db_pool_checkouts_total.inc()
+        except Exception:  # pragma: no cover - prometheus optional
+            return
+
+    @event.listens_for(pool, "checkin")
+    def _on_pool_checkin(_dbapi_conn: Any, _record: Any) -> None:
+        try:
+            from services.observability import business_metrics as bm
+
+            bm.db_pool_checkins_total.inc()
+        except Exception:
+            return
+
+    def _warn_threshold() -> float:
+        from core.settings import get_settings
+
+        return float(get_settings().WARN_ON_POOL_CHECKOUT_SECONDS)
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _before_cursor(conn: Any, _cursor: Any, _statement: Any, _parameters: Any, _context: Any, _executemany: Any) -> None:
+        import time
+
+        conn.info.setdefault("_thiramai_qt_stack", []).append(time.perf_counter())
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _after_cursor(
+        conn: Any,
+        _cursor: Any,
+        statement: Any,
+        _parameters: Any,
+        _context: Any,
+        _executemany: Any,
+    ) -> None:
+        import time
+
+        stack = conn.info.get("_thiramai_qt_stack")
+        if not stack:
+            return
+        start = stack.pop()
+        elapsed = time.perf_counter() - start
+        thr = _warn_threshold()
+        if elapsed >= thr:
+            stmt = str(statement) if statement is not None else ""
+            _log.warning(
+                "slow_db_operation duration=%.3fs threshold=%.3fs statement=%s",
+                elapsed,
+                thr,
+                stmt[:200],
+                extra={"duration_s": elapsed, "statement_prefix": stmt[:200]},
+            )
 
 
 def get_engine() -> Optional[Engine]:
@@ -85,12 +188,50 @@ def get_engine() -> Optional[Engine]:
     if not url:
         return None
     normalized = normalize_database_url(url)
-    kw: dict = {"pool_pre_ping": True}
-    if normalized.split("://", 1)[0].startswith("sqlite"):
-        # PEP 249 transaction semantics: legacy sqlite3 often skips BEGIN on SELECT, which
-        # allows lost-update races under concurrent writers; autocommit=False fixes that.
-        kw["connect_args"] = {"autocommit": False}
-    _engine = create_engine(normalized, **kw)
+
+    from core.settings import get_settings
+
+    settings = get_settings()
+
+    if _is_sqlite_url(normalized):
+        kw_sqlite: dict[str, Any] = {
+            "pool_pre_ping": bool(settings.POOL_PRE_PING),
+            "connect_args": {"autocommit": False},
+        }
+        if settings.debug_truthy():
+            kw_sqlite["echo"] = True
+        _engine_local = create_engine(normalized, **kw_sqlite)
+        _attach_engine_monitoring(_engine_local)
+        _log.info(
+            "database engine created dialect=sqlite pool_pre_ping=%s",
+            settings.POOL_PRE_PING,
+        )
+        _engine = _engine_local
+        return _engine
+
+    kw_pg: dict[str, Any] = {
+        "pool_size": int(settings.POOL_SIZE),
+        "max_overflow": int(settings.MAX_OVERFLOW),
+        "pool_timeout": int(settings.POOL_TIMEOUT),
+        "pool_recycle": int(settings.POOL_RECYCLE),
+        "pool_pre_ping": bool(settings.POOL_PRE_PING),
+        "echo": settings.debug_truthy(),
+        "echo_pool": False,
+        "connect_args": _pg_connect_args(settings),
+    }
+    _engine_local = create_engine(normalized, **kw_pg)
+    _attach_engine_monitoring(_engine_local)
+    _log.info(
+        "database engine created dialect=postgresql pool_size=%s max_overflow=%s pool_timeout=%s "
+        "pool_recycle=%s total_max=%s pre_ping=%s",
+        settings.POOL_SIZE,
+        settings.MAX_OVERFLOW,
+        settings.POOL_TIMEOUT,
+        settings.POOL_RECYCLE,
+        settings.POOL_SIZE + settings.MAX_OVERFLOW,
+        settings.POOL_PRE_PING,
+    )
+    _engine = _engine_local
     return _engine
 
 
@@ -117,12 +258,21 @@ def _session_after_begin_set_rls(session: Session, _transaction, _connection) ->
     """
     Auto-apply tenant RLS context once a transaction begins so ad-hoc ``factory()`` sessions
     used by existing services/routes still inherit request tenant scope.
+
+    Errors here used to be silently swallowed, which masked the ``row_security = force``
+    bug that disabled tenant isolation in production. They are now logged and re-raised
+    so that any RLS misconfiguration becomes a hard failure instead of silent data exposure.
     """
     try:
         _apply_session_rls_context(session)
-    except Exception:
-        # Keep session creation resilient; query-time failures will surface naturally.
-        return
+    except Exception as exc:  # noqa: BLE001
+        _log.error(
+            "RLS session bootstrap failed (%s: %s) — refusing session to avoid "
+            "silent tenant-isolation downgrade.",
+            type(exc).__name__,
+            exc,
+        )
+        raise
 
 
 @contextmanager

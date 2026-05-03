@@ -31,6 +31,8 @@ def test_health_ready_shape() -> None:
     assert "checks" in body
     assert "schema_mode" in body["checks"]
     assert "ai" in body["checks"]
+    assert "policy_engine" in body["checks"]
+    assert "ok" in body["checks"]["policy_engine"]
 
 
 def test_dashboard_live_returns_html() -> None:

@@ -1,4 +1,4 @@
 """Expected Alembic head revision for production readiness checks (update when adding migrations)."""
 
 # Must match the head revision id in ``alembic/versions`` (``alembic upgrade head``).
-EXPECTED_ALEMBIC_REVISION = "0076_paper_trading_table"
+EXPECTED_ALEMBIC_REVISION = "0079_create_app_role_fix_rls"

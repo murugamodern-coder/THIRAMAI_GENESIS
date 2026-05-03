@@ -1,6 +1,6 @@
 # Thiramai Grafana dashboards
 
-Ten dashboards backed by the metrics defined in
+Ten dashboards plus the SLO overview board, backed by the metrics defined in
 `services/observability/business_metrics.py` and the existing
 `prometheus_fastapi_instrumentator` `/metrics` endpoint mounted in `app.py`.
 
@@ -16,6 +16,9 @@ Ten dashboards backed by the metrics defined in
 | `broker.json` | `thiramai-broker` | Order latency / errors / throughput |
 | `alerts.json` | `thiramai-alerts` | SLO violations, error rates, kill-switches |
 | `business.json` | `thiramai-business` | Revenue, decisions/day, inventory |
+| `slo-overview.json` | `thiramai-slo-overview` | SLO recording rules: SLI, error budget, burn rate |
+
+Additional series: `thiramai_ai_quality_anomalies_total` (in-process quality tracker). JSON snapshot: authenticated **GET /monitoring/ai-quality** (`api/routes/monitoring.py`).
 
 ## Datasource
 

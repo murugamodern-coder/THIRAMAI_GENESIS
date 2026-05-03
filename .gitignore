@@ -32,6 +32,14 @@ Thumbs.db
 # Python caches / binaries
 __pycache__/
 *.pyc
+
+# Coverage / pytest-cov (generated locally and in CI artifacts)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+coverage.json
+coverage-trends.json
 *.pyo
 *.pyd
 .Python
@@ -47,3 +55,7 @@ var/
 vault/
 *.jsonl
 *.log
+
+# Local live test artifact (generated)
+local_live_test_results.txt
+.cache/local_live_test/
