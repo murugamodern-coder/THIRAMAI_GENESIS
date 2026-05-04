@@ -129,6 +129,7 @@ def attach_domain_routers(app: FastAPI) -> None:
     from api.routes.autonomous_operations import router as autonomous_operations_router
     from api.routes.system_bootstrap import router as system_bootstrap_router
     from api.routes.research_projects import router as research_projects_router
+    from api.routes.os.research import router as os_research_router
     from api.routes.action_execution import router as action_execution_router
     from api.routes.autonomy_safety import router as autonomy_safety_router
     from api.routes.domain_dominion import router as domain_dominion_router
@@ -194,6 +195,7 @@ def attach_domain_routers(app: FastAPI) -> None:
     app.include_router(autonomous_operations_router)
     app.include_router(system_bootstrap_router)
     app.include_router(research_projects_router)
+    app.include_router(os_research_router)
     app.include_router(action_execution_router)
     app.include_router(autonomy_safety_router)
     app.include_router(domain_dominion_router)

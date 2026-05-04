@@ -20,6 +20,7 @@ google-api-python-client==2.194.0
 langgraph==1.1.6
 langchain-core==1.2.29
 tavily-python==0.7.23
+duckduckgo-search==6.3.0
 pypdf==6.10.2
 fpdf2==2.8.7
 pydantic-settings==2.13.1

@@ -23,11 +23,27 @@ class ExecutionContractContext:
 
 
 def activate_execution_context(run_id: int) -> ExecutionContractContext:
+    """Bind ``run_id`` to the current ContextVar scope.
+
+    Historically this function also reset ``_pipeline_stages`` to ``[]``.
+    That was wrong: the brain pipeline marks ``brain_execute`` and
+    ``preflight`` *before* a run id is created (they run as part of
+    planning), and only calls ``activate_execution_context`` once
+    ``run_persisted_action_plan`` is about to start. Wiping the list here
+    deleted those earlier marks, so ``assert_pipeline_sequence`` always
+    saw only ``execute_action_plan / closure / retry_learning`` and
+    raised ``pipeline_missing_stages:brain_execute,preflight,...``.
+
+    Per-call isolation is now the sole responsibility of
+    ``clear_execution_context``, which the brain entrypoint already
+    invokes in a ``finally`` block. Each fresh request starts with the
+    ContextVar default ``[]`` (or the previous-call clear), accumulates
+    the five required marks, asserts the order, and clears.
+    """
     rid = int(run_id)
     if rid <= 0:
         raise ExecutionContractViolation("execution_context_requires_positive_run_id")
     _current_run_id.set(rid)
-    _pipeline_stages.set([])
     return ExecutionContractContext(run_id=rid)
 
 

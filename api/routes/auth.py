@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -110,6 +110,41 @@ class UserMeResponse(BaseModel):
 def ensure_roles_seeded(session: Session, organization_id: int) -> None:
     """Ensure default roles + General department exist (idempotent)."""
     ensure_tenant_defaults(session, organization_id)
+
+
+def get_user_roles(session: Session, user_id: int) -> list[dict[str, Any]]:
+    """
+    Fetch all roles for a user across all their organization memberships.
+    
+    Returns a list of role dictionaries with id, name, level, and organization_id.
+    """
+    stmt = select(
+        Role.id,
+        Role.name,
+        Role.level,
+        Role.organization_id,
+        Organization.name.label("organization_name")
+    ).select_from(
+        UserOrganizationMembership
+    ).join(
+        Role, UserOrganizationMembership.role_id == Role.id
+    ).join(
+        Organization, UserOrganizationMembership.organization_id == Organization.id
+    ).where(
+        UserOrganizationMembership.user_id == user_id
+    )
+    
+    result = session.execute(stmt)
+    roles = []
+    for row in result:
+        roles.append({
+            "id": int(row.id),
+            "name": row.name,
+            "level": int(row.level),
+            "organization_id": int(row.organization_id),
+            "organization_name": row.organization_name,
+        })
+    return roles
 
 
 @router.post(

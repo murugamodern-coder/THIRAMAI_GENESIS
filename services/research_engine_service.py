@@ -13,7 +13,7 @@ import os
 import re
 from typing import Any
 
-from services.research_common import groq_json_object_sync, tavily_search_sync
+from core.agents.researcher import perform_research
 
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 _PHONE_RE = re.compile(r"(?:\+91[-\s]?)?[6-9]\d{9}\b")
@@ -162,11 +162,18 @@ def run_supplier_research_sync(
     cache_key = f"thiramai:research:suppliers:{q.lower()[:280]}:{int(max_results)}"
 
     def _compute() -> dict[str, Any]:
-        raw = tavily_search_sync(q, max_results=max(5, min(int(max_results), 30)))
-        if isinstance(raw, dict) and raw.get("ok") is False:
-            return {"ok": False, "error": raw.get("error") or "web search failed", "suppliers": [], "links": []}
-
-        results = [r for r in (raw.get("results") or []) if isinstance(r, dict)] if isinstance(raw, dict) else []
+        raw = perform_research(q, max_results=max(5, min(int(max_results), 30)))
+        # Convert DuckDuckGo results to expected format
+        results = []
+        for item in raw:
+            if isinstance(item, dict):
+                results.append({
+                    "title": item.get("title", ""),
+                    "url": item.get("url", ""),
+                    "content": item.get("snippet", ""),
+                    "snippet": item.get("snippet", "")
+                })
+        
         links = list(dict.fromkeys(str(r.get("url") or "").strip() for r in results if r.get("url")))[:25]
 
         llm = _llm_extract(q, results)
@@ -184,4 +191,13 @@ def run_supplier_research_sync(
         }
 
     return get_or_set_cache(cache_key, ttl, _compute)
+
+
+def perform_duckduckgo_research(query: str, max_results: int = 10) -> list[dict[str, Any]]:
+    """
+    Perform web research using DuckDuckGo.
+    
+    Returns list of search results with title, url, snippet.
+    """
+    return perform_research(query, max_results)
 

@@ -195,11 +195,29 @@ def _collect_internal_signals(user_id: int, topic: str) -> list[dict[str, Any]]:
 
 
 def _collect_web_stub(topic: str, cycle: int) -> list[dict[str, Any]]:
-    # Intentional no-side-effect research stub: creates a web exploration trace without execution side effects.
-    return [
-        {"source": "web", "topic": topic, "query": f"{topic} recent trends", "cycle": cycle},
-        {"source": "web", "topic": topic, "query": f"{topic} benchmark cases", "cycle": cycle},
-    ]
+    """Collect web research data using DuckDuckGo search."""
+    try:
+        from core.agents.researcher import perform_research
+        
+        results = perform_research(f"{topic} recent trends", max_results=5)
+        web_data = []
+        for result in results:
+            web_data.append({
+                "source": "web",
+                "topic": topic,
+                "query": f"{topic} recent trends",
+                "cycle": cycle,
+                "title": result.get("title", ""),
+                "url": result.get("url", ""),
+                "snippet": result.get("snippet", ""),
+            })
+        return web_data
+    except Exception as exc:
+        # Fallback to stub data if search fails
+        return [
+            {"source": "web", "topic": topic, "query": f"{topic} recent trends", "cycle": cycle},
+            {"source": "web", "topic": topic, "query": f"{topic} benchmark cases", "cycle": cycle},
+        ]
 
 
 def _build_final_output(project: dict[str, Any], ranked_hypotheses: list[dict[str, Any]]) -> dict[str, Any]:
