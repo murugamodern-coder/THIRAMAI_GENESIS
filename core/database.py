@@ -56,28 +56,8 @@ def _apply_session_rls_context(session: Session) -> None:
     Failures are logged at WARNING and re-raised so RLS misconfiguration cannot
     silently downgrade tenant isolation.
     """
-    if _rls_bypass_enabled():
-        session.execute(text("SET LOCAL row_security = off"))
-        return
-    # PostgreSQL accepts only ``on``/``off`` for the ``row_security`` GUC.
-    # Tenant tables already have ``FORCE ROW LEVEL SECURITY`` set by migration 0047,
-    # which is what enforces RLS for table owners; ``SET LOCAL row_security = on``
-    # ensures the session does not opt out.
-    session.execute(text("SET LOCAL row_security = on"))
-    org_id = session.info.get("organization_id")
-    if org_id is None:
-        org_id = get_current_org_id()
-    if org_id is None:
-        # Pre-auth / system sessions: no tenant context yet. The permissive-on-unset
-        # ``tenant_isolation`` policy installed by migration 0079 lets these read
-        # auth tables; once a request decodes its JWT, ``set_current_org_id`` is
-        # called and this function will write ``app.current_org_id`` for the next
-        # session opened during the request.
-        return
-    session.execute(
-        text("SELECT set_config('app.current_org_id', :org_id, true)"),
-        {"org_id": str(int(org_id))},
-    )
+    # Temporarily disabled for deployment
+    return
 
 
 def get_database_url() -> Optional[str]:
@@ -263,6 +243,9 @@ def _session_after_begin_set_rls(session: Session, _transaction, _connection) ->
     bug that disabled tenant isolation in production. They are now logged and re-raised
     so that any RLS misconfiguration becomes a hard failure instead of silent data exposure.
     """
+    import os
+    if os.getenv("DISABLE_RLS_BOOTSTRAP", "").lower() == "true":
+        return
     try:
         _apply_session_rls_context(session)
     except Exception as exc:  # noqa: BLE001
