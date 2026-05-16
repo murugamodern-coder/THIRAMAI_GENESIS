@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator, Optional
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy import event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql.elements import TextClause
@@ -48,7 +48,13 @@ class RlsSessionBootstrapError(RuntimeError):
     """PostgreSQL RLS session guards could not be applied."""
 
 
-def _apply_session_rls_context(session: Session) -> None:
+def _apply_session_rls_context(
+    session: Session,
+    *,
+    connection: Connection | None = None,
+) -> None:
+    if os.getenv("DISABLE_RLS_BOOTSTRAP", "").lower() == "true":
+        return
     """
     Set PostgreSQL session-local guards:
 
@@ -59,19 +65,27 @@ def _apply_session_rls_context(session: Session) -> None:
       tried to express via the unsupported ``= force`` value.
     - ``app.current_org_id`` for tenant-scoped sessions (explicit org arg or contextvar).
 
+    Use ``connection`` when called from SQLAlchemy ``after_begin`` (session cannot
+    ``execute()`` while the connection is still being provisioned).
+
     Failures are logged at WARNING and re-raised so RLS misconfiguration cannot
     silently downgrade tenant isolation.
     """
+    if connection is not None:
+        execute = connection.execute
+    else:
+        execute = session.execute
+
     if _rls_bypass_enabled():
-        session.execute(text("SET LOCAL row_security = off"))
+        execute(text("SET LOCAL row_security = off"))
         return
-    session.execute(text("SET LOCAL row_security = on"))
+    execute(text("SET LOCAL row_security = on"))
     org_id = session.info.get("organization_id")
     if org_id is None:
         org_id = get_current_org_id()
     if org_id is None:
         return
-    session.execute(
+    execute(
         text("SELECT set_config('app.current_org_id', :org_id, true)"),
         {"org_id": str(int(org_id))},
     )
@@ -81,26 +95,29 @@ def get_rls_session(
     session: Session,
     *,
     organization_id: int | None = None,
+    connection: Connection | None = None,
 ) -> Session:
+    if os.getenv("DISABLE_RLS_BOOTSTRAP", "").lower() == "true":
+        return session
     """
     Ensure engine/session factory exist (thread-safe), then apply RLS GUCs.
 
     Must run inside an active transaction (e.g. SQLAlchemy ``after_begin``).
+    Pass ``connection`` from the ``after_begin`` listener to avoid
+    ``InvalidRequestError: concurrent operations are not permitted``.
     """
-    if os.getenv("DISABLE_RLS_BOOTSTRAP", "").lower() == "true":
-        return session
-
-    with _provision_lock:
-        factory = get_session_factory()
-    if factory is None:
-        raise RlsSessionBootstrapError(
-            "DATABASE_URL is not set or engine could not be created."
-        )
+    if connection is None:
+        with _provision_lock:
+            factory = get_session_factory()
+        if factory is None:
+            raise RlsSessionBootstrapError(
+                "DATABASE_URL is not set or engine could not be created."
+            )
 
     try:
         if organization_id is not None:
             session.info["organization_id"] = int(organization_id)
-        _apply_session_rls_context(session)
+        _apply_session_rls_context(session, connection=connection)
     except RlsSessionBootstrapError:
         raise
     except Exception as exc:
@@ -298,7 +315,7 @@ def get_session_factory() -> Optional[sessionmaker[Session]]:
 
 
 @event.listens_for(Session, "after_begin")
-def _session_after_begin_set_rls(session: Session, _transaction, _connection) -> None:
+def _session_after_begin_set_rls(session: Session, _transaction, connection: Connection) -> None:
     """
     Auto-apply tenant RLS context once a transaction begins so ad-hoc ``factory()`` sessions
     used by existing services/routes still inherit request tenant scope.
@@ -307,7 +324,7 @@ def _session_after_begin_set_rls(session: Session, _transaction, _connection) ->
     bug that disabled tenant isolation in production. They are now logged and re-raised
     so that any RLS misconfiguration becomes a hard failure instead of silent data exposure.
     """
-    get_rls_session(session)
+    get_rls_session(session, connection=connection)
 
 
 @contextmanager
@@ -318,7 +335,7 @@ def session_scope(organization_id: int | None = None) -> Iterator[Session]:
     session = factory()
     try:
         if organization_id is not None:
-            get_rls_session(session, organization_id=organization_id)
+            session.info["organization_id"] = int(organization_id)
         yield session
         session.commit()
     except Exception:
