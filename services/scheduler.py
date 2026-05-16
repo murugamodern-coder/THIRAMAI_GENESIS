@@ -232,6 +232,11 @@ def _user_kill_switch_active(user_id: int) -> bool:
         return False
 
 
+def _autonomous_loop_disabled(env_var: str) -> bool:
+    """Production stabilization: loop skipped when env var is exactly ``1``."""
+    return (os.getenv(env_var) or "").strip() == "1"
+
+
 def _env_int(name: str, default: int, *, low: int = 1, high: int = 100000) -> int:
     try:
         v = int((os.getenv(name) or str(default)).strip() or str(default))
@@ -343,11 +348,16 @@ class ThiramaiScheduler:
             "last_snapshot": {},
         }
 
+    def _maybe_start_loop(self, disable_env: str, loop_name: str, coro_method: Any) -> None:
+        if _autonomous_loop_disabled(disable_env):
+            _log.info("%s: Loop disabled by env flag", loop_name)
+            return
+        self.tasks.append(asyncio.create_task(coro_method()))
+
     async def start(self) -> None:
         self.running = True
         self.tasks = [
             asyncio.create_task(self.daily_morning_brief()),
-            asyncio.create_task(self.stock_alert_monitor()),
             asyncio.create_task(self.system_health_check()),
             asyncio.create_task(self.memory_cleanup()),
             asyncio.create_task(self.execution_watchdog_cron()),
@@ -357,18 +367,14 @@ class ThiramaiScheduler:
             asyncio.create_task(self.money_loop_cron()),
             asyncio.create_task(self.goal_engine_cron()),
             asyncio.create_task(self.research_loop_cron()),
-            asyncio.create_task(self.continuous_thinking_cron()),
-            asyncio.create_task(self.brain_continuous_loop_cron()),
             asyncio.create_task(self.strategic_intelligence_cron()),
             asyncio.create_task(self.autonomous_operations_cron()),
-            asyncio.create_task(self.continuity_loop_cron()),
             asyncio.create_task(self.domain_weekly_review_cron()),
             asyncio.create_task(self.nightly_research_cron()),
             asyncio.create_task(self.architect_auto_propose_cron()),
             asyncio.create_task(self.world_model_snapshot_cron()),
             asyncio.create_task(self.meta_learning_cycle_cron()),
             asyncio.create_task(self.learning_pipeline_nightly_cron()),
-            asyncio.create_task(self.self_evolution_trigger_cron()),
             asyncio.create_task(self.online_learner_resolve_cron()),
             asyncio.create_task(self.causal_graph_populate_cron()),
             asyncio.create_task(self.feature_archive_daily_cron()),
@@ -378,6 +384,27 @@ class ThiramaiScheduler:
             asyncio.create_task(self.paper_trading_cron()),
             asyncio.create_task(self.weekly_backtest_cron()),
         ]
+        self._maybe_start_loop("THIRAMAI_DISABLE_STOCK_ALERTS", "stock_alert_monitor", self.stock_alert_monitor)
+        self._maybe_start_loop(
+            "THIRAMAI_DISABLE_CONTINUOUS_THINKING",
+            "continuous_thinking_cron",
+            self.continuous_thinking_cron,
+        )
+        self._maybe_start_loop(
+            "THIRAMAI_DISABLE_BRAIN_LOOP",
+            "brain_continuous_loop_cron",
+            self.brain_continuous_loop_cron,
+        )
+        self._maybe_start_loop(
+            "THIRAMAI_DISABLE_CONTINUITY_LOOP",
+            "continuity_loop_cron",
+            self.continuity_loop_cron,
+        )
+        self._maybe_start_loop(
+            "THIRAMAI_DISABLE_SELF_EVOLUTION",
+            "self_evolution_trigger_cron",
+            self.self_evolution_trigger_cron,
+        )
         if _autonomous_business_operator_enabled():
             self.tasks.append(asyncio.create_task(self.autonomous_business_operator_cron()))
 
@@ -729,6 +756,9 @@ class ThiramaiScheduler:
         Disable with ``THIRAMAI_SELF_EVOLUTION_TRIGGER_CRON=0``. Hourly cadence
         is overridable via ``THIRAMAI_SELF_EVOLUTION_TRIGGER_MINUTES`` (default 60).
         """
+        if _autonomous_loop_disabled("THIRAMAI_DISABLE_SELF_EVOLUTION"):
+            _log.info("self_evolution_trigger_cron: Loop disabled by env flag")
+            return
         if (os.getenv("THIRAMAI_SELF_EVOLUTION_TRIGGER_CRON") or "1").strip() in ("0", "false", "off", "no"):
             _log.info("self_evolution_trigger_cron disabled via env")
             return
@@ -960,6 +990,9 @@ class ThiramaiScheduler:
 
     async def stock_alert_monitor(self) -> None:
         """Every 5 minutes — snapshot active stock alert rules into Redis lists per org."""
+        if _autonomous_loop_disabled("THIRAMAI_DISABLE_STOCK_ALERTS"):
+            _log.info("stock_alert_monitor: Loop disabled by env flag")
+            return
         while self.running:
             try:
                 await asyncio.sleep(300)
@@ -1286,6 +1319,9 @@ class ThiramaiScheduler:
         inside ``run_brain_cycle`` (autonomy mode, ``validate_action``). Set
         ``THIRAMAI_BRAIN_CONTINUOUS_LOOP_CRON=0`` to disable.
         """
+        if _autonomous_loop_disabled("THIRAMAI_DISABLE_BRAIN_LOOP"):
+            _log.info("brain_continuous_loop_cron: Loop disabled by env flag")
+            return
         import os
 
         from services.autonomy_safety_layer import global_autonomy_halted
@@ -1333,6 +1369,9 @@ class ThiramaiScheduler:
 
     async def continuous_thinking_cron(self) -> None:
         """Every few minutes: think -> prioritize goals -> execute -> learn."""
+        if _autonomous_loop_disabled("THIRAMAI_DISABLE_CONTINUOUS_THINKING"):
+            _log.info("continuous_thinking_cron: Loop disabled by env flag")
+            return
 
         interval_min = 5
         try:
@@ -1421,6 +1460,9 @@ class ThiramaiScheduler:
         one continuity tick per active user+org (RQ when enabled, else inline thread).
         Set ``THIRAMAI_CONTINUITY_CRON=0`` to disable this loop. Per-tenant gating: ``continuity_user_settings.enabled``.
         """
+        if _autonomous_loop_disabled("THIRAMAI_DISABLE_CONTINUITY_LOOP"):
+            _log.info("continuity_loop_cron: Loop disabled by env flag")
+            return
         import os
 
         from services.async_task_queue import enqueue_task
