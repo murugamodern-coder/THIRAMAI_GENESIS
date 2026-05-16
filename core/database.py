@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from contextvars import ContextVar
 from contextlib import contextmanager
 from typing import Any, Iterator, Optional
@@ -23,6 +24,7 @@ from sqlalchemy.sql.elements import TextClause
 
 _log = logging.getLogger(__name__)
 
+_provision_lock = threading.RLock()
 _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker[Session]] = None
 _current_org_id: ContextVar[int | None] = ContextVar("thiramai_current_org_id", default=None)
@@ -42,6 +44,10 @@ def _rls_bypass_enabled() -> bool:
     return (os.getenv("THIRAMAI_RLS_BYPASS") or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+class RlsSessionBootstrapError(RuntimeError):
+    """PostgreSQL RLS session guards could not be applied."""
+
+
 def _apply_session_rls_context(session: Session) -> None:
     """
     Set PostgreSQL session-local guards:
@@ -56,8 +62,59 @@ def _apply_session_rls_context(session: Session) -> None:
     Failures are logged at WARNING and re-raised so RLS misconfiguration cannot
     silently downgrade tenant isolation.
     """
-    # Temporarily disabled for deployment
-    return
+    if _rls_bypass_enabled():
+        session.execute(text("SET LOCAL row_security = off"))
+        return
+    session.execute(text("SET LOCAL row_security = on"))
+    org_id = session.info.get("organization_id")
+    if org_id is None:
+        org_id = get_current_org_id()
+    if org_id is None:
+        return
+    session.execute(
+        text("SELECT set_config('app.current_org_id', :org_id, true)"),
+        {"org_id": str(int(org_id))},
+    )
+
+
+def get_rls_session(
+    session: Session,
+    *,
+    organization_id: int | None = None,
+) -> Session:
+    """
+    Ensure engine/session factory exist (thread-safe), then apply RLS GUCs.
+
+    Must run inside an active transaction (e.g. SQLAlchemy ``after_begin``).
+    """
+    if os.getenv("DISABLE_RLS_BOOTSTRAP", "").lower() == "true":
+        return session
+
+    with _provision_lock:
+        factory = get_session_factory()
+    if factory is None:
+        raise RlsSessionBootstrapError(
+            "DATABASE_URL is not set or engine could not be created."
+        )
+
+    try:
+        if organization_id is not None:
+            session.info["organization_id"] = int(organization_id)
+        _apply_session_rls_context(session)
+    except RlsSessionBootstrapError:
+        raise
+    except Exception as exc:
+        _log.error(
+            "RLS session bootstrap failed (%s: %s) — refusing session to avoid "
+            "silent tenant-isolation downgrade.",
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
+        raise RlsSessionBootstrapError(
+            f"RLS session bootstrap failed: {type(exc).__name__}: {exc}"
+        ) from exc
+    return session
 
 
 def get_database_url() -> Optional[str]:
@@ -164,63 +221,67 @@ def get_engine() -> Optional[Engine]:
         return None
     if _engine is not None:
         return _engine
-    url = get_database_url()
-    if not url:
-        return None
-    normalized = normalize_database_url(url)
+    with _provision_lock:
+        if _engine is not None:
+            return _engine
+        url = get_database_url()
+        if not url:
+            return None
+        normalized = normalize_database_url(url)
 
-    from core.settings import get_settings
+        from core.settings import get_settings
 
-    settings = get_settings()
+        settings = get_settings()
 
-    if _is_sqlite_url(normalized):
-        kw_sqlite: dict[str, Any] = {
+        if _is_sqlite_url(normalized):
+            kw_sqlite: dict[str, Any] = {
+                "pool_pre_ping": bool(settings.POOL_PRE_PING),
+                "connect_args": {"autocommit": False},
+            }
+            if settings.debug_truthy():
+                kw_sqlite["echo"] = True
+            _engine_local = create_engine(normalized, **kw_sqlite)
+            _attach_engine_monitoring(_engine_local)
+            _log.info(
+                "database engine created dialect=sqlite pool_pre_ping=%s",
+                settings.POOL_PRE_PING,
+            )
+            _engine = _engine_local
+            return _engine
+
+        kw_pg: dict[str, Any] = {
+            "pool_size": int(settings.POOL_SIZE),
+            "max_overflow": int(settings.MAX_OVERFLOW),
+            "pool_timeout": int(settings.POOL_TIMEOUT),
+            "pool_recycle": int(settings.POOL_RECYCLE),
             "pool_pre_ping": bool(settings.POOL_PRE_PING),
-            "connect_args": {"autocommit": False},
+            "echo": settings.debug_truthy(),
+            "echo_pool": False,
+            "connect_args": _pg_connect_args(settings),
         }
-        if settings.debug_truthy():
-            kw_sqlite["echo"] = True
-        _engine_local = create_engine(normalized, **kw_sqlite)
+        _engine_local = create_engine(normalized, **kw_pg)
         _attach_engine_monitoring(_engine_local)
         _log.info(
-            "database engine created dialect=sqlite pool_pre_ping=%s",
+            "database engine created dialect=postgresql pool_size=%s max_overflow=%s pool_timeout=%s "
+            "pool_recycle=%s total_max=%s pre_ping=%s",
+            settings.POOL_SIZE,
+            settings.MAX_OVERFLOW,
+            settings.POOL_TIMEOUT,
+            settings.POOL_RECYCLE,
+            settings.POOL_SIZE + settings.MAX_OVERFLOW,
             settings.POOL_PRE_PING,
         )
         _engine = _engine_local
         return _engine
 
-    kw_pg: dict[str, Any] = {
-        "pool_size": int(settings.POOL_SIZE),
-        "max_overflow": int(settings.MAX_OVERFLOW),
-        "pool_timeout": int(settings.POOL_TIMEOUT),
-        "pool_recycle": int(settings.POOL_RECYCLE),
-        "pool_pre_ping": bool(settings.POOL_PRE_PING),
-        "echo": settings.debug_truthy(),
-        "echo_pool": False,
-        "connect_args": _pg_connect_args(settings),
-    }
-    _engine_local = create_engine(normalized, **kw_pg)
-    _attach_engine_monitoring(_engine_local)
-    _log.info(
-        "database engine created dialect=postgresql pool_size=%s max_overflow=%s pool_timeout=%s "
-        "pool_recycle=%s total_max=%s pre_ping=%s",
-        settings.POOL_SIZE,
-        settings.MAX_OVERFLOW,
-        settings.POOL_TIMEOUT,
-        settings.POOL_RECYCLE,
-        settings.POOL_SIZE + settings.MAX_OVERFLOW,
-        settings.POOL_PRE_PING,
-    )
-    _engine = _engine_local
-    return _engine
-
 
 def reset_engine_cache() -> None:
     global _engine, _session_factory
-    if _engine is not None:
-        _engine.dispose()
-    _engine = None
-    _session_factory = None
+    with _provision_lock:
+        if _engine is not None:
+            _engine.dispose()
+        _engine = None
+        _session_factory = None
 
 
 def get_session_factory() -> Optional[sessionmaker[Session]]:
@@ -228,9 +289,12 @@ def get_session_factory() -> Optional[sessionmaker[Session]]:
     engine = get_engine()
     if engine is None:
         return None
-    if _session_factory is None:
-        _session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
-    return _session_factory
+    if _session_factory is not None:
+        return _session_factory
+    with _provision_lock:
+        if _session_factory is None:
+            _session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        return _session_factory
 
 
 @event.listens_for(Session, "after_begin")
@@ -243,19 +307,7 @@ def _session_after_begin_set_rls(session: Session, _transaction, _connection) ->
     bug that disabled tenant isolation in production. They are now logged and re-raised
     so that any RLS misconfiguration becomes a hard failure instead of silent data exposure.
     """
-    import os
-    if os.getenv("DISABLE_RLS_BOOTSTRAP", "").lower() == "true":
-        return
-    try:
-        _apply_session_rls_context(session)
-    except Exception as exc:  # noqa: BLE001
-        _log.error(
-            "RLS session bootstrap failed (%s: %s) — refusing session to avoid "
-            "silent tenant-isolation downgrade.",
-            type(exc).__name__,
-            exc,
-        )
-        raise
+    get_rls_session(session)
 
 
 @contextmanager
@@ -266,8 +318,7 @@ def session_scope(organization_id: int | None = None) -> Iterator[Session]:
     session = factory()
     try:
         if organization_id is not None:
-            session.info["organization_id"] = int(organization_id)
-            _apply_session_rls_context(session)
+            get_rls_session(session, organization_id=organization_id)
         yield session
         session.commit()
     except Exception:
