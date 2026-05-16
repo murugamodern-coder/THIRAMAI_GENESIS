@@ -1,2 +1,0 @@
-import{k as t}from"./cc-vendor-CyTesiP1.js";import{C as e}from"./cc-app-Cm2ISnx0.js";import"./cc-vendor-router-De2AVtcB.js";import"./cc-vendor-state-WWOKp67T.js";function s(){return t.jsx(e,{title:"Settings",icon:"??",description:"Full system configuration and preferences",expectedDate:"Q2 2026",features:["Account management","Notification preferences","Integration settings","Security controls"]})}export{s as default};
-//# sourceMappingURL=cc-SettingsPage-C8t15NI5.js.map

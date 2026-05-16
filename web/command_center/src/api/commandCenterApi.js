@@ -164,7 +164,7 @@ export async function loginWithPassword(username, password) {
   const body = new URLSearchParams();
   body.set("username", username);
   body.set("password", password);
-  const { data } = await api.post("/auth/login", body, {
+  const { data } = await api.post("/auth/login", body.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
   return data;
